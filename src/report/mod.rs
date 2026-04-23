@@ -12,8 +12,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::schema::{
-    BlockSummary, ExpertAtlas, ExpertIssueCategory, ModelInventory, RoutingIssueCategory,
-    RoutingReport,
+    BlockSummary, CandidateTensorManifest, ExpertAtlas, ExpertIssueCategory, ModelInventory,
+    RoutingIssueCategory, RoutingReport, SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
 };
 
 /// Write the full inventory as pretty-printed JSON. The JSON layout is the
@@ -35,6 +35,29 @@ pub fn write_expert_json(atlas: &ExpertAtlas, out: &Path) -> Result<()> {
 /// Write the full routing report as pretty-printed JSON.
 pub fn write_routing_json(report_doc: &RoutingReport, out: &Path) -> Result<()> {
     let s = serde_json::to_string_pretty(report_doc).context("serialize routing report to json")?;
+    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
+    Ok(())
+}
+
+/// Write the full stats profile as pretty-printed JSON.
+pub fn write_stats_json(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
+    let s = serde_json::to_string_pretty(report_doc).context("serialize stats report to json")?;
+    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
+    Ok(())
+}
+
+/// Write the full SAAQ-readiness report as pretty-printed JSON.
+pub fn write_saaq_readiness_json(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
+    let s = serde_json::to_string_pretty(report_doc)
+        .context("serialize saaq-readiness report to json")?;
+    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
+    Ok(())
+}
+
+/// Write the candidate manifest as pretty-printed JSON.
+pub fn write_candidate_manifest_json(manifest: &CandidateTensorManifest, out: &Path) -> Result<()> {
+    let s =
+        serde_json::to_string_pretty(manifest).context("serialize candidate manifest to json")?;
     fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
     Ok(())
 }
@@ -559,6 +582,277 @@ pub fn write_routing_markdown(report_doc: &RoutingReport, out: &Path) -> Result<
     Ok(())
 }
 
+/// Render a Markdown summary report for humans from a stats profile.
+pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# xai-dissect stats report");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
+    let _ = writeln!(
+        md,
+        "- **checkpoint**: `{}`",
+        report_doc.checkpoint_path.display()
+    );
+    let _ = writeln!(md, "- **shards**: {}", report_doc.shard_count);
+    let _ = writeln!(
+        md,
+        "- **sample_values_per_tensor**: {}",
+        report_doc.sampling.max_sample_values
+    );
+    let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Norm summary");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "- **mean_rms**: {:.6}",
+        report_doc.norm_summary.mean_rms
+    );
+    render_ranked_table(&mut md, "Top RMS tensors", &report_doc.norm_summary.top_rms);
+    render_ranked_table(&mut md, "Top L2 tensors", &report_doc.norm_summary.top_l2);
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Variance summary");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "- **mean_variance**: {:.6}",
+        report_doc.variance_summary.mean_variance
+    );
+    render_ranked_table(
+        &mut md,
+        "Top variance tensors",
+        &report_doc.variance_summary.top_variance,
+    );
+    render_ranked_table(
+        &mut md,
+        "Lowest variance tensors",
+        &report_doc.variance_summary.lowest_variance,
+    );
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Outlier summary");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "- **mean_outlier_fraction**: {:.6}",
+        report_doc.outlier_summary.mean_outlier_fraction
+    );
+    render_ranked_table(
+        &mut md,
+        "Most outlier-heavy tensors",
+        &report_doc.outlier_summary.most_outlier_heavy,
+    );
+    render_ranked_table(
+        &mut md,
+        "Highest peak-to-RMS tensors",
+        &report_doc.outlier_summary.highest_peak_to_rms,
+    );
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Per-layer metrics");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Label | Block | Tensors | Bytes | Mean RMS | Mean variance | Mean outlier frac | Routing tensors | Candidate-like tensors |"
+    );
+    let _ = writeln!(
+        md,
+        "| ----- | ----: | ------: | ----: | -------: | ------------: | ----------------: | --------------: | ---------------------: |"
+    );
+    for layer in &report_doc.layers {
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} ({}) | {:.6} | {:.6} | {:.6} | {} | {} |",
+            layer.label,
+            fmt_opt_u32(layer.block_index),
+            layer.tensor_count,
+            layer.total_nbytes,
+            human_bytes(layer.total_nbytes),
+            layer.mean_rms,
+            layer.mean_variance,
+            layer.mean_outlier_fraction,
+            layer.routing_tensor_count,
+            layer.compressible_candidate_count
+        );
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Per-tensor metrics");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Tensor | Kind | Dtype | Shape | RMS | Variance | Zero frac | Near-zero frac | Outlier frac | Distribution |"
+    );
+    let _ = writeln!(
+        md,
+        "| ------ | ---- | ----- | ----- | ---: | -------: | --------: | -------------: | -----------: | ------------ |"
+    );
+    for tensor in &report_doc.tensors {
+        let _ = writeln!(
+            md,
+            "| `{}` | {} | {} | `{}` | {:.6} | {:.6} | {:.4} | {:.4} | {:.4} | {} |",
+            tensor.structural_name,
+            tensor.kind_label,
+            tensor.dtype.label(),
+            tensor.shape.render(),
+            tensor.rms,
+            tensor.variance,
+            tensor.zero_fraction,
+            tensor.near_zero_fraction,
+            tensor.outlier_fraction,
+            tensor.distribution_label
+        );
+    }
+
+    md
+}
+
+/// Write the stats Markdown summary to `out`.
+pub fn write_stats_markdown(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
+    let s = render_stats_markdown(report_doc);
+    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
+    Ok(())
+}
+
+/// Render a Markdown summary report for humans from a SAAQ-readiness report.
+pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> String {
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# xai-dissect SAAQ-readiness report");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
+    let _ = writeln!(
+        md,
+        "- **checkpoint**: `{}`",
+        report_doc.checkpoint_path.display()
+    );
+    let _ = writeln!(md, "- **shards**: {}", report_doc.shard_count);
+    let _ = writeln!(
+        md,
+        "- **candidate_targets**: {}",
+        report_doc.candidate_targets.len()
+    );
+    let _ = writeln!(
+        md,
+        "- **routing_critical_tensors**: {}",
+        report_doc.routing_critical_tensors.len()
+    );
+    let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Candidate target tensors");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Rank | Tensor | Kind | Region | Readiness | Opportunity | Risk | Disposition |"
+    );
+    let _ = writeln!(
+        md,
+        "| ---: | ------ | ---- | ------ | --------: | ----------: | ---: | ----------- |"
+    );
+    for candidate in &report_doc.candidate_targets {
+        let _ = writeln!(
+            md,
+            "| {} | `{}` | {} | {} | {:.3} | {:.3} | {:.3} | {} |",
+            candidate.rank,
+            candidate.structural_name,
+            candidate.kind_label,
+            saaq_region_label(candidate.region_class),
+            candidate.readiness_score,
+            candidate.opportunity_score,
+            candidate.risk_score,
+            saaq_disposition_label(candidate.disposition)
+        );
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Routing-critical tensors");
+    let _ = writeln!(md);
+    if report_doc.routing_critical_tensors.is_empty() {
+        let _ = writeln!(md, "None detected.");
+    } else {
+        let _ = writeln!(md, "| Tensor | Readiness | Risk | Reasons |");
+        let _ = writeln!(md, "| ------ | --------: | ---: | ------- |");
+        for candidate in &report_doc.routing_critical_tensors {
+            let _ = writeln!(
+                md,
+                "| `{}` | {:.3} | {:.3} | {} |",
+                candidate.structural_name,
+                candidate.readiness_score,
+                candidate.risk_score,
+                candidate.reasons.join("<br>")
+            );
+        }
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Highest-risk tensors");
+    let _ = writeln!(md);
+    if report_doc.risky_tensors.is_empty() {
+        let _ = writeln!(md, "None detected.");
+    } else {
+        let _ = writeln!(md, "| Tensor | Region | Risk | Reasons |");
+        let _ = writeln!(md, "| ------ | ------ | ---: | ------- |");
+        for candidate in &report_doc.risky_tensors {
+            let _ = writeln!(
+                md,
+                "| `{}` | {} | {:.3} | {} |",
+                candidate.structural_name,
+                saaq_region_label(candidate.region_class),
+                candidate.risk_score,
+                candidate.reasons.join("<br>")
+            );
+        }
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Layer readiness");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Label | Block | Routing critical | Candidate targets | Mean readiness | Max risk |"
+    );
+    let _ = writeln!(
+        md,
+        "| ----- | ----: | ---------------- | ----------------: | -------------: | -------: |"
+    );
+    for layer in &report_doc.layer_readiness {
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} | {:.3} | {:.3} |",
+            layer.label,
+            fmt_opt_u32(layer.block_index),
+            if layer.routing_critical { "yes" } else { "no" },
+            layer.candidate_target_count,
+            layer.mean_readiness_score,
+            layer.max_risk_score
+        );
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Notes");
+    let _ = writeln!(md);
+    if report_doc.notes.is_empty() {
+        let _ = writeln!(md, "None.");
+    } else {
+        for note in &report_doc.notes {
+            let _ = writeln!(md, "- {}", note);
+        }
+    }
+
+    md
+}
+
+/// Write the SAAQ-readiness Markdown summary to `out`.
+pub fn write_saaq_readiness_markdown(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
+    let s = render_saaq_readiness_markdown(report_doc);
+    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
+    Ok(())
+}
+
 // --- Helpers ---------------------------------------------------------------
 
 fn render_kinds(b: &BlockSummary) -> String {
@@ -720,5 +1014,46 @@ fn render_routing_issue_section(
             tensor,
             issue.message
         );
+    }
+}
+
+fn render_ranked_table(md: &mut String, title: &str, rows: &[crate::schema::RankedTensorStat]) {
+    let _ = writeln!(md);
+    let _ = writeln!(md, "### {}", title);
+    let _ = writeln!(md);
+    if rows.is_empty() {
+        let _ = writeln!(md, "None detected.");
+        return;
+    }
+    let _ = writeln!(md, "| Tensor | Kind | Block | Value |");
+    let _ = writeln!(md, "| ------ | ---- | ----: | ----: |");
+    for row in rows {
+        let _ = writeln!(
+            md,
+            "| `{}` | {} | {} | {:.6} |",
+            row.structural_name,
+            row.kind_label,
+            fmt_opt_u32(row.block_index),
+            row.value
+        );
+    }
+}
+
+fn saaq_region_label(region: crate::schema::SaaqRegionClass) -> &'static str {
+    match region {
+        crate::schema::SaaqRegionClass::RoutingCritical => "routing_critical",
+        crate::schema::SaaqRegionClass::NormalizationSensitive => "normalization_sensitive",
+        crate::schema::SaaqRegionClass::AlreadyCompressed => "already_compressed",
+        crate::schema::SaaqRegionClass::PotentialCompressionTarget => "potential_target",
+        crate::schema::SaaqRegionClass::EmbeddingHeavy => "embedding_heavy",
+        crate::schema::SaaqRegionClass::Unknown => "unknown",
+    }
+}
+
+fn saaq_disposition_label(disposition: SaaqDisposition) -> &'static str {
+    match disposition {
+        SaaqDisposition::Candidate => "candidate",
+        SaaqDisposition::ObserveOnly => "observe_only",
+        SaaqDisposition::AvoidForNow => "avoid_for_now",
     }
 }

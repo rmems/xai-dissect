@@ -18,7 +18,7 @@ testable against a single shard or a full checkpoint directory.
         |
         +--> [ expert analysis ]   -> MoE expert geometry
         +--> [ routing analysis ]  -> router / gate geometry
-        +--> [ stats ]             -> parameter & byte accounting
+        +--> [ stats ]             -> offline tensor-value profiling
         |
         v
   [ reports / exports ]  -> JSON, CSV, Markdown
@@ -82,16 +82,16 @@ Explicitly does not execute routing, does not rank experts, and does not
 touch activation data.
 
 ### 6. stats
-Summary accounting over the inventory:
+Offline profiling over the inventory plus sampled tensor payloads:
 
-- total parameters (raw, effective after dequant accounting)
-- bytes on disk, bytes after notional dequant
-- shard-size histogram (the "6 MiB / 36 MiB / 1.5 GiB / 3 GiB" story for
-  Grok-1)
-- per-layer and per-role breakdowns
+- norm, variance, outlier, and sparsity-ish summaries
+- per-layer and per-tensor metrics
+- SAAQ-readiness scouting: likely routing-critical vs. potentially
+  compressible regions
+- ranked candidate-target manifests for future experiments
 
-Pure arithmetic over inventory records; no I/O beyond what inventory
-already did.
+Read-only payload sampling is allowed here. No weight mutation, no
+quantization runtime, and no model execution.
 
 ### 7. reports / exports
 Emits stable, machine-readable artifacts:
@@ -100,7 +100,8 @@ Emits stable, machine-readable artifacts:
 - `architecture.md` - human-readable summary (layer count, d_model,
   n_experts, head geometry, norm placement)
 - `experts.json` / `routing.json` - structured findings from (4) and (5)
-- `stats.csv` - parameter and byte accounting
+- `stats.json` / `saaq-readiness.json` - structured profiling outputs from (6)
+- `candidate-manifest.json` - ranked machine-readable target list for future experiments
 
 Exports are the only supported integration surface for downstream repos
 (`corinth-canal`, `SAAQ-latent`, `Surrogate_Viz.jl`). No in-process API is

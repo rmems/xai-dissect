@@ -496,6 +496,187 @@ pub enum RoutingIssueCategory {
     LayoutNote,
 }
 
+/// Top-level, serializable tensor-statistics profile. Unlike the inventory,
+/// this document is allowed to summarize sampled tensor payload values, but
+/// it remains offline analysis only.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StatsProfileReport {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub shard_count: u32,
+    pub inferred: InferredHyperparams,
+    pub sampling: StatsSamplingConfig,
+    pub tensors: Vec<TensorStats>,
+    pub layers: Vec<LayerStats>,
+    pub norm_summary: NormSummary,
+    pub variance_summary: VarianceSummary,
+    pub outlier_summary: OutlierSummary,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StatsSamplingConfig {
+    pub max_sample_values: u64,
+    pub f32_near_zero_abs: f64,
+    pub i8_near_zero_abs: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TensorStats {
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub structural_name: String,
+    pub role: TensorRole,
+    pub dtype: TensorDType,
+    pub shape: TensorShape,
+    pub kind_label: String,
+    pub sampled: bool,
+    pub total_values: u64,
+    pub sample_values: u64,
+    pub total_nbytes: u64,
+    pub mean: f64,
+    pub variance: f64,
+    pub stddev: f64,
+    pub min: f64,
+    pub max: f64,
+    pub max_abs: f64,
+    pub l1_norm: f64,
+    pub l2_norm: f64,
+    pub rms: f64,
+    pub zero_fraction: f64,
+    pub near_zero_fraction: f64,
+    pub positive_fraction: f64,
+    pub negative_fraction: f64,
+    pub outlier_fraction: f64,
+    pub peak_to_rms: f64,
+    pub distribution_label: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LayerStats {
+    pub block_index: Option<u32>,
+    pub label: String,
+    pub tensor_count: u32,
+    pub sampled_tensor_count: u32,
+    pub total_nbytes: u64,
+    pub mean_rms: f64,
+    pub mean_variance: f64,
+    pub mean_outlier_fraction: f64,
+    pub routing_tensor_count: u32,
+    pub compressible_candidate_count: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RankedTensorStat {
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub structural_name: String,
+    pub kind_label: String,
+    pub block_index: Option<u32>,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NormSummary {
+    pub mean_rms: f64,
+    pub max_rms: Option<RankedTensorStat>,
+    pub max_l2: Option<RankedTensorStat>,
+    pub top_rms: Vec<RankedTensorStat>,
+    pub top_l2: Vec<RankedTensorStat>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VarianceSummary {
+    pub mean_variance: f64,
+    pub max_variance: Option<RankedTensorStat>,
+    pub min_variance: Option<RankedTensorStat>,
+    pub top_variance: Vec<RankedTensorStat>,
+    pub lowest_variance: Vec<RankedTensorStat>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutlierSummary {
+    pub mean_outlier_fraction: f64,
+    pub most_outlier_heavy: Vec<RankedTensorStat>,
+    pub highest_peak_to_rms: Vec<RankedTensorStat>,
+}
+
+/// Top-level, serializable profiling report for future SAAQ experiments.
+/// This does not apply SAAQ; it identifies where experiments may be
+/// promising or risky.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SaaqReadinessReport {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub shard_count: u32,
+    pub inferred: InferredHyperparams,
+    pub candidate_targets: Vec<SaaqCandidate>,
+    pub routing_critical_tensors: Vec<SaaqCandidate>,
+    pub risky_tensors: Vec<SaaqCandidate>,
+    pub layer_readiness: Vec<SaaqLayerReadiness>,
+    pub notes: Vec<String>,
+    pub manifest: CandidateTensorManifest,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CandidateTensorManifest {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub candidates: Vec<SaaqCandidate>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SaaqCandidate {
+    pub rank: u32,
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub structural_name: String,
+    pub kind_label: String,
+    pub dtype: TensorDType,
+    pub shape: TensorShape,
+    pub region_class: SaaqRegionClass,
+    pub disposition: SaaqDisposition,
+    pub readiness_score: f64,
+    pub opportunity_score: f64,
+    pub risk_score: f64,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SaaqLayerReadiness {
+    pub block_index: Option<u32>,
+    pub label: String,
+    pub routing_critical: bool,
+    pub candidate_target_count: u32,
+    pub mean_readiness_score: f64,
+    pub max_risk_score: f64,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SaaqRegionClass {
+    RoutingCritical,
+    NormalizationSensitive,
+    AlreadyCompressed,
+    PotentialCompressionTarget,
+    EmbeddingHeavy,
+    Unknown,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SaaqDisposition {
+    Candidate,
+    ObserveOnly,
+    AvoidForNow,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct InferredHyperparams {
     pub vocab_size: Option<u64>,
