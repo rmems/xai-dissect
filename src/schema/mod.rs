@@ -367,6 +367,135 @@ pub enum ExpertIssueCategory {
     LayoutAnomaly,
 }
 
+/// Top-level, serializable routing-oriented view of a checkpoint directory.
+/// This is derived from `ModelInventory` and remains structural only.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingReport {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub shard_count: u32,
+    pub inferred: InferredHyperparams,
+    pub relevant_block_count: u32,
+    pub expected_experts_per_router: Option<u64>,
+    pub candidate_tensors: Vec<RoutingTensorRef>,
+    pub blocks: Vec<RoutingBlockReport>,
+    pub orientation_summaries: Vec<RoutingOrientationSummary>,
+    pub likely_routing_critical_blocks: Vec<RoutingCriticalBlock>,
+    pub grok_layout_notes: Vec<String>,
+    pub anomalies: Vec<RoutingIssue>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingBlockReport {
+    pub block_index: Option<u32>,
+    pub label: String,
+    pub shard_range: Option<ShardRange>,
+    pub local_expert_count: Option<u64>,
+    pub primary_candidate: Option<RoutingTensorLocator>,
+    pub candidates: Vec<RoutingTensorRef>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingTensorRef {
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub role: TensorRole,
+    pub dtype: TensorDType,
+    pub shape: TensorShape,
+    pub kind_label: String,
+    pub orientation: RoutingOrientation,
+    pub expert_axis: Option<u32>,
+    pub linked_expert_count: Option<u64>,
+    pub matches_inferred_expert_count: bool,
+    pub structural_name: String,
+    pub gate_metrics: RoutingGateMetrics,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingGateMetrics {
+    pub total_elements: u64,
+    pub total_nbytes: u64,
+    pub input_width: Option<u64>,
+    pub output_width: Option<u64>,
+    pub expert_count: Option<u64>,
+    pub logits_per_input: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingOrientationSummary {
+    pub orientation: RoutingOrientation,
+    pub count: u32,
+    pub observed_shapes: Vec<TensorShape>,
+    pub observed_blocks: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingCriticalBlock {
+    pub block_index: Option<u32>,
+    pub label: String,
+    pub reason: String,
+    pub primary_candidate: Option<RoutingTensorLocator>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingOrientation {
+    DModelToExperts,
+    ExpertsToDModel,
+    ExpertAxisLeading,
+    ExpertAxisTrailing,
+    Ambiguous,
+    Unknown,
+}
+
+impl RoutingOrientation {
+    pub fn label(self) -> &'static str {
+        match self {
+            RoutingOrientation::DModelToExperts => "d_model_to_experts",
+            RoutingOrientation::ExpertsToDModel => "experts_to_d_model",
+            RoutingOrientation::ExpertAxisLeading => "expert_axis_leading",
+            RoutingOrientation::ExpertAxisTrailing => "expert_axis_trailing",
+            RoutingOrientation::Ambiguous => "ambiguous",
+            RoutingOrientation::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingIssue {
+    pub severity: RoutingIssueSeverity,
+    pub category: RoutingIssueCategory,
+    pub block_index: Option<u32>,
+    pub tensor: Option<RoutingTensorLocator>,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingTensorLocator {
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub block_slot: Option<u32>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingIssueSeverity {
+    Warning,
+    Error,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingIssueCategory {
+    MissingCandidate,
+    ShapeSummary,
+    ExpertCountLinkage,
+    LayoutNote,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct InferredHyperparams {
     pub vocab_size: Option<u64>,
