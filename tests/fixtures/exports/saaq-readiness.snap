@@ -1,0 +1,233 @@
+=== exports/grok-1-official__ckpt-0/saaq-readiness-findings.json ===
+{
+  "analysis": "saaq-readiness",
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "checkpoint_slug": "grok-1-official__ckpt-0",
+  "headline": "1 SAAQ candidates ranked",
+  "findings": [
+    {
+      "severity": "info",
+      "category": "candidate_targets",
+      "detail": "1 candidate targets, 1 routing-critical tensors"
+    },
+    {
+      "severity": "info",
+      "category": "layer_readiness",
+      "detail": "1 layer readiness rows"
+    },
+    {
+      "severity": "info",
+      "category": "top_candidate",
+      "detail": "top candidate block_000.slot_01.attn_proj with readiness 0.820 and risk 0.240"
+    },
+    {
+      "severity": "warning",
+      "category": "highest_risk",
+      "detail": "highest-risk tensor block_000.slot_02.norm at 0.740"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== exports/grok-1-official__ckpt-0/saaq-readiness.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 2,
+  "inferred": {
+    "vocab_size": null,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": null,
+    "n_blocks": 1
+  },
+  "candidate_targets": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 1,
+      "block_index": 0,
+      "block_slot": 1,
+      "structural_name": "block_000.slot_01.attn_proj",
+      "kind_label": "attn_proj_f32",
+      "dtype": "f32",
+      "shape": [
+        4,
+        4
+      ],
+      "region_class": "potential_compression_target",
+      "disposition": "candidate",
+      "readiness_score": 0.82,
+      "opportunity_score": 0.78,
+      "risk_score": 0.24,
+      "reasons": [
+        "f32 tensor with moderate size share",
+        "not marked routing-critical"
+      ]
+    }
+  ],
+  "routing_critical_tensors": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 0,
+      "block_index": 0,
+      "block_slot": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "kind_label": "router",
+      "dtype": "f32",
+      "shape": [
+        4,
+        2
+      ],
+      "region_class": "routing_critical",
+      "disposition": "avoid_for_now",
+      "readiness_score": 0.05,
+      "opportunity_score": 0.08,
+      "risk_score": 0.91,
+      "reasons": [
+        "routing tensor linked to expert selection"
+      ]
+    }
+  ],
+  "risky_tensors": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 2,
+      "block_index": 0,
+      "block_slot": 2,
+      "structural_name": "block_000.slot_02.norm",
+      "kind_label": "block_norm",
+      "dtype": "f32",
+      "shape": [
+        4
+      ],
+      "region_class": "normalization_sensitive",
+      "disposition": "avoid_for_now",
+      "readiness_score": 0.1,
+      "opportunity_score": 0.12,
+      "risk_score": 0.74,
+      "reasons": [
+        "normalization-sensitive tensor"
+      ]
+    }
+  ],
+  "layer_readiness": [
+    {
+      "block_index": 0,
+      "label": "block_000",
+      "routing_critical": true,
+      "candidate_target_count": 1,
+      "mean_readiness_score": 0.49,
+      "max_risk_score": 0.91
+    }
+  ],
+  "notes": [
+    "routing tensors remain avoid-for-now in this structural profile",
+    "attention projection is the top candidate in the synthetic sample"
+  ],
+  "manifest": {
+    "model_family": "grok-1",
+    "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+    "candidates": [
+      {
+        "rank": 1,
+        "shard_ordinal": 1,
+        "in_shard_index": 1,
+        "block_index": 0,
+        "block_slot": 1,
+        "structural_name": "block_000.slot_01.attn_proj",
+        "kind_label": "attn_proj_f32",
+        "dtype": "f32",
+        "shape": [
+          4,
+          4
+        ],
+        "region_class": "potential_compression_target",
+        "disposition": "candidate",
+        "readiness_score": 0.82,
+        "opportunity_score": 0.78,
+        "risk_score": 0.24,
+        "reasons": [
+          "f32 tensor with moderate size share",
+          "not marked routing-critical"
+        ]
+      }
+    ],
+    "schema_version": 1
+  },
+  "schema_version": 1
+}
+
+=== manifests/grok-1-official__ckpt-0/candidate-saaq-targets.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "candidates": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 1,
+      "block_index": 0,
+      "block_slot": 1,
+      "structural_name": "block_000.slot_01.attn_proj",
+      "kind_label": "attn_proj_f32",
+      "dtype": "f32",
+      "shape": [
+        4,
+        4
+      ],
+      "region_class": "potential_compression_target",
+      "disposition": "candidate",
+      "readiness_score": 0.82,
+      "opportunity_score": 0.78,
+      "risk_score": 0.24,
+      "reasons": [
+        "f32 tensor with moderate size share",
+        "not marked routing-critical"
+      ]
+    }
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/saaq-readiness.md ===
+# xai-dissect SAAQ-readiness report
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **shards**: 2
+- **candidate_targets**: 1
+- **routing_critical_tensors**: 1
+- **schema_version**: 1
+
+## Candidate target tensors
+
+| Rank | Tensor | Kind | Region | Readiness | Opportunity | Risk | Disposition |
+| ---: | ------ | ---- | ------ | --------: | ----------: | ---: | ----------- |
+| 1 | `block_000.slot_01.attn_proj` | attn_proj_f32 | potential_target | 0.820 | 0.780 | 0.240 | candidate |
+
+## Routing-critical tensors
+
+| Tensor | Readiness | Risk | Reasons |
+| ------ | --------: | ---: | ------- |
+| `block_000.routing_slot_00` | 0.050 | 0.910 | routing tensor linked to expert selection |
+
+## Highest-risk tensors
+
+| Tensor | Region | Risk | Reasons |
+| ------ | ------ | ---: | ------- |
+| `block_000.slot_02.norm` | normalization_sensitive | 0.740 | normalization-sensitive tensor |
+
+## Layer readiness
+
+| Label | Block | Routing critical | Candidate targets | Mean readiness | Max risk |
+| ----- | ----: | ---------------- | ----------------: | -------------: | -------: |
+| block_000 | 0 | yes | 1 | 0.490 | 0.910 |
+
+## Notes
+
+- routing tensors remain avoid-for-now in this structural profile
+- attention projection is the top candidate in the synthetic sample

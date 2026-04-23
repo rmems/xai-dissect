@@ -75,3 +75,6 @@ pipeline needs a stable custom name.
 
 The output tree is additive. Existing explicit file flags remain supported
 and are not replaced by the unified tree.
+
+See `docs/export-contracts.md` for the stable schema types behind each
+artifact.

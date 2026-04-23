@@ -119,7 +119,8 @@ out/
 ```
 
 See [docs/output-conventions.md](docs/output-conventions.md) for the full
-artifact naming convention.
+artifact naming convention, and [docs/export-contracts.md](docs/export-contracts.md)
+for the stable schema types behind those files.
 
 ## Outputs
 
@@ -195,6 +196,7 @@ plots, does not ship a UI, and does not embed a plotting stack.
 See:
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/export-contracts.md](docs/export-contracts.md)
 - [docs/tensor-schema.md](docs/tensor-schema.md)
 - [docs/output-conventions.md](docs/output-conventions.md)
 

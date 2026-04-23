@@ -32,12 +32,15 @@ testable against a single shard or a full checkpoint directory.
 ### 1. parser
 Memory-maps each shard, validates the `\x80\x04` PROTO 4 magic, and walks
 the pickle byte grammar to locate every `numpy.ndarray` reduce site. Emits
-raw `TensorAnchor` records: shard path, byte offset, payload length, dtype
-token, shape tuple, and any enclosing `QuantizedWeight8bit` marker. Never
+raw `parser::RawTensor` records: role, dtype, shape, payload offset, and
+payload length, with `QuantizedWeight8bit` pairing preserved in the role
+assignment. Never
 decodes tensor bodies. Never depends on a Python interpreter.
 
 ### 2. schema
-Normalizes `TensorAnchor` records into a stable `TensorRecord`:
+Normalizes parser output into stable serializable types such as
+`TensorInfo`, `ModelInventory`, `ExpertAtlas`, `RoutingReport`,
+`StatsProfileReport`, and `SaaqReadinessReport`:
 
 - `shard_path`, `shard_index`
 - `role` (`tensor` | `quant.weight` | `quant.scales`)
@@ -50,7 +53,7 @@ This is the canonical on-disk / on-wire record format for every other layer
 and every export.
 
 ### 3. inventory
-Aggregates `TensorRecord`s across a checkpoint directory into a single
+Aggregates parser records across a checkpoint directory into a single
 queryable table. Responsibilities:
 
 - dedup and order shards deterministically
@@ -109,46 +112,51 @@ Exports are the only supported integration surface for downstream repos
 (`corinth-canal`, `SAAQ-latent`, `Surrogate_Viz.jl`). No in-process API is
 guaranteed across versions; the export schema is.
 
-## Minimal initial file tree (proposed)
+## Current file tree
 
 ```
 xai-dissect/
   Cargo.toml
   README.md
+  CHANGELOG.md
   LICENSE
   src/
-    main.rs                  # CLI entry (today's binary, preserved)
-    lib.rs                   # re-exports for the layers below
+    main.rs                  # CLI entry
+    lib.rs                   # library entry + module exports
     parser/
-      mod.rs
-      pickle_scan.rs         # PROTO 4 byte-grammar scanner
-      quantized.rs           # QuantizedWeight8bit anchor pairing
+      mod.rs                 # PROTO 4 byte-grammar scanner
     schema/
-      mod.rs                 # TensorRecord, Role, Dtype
+      mod.rs                 # stable serializable schema types
     inventory/
-      mod.rs                 # checkpoint walk, dedup, verification
+      mod.rs                 # checkpoint walk, dedup, classification
+    experts/
+      mod.rs                 # MoE geometry from inventory records
+    routing/
+      mod.rs                 # router / gate structure analysis
+    stats/
+      mod.rs                 # offline tensor-statistics profiling
+    report/
+      mod.rs                 # Markdown / JSON writers and renderers
     exports/
       mod.rs                 # output-tree planning and manifest bundles
-    analysis/
-      mod.rs
-      experts.rs             # MoE geometry from shapes
-      routing.rs             # router/gate identification
-      stats.rs               # parameter / byte accounting
-    report/
-      mod.rs
-      json.rs                # inventory.json, experts.json, routing.json
-      csv.rs                 # stats.csv
-      markdown.rs            # architecture.md renderer
   docs/
     architecture.md          # this file
+    export-contracts.md      # stable artifact contract
+    output-conventions.md    # bundle paths and filenames
     non_goals.md
+    tensor-schema.md         # inventory schema details
   tests/
-    fixtures/                # tiny synthetic shards (no real weights)
-    parser_smoke.rs
-    inventory_smoke.rs
+    fixtures/
+      parser/                # tiny synthetic pickle fixtures
+      exports/               # golden snapshot files
+    support/
+      mod.rs                 # synthetic sample builders
+    cli_help.rs              # CLI ergonomics coverage
+    export_contracts.rs      # bundle snapshot tests
+    parser_inventory.rs      # parser/inventory fixture tests
 ```
 
-The tree is aspirational; today's `src/` contains a single-file CLI. The
-migration is additive: `main.rs` stays, `lib.rs` + submodules grow under
-it, and the CLI is rewritten to call into the library once the schema is
-stable.
+This tree reflects the current milestone, not an aspirational future layout.
+The repo is already organized around parser, schema, inventory, expert,
+routing, stats, report, and export modules, with the CLI in `src/main.rs`
+acting as a thin entry point over those layers.
