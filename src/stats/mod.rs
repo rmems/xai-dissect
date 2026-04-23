@@ -114,9 +114,10 @@ pub fn build_saaq_readiness_report(
         }) {
             let mut fallback = fallback.clone();
             fallback.disposition = SaaqDisposition::Candidate;
-            fallback
-                .reasons
-                .push("promoted as the best available non-routing target in a constrained sample".to_string());
+            fallback.reasons.push(
+                "promoted as the best available non-routing target in a constrained sample"
+                    .to_string(),
+            );
             candidate_targets.push(fallback);
         }
     }

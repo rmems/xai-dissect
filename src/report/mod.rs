@@ -10,9 +10,11 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use serde::Serialize;
 
 use crate::schema::{
-    BlockSummary, CandidateTensorManifest, ExpertAtlas, ExpertIssueCategory, ModelInventory,
+    BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ExpertAtlas,
+    ExpertIssueCategory, FindingsSummary, ModelInventory, RoutingCriticalTensorManifest,
     RoutingIssueCategory, RoutingReport, SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
 };
 
@@ -20,46 +22,57 @@ use crate::schema::{
 /// `ModelInventory` struct rendered via serde; its schema version is carried
 /// in the `schema_version` field.
 pub fn write_json(inv: &ModelInventory, out: &Path) -> Result<()> {
-    let s = serde_json::to_string_pretty(inv).context("serialize inventory to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(inv, "serialize inventory to json", out)
 }
 
 /// Write the full expert atlas as pretty-printed JSON.
 pub fn write_expert_json(atlas: &ExpertAtlas, out: &Path) -> Result<()> {
-    let s = serde_json::to_string_pretty(atlas).context("serialize expert atlas to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(atlas, "serialize expert atlas to json", out)
 }
 
 /// Write the full routing report as pretty-printed JSON.
 pub fn write_routing_json(report_doc: &RoutingReport, out: &Path) -> Result<()> {
-    let s = serde_json::to_string_pretty(report_doc).context("serialize routing report to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(report_doc, "serialize routing report to json", out)
 }
 
 /// Write the full stats profile as pretty-printed JSON.
 pub fn write_stats_json(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
-    let s = serde_json::to_string_pretty(report_doc).context("serialize stats report to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(report_doc, "serialize stats report to json", out)
 }
 
 /// Write the full SAAQ-readiness report as pretty-printed JSON.
 pub fn write_saaq_readiness_json(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
-    let s = serde_json::to_string_pretty(report_doc)
-        .context("serialize saaq-readiness report to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(report_doc, "serialize saaq-readiness report to json", out)
 }
 
 /// Write the candidate manifest as pretty-printed JSON.
 pub fn write_candidate_manifest_json(manifest: &CandidateTensorManifest, out: &Path) -> Result<()> {
-    let s =
-        serde_json::to_string_pretty(manifest).context("serialize candidate manifest to json")?;
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_pretty_json(manifest, "serialize candidate manifest to json", out)
+}
+
+/// Write the inventory snapshot manifest as pretty-printed JSON.
+pub fn write_inventory_snapshot_manifest_json(
+    manifest: &CheckpointInventorySnapshot,
+    out: &Path,
+) -> Result<()> {
+    write_pretty_json(
+        manifest,
+        "serialize inventory snapshot manifest to json",
+        out,
+    )
+}
+
+/// Write the routing-critical tensor manifest as pretty-printed JSON.
+pub fn write_routing_critical_manifest_json(
+    manifest: &RoutingCriticalTensorManifest,
+    out: &Path,
+) -> Result<()> {
+    write_pretty_json(manifest, "serialize routing-critical manifest to json", out)
+}
+
+/// Write the compact findings summary as pretty-printed JSON.
+pub fn write_findings_summary_json(summary: &FindingsSummary, out: &Path) -> Result<()> {
+    write_pretty_json(summary, "serialize findings summary to json", out)
 }
 
 /// Render a Markdown summary report for humans. Intentionally small and
@@ -182,8 +195,7 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
 /// Write the Markdown summary to `out`.
 pub fn write_markdown(inv: &ModelInventory, out: &Path) -> Result<()> {
     let s = render_markdown(inv);
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_text(&s, out)
 }
 
 /// Render a Markdown summary report for humans from an expert atlas.
@@ -355,8 +367,7 @@ pub fn render_expert_markdown(atlas: &ExpertAtlas) -> String {
 /// Write the expert atlas Markdown summary to `out`.
 pub fn write_expert_markdown(atlas: &ExpertAtlas, out: &Path) -> Result<()> {
     let s = render_expert_markdown(atlas);
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_text(&s, out)
 }
 
 /// Render a Markdown summary report for humans from a routing report.
@@ -578,8 +589,7 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
 /// Write the routing Markdown summary to `out`.
 pub fn write_routing_markdown(report_doc: &RoutingReport, out: &Path) -> Result<()> {
     let s = render_routing_markdown(report_doc);
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_text(&s, out)
 }
 
 /// Render a Markdown summary report for humans from a stats profile.
@@ -713,8 +723,7 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
 /// Write the stats Markdown summary to `out`.
 pub fn write_stats_markdown(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
     let s = render_stats_markdown(report_doc);
-    fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
-    Ok(())
+    write_text(&s, out)
 }
 
 /// Render a Markdown summary report for humans from a SAAQ-readiness report.
@@ -849,11 +858,30 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
 /// Write the SAAQ-readiness Markdown summary to `out`.
 pub fn write_saaq_readiness_markdown(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
     let s = render_saaq_readiness_markdown(report_doc);
+    write_text(&s, out)
+}
+
+// --- Helpers ---------------------------------------------------------------
+
+fn write_pretty_json<T: Serialize>(value: &T, context: &str, out: &Path) -> Result<()> {
+    let s = serde_json::to_string_pretty(value).with_context(|| context.to_string())?;
+    write_text(&s, out)
+}
+
+fn write_text(s: &str, out: &Path) -> Result<()> {
+    ensure_parent_dir(out)?;
     fs::write(out, s).with_context(|| format!("write {}", out.display()))?;
     Ok(())
 }
 
-// --- Helpers ---------------------------------------------------------------
+fn ensure_parent_dir(out: &Path) -> Result<()> {
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        }
+    }
+    Ok(())
+}
 
 fn render_kinds(b: &BlockSummary) -> String {
     if b.kinds.is_empty() {

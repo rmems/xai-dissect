@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::parser::{self, RawTensor};
 use crate::schema::{
@@ -316,7 +316,7 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
         return None;
     }
     let interior = shard_count - 2; // drop embedding + final-norm singletons
-                                    // Candidate block sizes we try, in priority order.
+    // Candidate block sizes we try, in priority order.
     let candidates = [12usize];
     let mut chosen: Option<(usize, usize)> = None; // (k_per_block, n_blocks)
     for &k in &candidates {
