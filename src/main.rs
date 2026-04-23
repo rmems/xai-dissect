@@ -41,7 +41,7 @@ struct OutputTreeArgs {
     output_root: Option<PathBuf>,
     /// Optional override for the checkpoint slug used under the unified
     /// output tree. If unset, the slug is inferred from the checkpoint path.
-    #[arg(long)]
+    #[arg(long, requires = "output_root")]
     checkpoint_slug: Option<String>,
 }
 
