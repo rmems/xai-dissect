@@ -184,6 +184,15 @@ role is upstream reconnaissance: sampled tensor statistics, routing-risk flags,
 and candidate-target manifests that help decide where future SAAQ work should
 focus.
 
+### grok-ozempic
+
+`grok-ozempic` is where compression, packing, and runtime ideas actually get
+applied once the checkpoint structure is understood. `xai-dissect` stays
+upstream of that work: it tells you what you are touching before any
+compression-oriented repo starts changing representation or execution.
+`grok-ozempic` is still under construction for further upgrades, and the
+"ozempic" part of the name is meant to make that repo's purpose obvious.
+
 ### Surrogate_Viz.jl
 
 `Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
