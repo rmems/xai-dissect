@@ -1,0 +1,21 @@
+[workspace]
+
+[package]
+name = "xai-dissect"
+version = "0.1.0"
+edition = "2021"
+description = "Zero-copy dissector for Grok-1 raw JAX/Pickle tensor shards"
+license = "MIT"
+repository = "https://github.com/rmems/xai-dissect"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+comfy-table = "7.1"
+memchr = "2.7"
+memmap2 = "0.9"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
