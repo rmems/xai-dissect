@@ -16,7 +16,10 @@ use xai_dissect::inventory::{InventoryConfig, build_inventory};
 use xai_dissect::parser;
 use xai_dissect::report;
 use xai_dissect::routing::build_routing_report;
-use xai_dissect::schema::{ExpertAtlas, ModelInventory, RoutingReport, TensorInfo};
+use xai_dissect::schema::{
+    ExpertAtlas, ModelInventory, RoutingReport, SaaqReadinessReport, StatsProfileReport, TensorInfo,
+};
+use xai_dissect::stats::{StatsConfig, build_saaq_readiness_report, build_stats_report};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -114,6 +117,59 @@ enum Command {
         #[arg(long)]
         md: Option<PathBuf>,
     },
+    /// Profile tensor payload statistics for offline analysis.
+    Stats {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header. Only `grok-1`
+        /// is officially supported today.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// Maximum sampled values per tensor.
+        #[arg(long, default_value_t = 65_536)]
+        sample_values: usize,
+        /// If set, write the stats profile as pretty JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the stats Markdown report to this path. If unset,
+        /// the Markdown report is printed to stdout.
+        #[arg(long)]
+        md: Option<PathBuf>,
+    },
+    /// Rank likely SAAQ experiment targets without applying SAAQ itself.
+    SaaqReadiness {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header. Only `grok-1`
+        /// is officially supported today.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// Maximum sampled values per tensor.
+        #[arg(long, default_value_t = 65_536)]
+        sample_values: usize,
+        /// If set, write the SAAQ-readiness report as pretty JSON.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the SAAQ-readiness Markdown report. If unset, the
+        /// Markdown report is printed to stdout.
+        #[arg(long)]
+        md: Option<PathBuf>,
+        /// If set, write the machine-readable candidate manifest as pretty JSON.
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -168,6 +224,42 @@ fn main() -> Result<()> {
             &family,
             json.as_deref(),
             md.as_deref(),
+        ),
+        Command::Stats {
+            path,
+            prefix,
+            limit,
+            family,
+            sample_values,
+            json,
+            md,
+        } => run_stats(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            sample_values,
+            json.as_deref(),
+            md.as_deref(),
+        ),
+        Command::SaaqReadiness {
+            path,
+            prefix,
+            limit,
+            family,
+            sample_values,
+            json,
+            md,
+            manifest,
+        } => run_saaq_readiness(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            sample_values,
+            json.as_deref(),
+            md.as_deref(),
+            manifest.as_deref(),
         ),
     }
 }
@@ -342,6 +434,92 @@ fn run_routing_report(
     Ok(())
 }
 
+// --- `stats` --------------------------------------------------------------
+
+fn run_stats(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    sample_values: usize,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+) -> Result<()> {
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let stats_cfg = StatsConfig {
+        max_sample_values: sample_values,
+        ..Default::default()
+    };
+    let report_doc = build_stats_report(&inv, &stats_cfg)?;
+
+    print_stats_console_summary(&report_doc);
+
+    if let Some(p) = json_out {
+        report::write_stats_json(&report_doc, p)?;
+        eprintln!("wrote JSON stats report -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_stats_markdown(&report_doc, p)?;
+        eprintln!("wrote Markdown stats report -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_stats_markdown(&report_doc));
+    }
+
+    Ok(())
+}
+
+// --- `saaq-readiness` -----------------------------------------------------
+
+fn run_saaq_readiness(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    sample_values: usize,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+    manifest_out: Option<&std::path::Path>,
+) -> Result<()> {
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let stats_cfg = StatsConfig {
+        max_sample_values: sample_values,
+        ..Default::default()
+    };
+    let stats = build_stats_report(&inv, &stats_cfg)?;
+    let readiness = build_saaq_readiness_report(&inv, &stats);
+
+    print_saaq_console_summary(&readiness);
+
+    if let Some(p) = json_out {
+        report::write_saaq_readiness_json(&readiness, p)?;
+        eprintln!("wrote JSON SAAQ-readiness report -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_saaq_readiness_markdown(&readiness, p)?;
+        eprintln!("wrote Markdown SAAQ-readiness report -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_saaq_readiness_markdown(&readiness));
+    }
+    if let Some(p) = manifest_out {
+        report::write_candidate_manifest_json(&readiness.manifest, p)?;
+        eprintln!("wrote candidate manifest -> {}", p.display());
+    }
+
+    Ok(())
+}
+
 fn print_console_summary(inv: &ModelInventory) {
     eprintln!(
         "checkpoint: {}  shards: {}  tensors: {}",
@@ -414,6 +592,36 @@ fn print_routing_console_summary(report_doc: &RoutingReport) {
         eprintln!(
             "warn: routing report contains {} anomalies",
             report_doc.anomalies.len()
+        );
+    }
+}
+
+fn print_stats_console_summary(report_doc: &StatsProfileReport) {
+    eprintln!(
+        "checkpoint: {}  tensors: {}  layers: {}",
+        report_doc.checkpoint_path.display(),
+        report_doc.tensors.len(),
+        report_doc.layers.len(),
+    );
+    eprintln!(
+        "sample_values_per_tensor: {}  mean_rms: {:.6}  mean_variance: {:.6}",
+        report_doc.sampling.max_sample_values,
+        report_doc.norm_summary.mean_rms,
+        report_doc.variance_summary.mean_variance,
+    );
+}
+
+fn print_saaq_console_summary(report_doc: &SaaqReadinessReport) {
+    eprintln!(
+        "checkpoint: {}  candidate_targets: {}  routing_critical: {}",
+        report_doc.checkpoint_path.display(),
+        report_doc.candidate_targets.len(),
+        report_doc.routing_critical_tensors.len(),
+    );
+    if let Some(top) = report_doc.candidate_targets.first() {
+        eprintln!(
+            "top_candidate: {}  readiness: {:.3}  risk: {:.3}",
+            top.structural_name, top.readiness_score, top.risk_score,
         );
     }
 }

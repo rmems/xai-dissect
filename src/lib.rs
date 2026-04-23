@@ -13,3 +13,4 @@ pub mod parser;
 pub mod report;
 pub mod routing;
 pub mod schema;
+pub mod stats;

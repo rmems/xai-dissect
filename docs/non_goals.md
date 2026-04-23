@@ -8,8 +8,10 @@ entirely. Pull requests expanding into these areas will be rejected.
 
 ### Inference runtime
 - No forward pass, no decode loop, no sampler, no KV cache.
-- No tensor body loads into host or device memory.
 - No model execution of any kind, even for "just a sanity check".
+
+Offline tensor-value sampling for stats profiling is in scope; runtime model
+execution is not.
 
 ### Projector logic
 - No spiking / neuromorphic projection of activations or weights.
@@ -18,7 +20,8 @@ entirely. Pull requests expanding into these areas will be rejected.
 
 ### SAAQ latent calibration
 - No SAAQ scoring, calibration, or latent-space analysis.
-- No numerical interpretation of tensor contents.
+- No numerical interpretation that turns into a latent-space method or a
+  quantization runtime.
 - Latent work lives in `SAAQ-latent`.
 
 ### GPU kernels

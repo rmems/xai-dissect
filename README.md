@@ -3,9 +3,11 @@
 Static structural analysis of the Grok family of open-weight checkpoints.
 
 `xai-dissect` parses raw xAI weight shards (Pickle Protocol 4 / JAX dumps),
-builds a tensor inventory, and emits architecture, expert, and routing
-reports. It is a read-only structural tool: it never loads tensor bodies,
-never runs the model, and never produces inference output.
+builds a tensor inventory, and emits architecture, expert, routing, and
+offline profiling reports. It is a read-only analysis tool: it never mutates
+weights, never runs the model, and never produces inference output. The
+inventory/expert/routing paths stay parser-driven; the stats/SAAQ-readiness
+paths may sample tensor payload values for profiling.
 
 Current target:
 
@@ -29,6 +31,10 @@ here.
   (up / gate / down), quantization layout (`int8` weight + `f32` scales).
 - Routing analysis: router/gate tensor identification, shape consistency
   across layers, top-k inference from shape alone where possible.
+- Offline stats profiling: sampled norm / variance / outlier / sparsity-ish
+  heuristics per tensor and per layer.
+- SAAQ-readiness profiling: routing-critical vs. potentially compressible
+  regions, plus ranked candidate target manifests for future experiments.
 - Summary statistics: parameter counts (raw / effective / per-expert),
   quantized vs. unquantized byte budgets, shard-size histograms.
 - Exportable findings: stable, machine-readable artifacts (JSON / CSV /
@@ -38,7 +44,8 @@ here.
 
 - A full inference runtime. No forward pass, no sampler, no decode loop.
 - Projector logic (neuromorphic or otherwise).
-- SAAQ latent calibration, SAAQ scoring, or any latent-space experiments.
+- SAAQ latent calibration, SAAQ scoring, or latent-space experiments beyond
+  offline readiness profiling.
 - GPU kernels, CUDA/Metal/ROCm code, or perf tuning of matmul paths.
 - Symbolic regression over weights or activations.
 - Plot-heavy / dashboard-heavy interactive analysis.
@@ -68,10 +75,10 @@ never projects anything itself.
 
 ### SAAQ-latent
 `SAAQ-latent` owns SAAQ latent calibration and latent-space analysis.
-`xai-dissect` does not compute SAAQ scores, does not calibrate latents, and
-does not load tensor values into memory. The boundary is sharp: `xai-dissect`
-stops at "this tensor lives at this offset with this shape and dtype"; any
-interpretation of its numerical contents belongs in `SAAQ-latent`.
+`xai-dissect` does not compute SAAQ scores and does not calibrate latents.
+Its role is upstream reconnaissance: sampled tensor statistics, routing-risk
+flags, and candidate-target manifests that help decide where future SAAQ work
+should focus.
 
 ### Surrogate_Viz.jl
 `Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
@@ -85,20 +92,25 @@ plots, does not ship a UI, and does not embed a plotting stack.
 cargo build --release
 
 # Inventory an entire checkpoint directory.
-./target/release/xai-dissect /path/to/grok-1/ckpt-0
+./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
 
 # Peek at a single shard.
-./target/release/xai-dissect /path/to/grok-1/ckpt-0 --limit 1
+./target/release/xai-dissect dissect /path/to/grok-1/ckpt-0 --limit 1
 
-# Non-default shard filename prefix.
-./target/release/xai-dissect /path/to/dump --prefix shard_
+# Expert and routing structure.
+./target/release/xai-dissect experts /path/to/grok-1/ckpt-0
+./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0
+
+# Offline profiling for future SAAQ work.
+./target/release/xai-dissect stats /path/to/grok-1/ckpt-0
+./target/release/xai-dissect saaq-readiness /path/to/grok-1/ckpt-0
 ```
 
-The CLI memory-maps each shard, validates the PROTO 4 header, scans the
-pickle byte grammar for ndarray anchors, and prints one row per tensor:
-`Idx | Role | Dtype | Shape | Offset | Nbytes`. `QuantizedWeight8bit`
-dataclasses are split into `quant.weight` (`int8`) and `quant.scales`
-(`f32`) rows. No tensor bodies are read.
+The parser-oriented commands memory-map each shard, validate the PROTO 4
+header, scan the pickle byte grammar for ndarray anchors, and classify the
+resulting tensors without executing model code. The stats-oriented commands
+reuse those offsets and sample tensor payload values for offline profiling;
+they still do not mutate weights or run inference.
 
 See `docs/architecture.md` for the intended layer breakdown and
 `docs/non_goals.md` for the full non-goals list.
