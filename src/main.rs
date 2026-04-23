@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// xai-dissect CLI. Thin wrapper over the library crate. Two subcommands:
+// xai-dissect CLI. Thin wrapper over the library crate.
 //
-//   dissect    - legacy per-shard byte-table view (parser output only).
-//   inventory  - full checkpoint cartography with JSON / Markdown export.
+// Primary commands:
+//
+//   dissect         - legacy per-shard byte-table view (parser output only)
+//   inventory       - full checkpoint cartography with JSON / Markdown export
+//   experts         - expert atlas discovery
+//   routing-report  - routing / gating structure inspection
+//   stats           - offline tensor-statistics profiling
+//   saaq-readiness  - candidate scouting for future SAAQ work
 
 use std::path::PathBuf;
 

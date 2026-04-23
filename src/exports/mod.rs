@@ -668,6 +668,14 @@ mod tests {
     }
 
     #[test]
+    fn respects_checkpoint_slug_override() {
+        let path = Path::new("/tmp/grok-1-official/ckpt-0");
+        let slug = resolve_checkpoint_slug(path, Some("Milestone Release / CKPT-0"))
+            .expect("override slug");
+        assert_eq!(slug, "milestone-release-ckpt-0");
+    }
+
+    #[test]
     fn inventory_bundle_writes_standard_tree() {
         let root = unique_test_root("inventory_bundle");
         let inv = sample_inventory();

@@ -4,8 +4,9 @@
 // Copyright (C) 2026 xai-dissect contributors.
 //
 // Library entry point. The binary (src/main.rs) is a thin CLI on top of
-// this crate; external consumers should depend on the library and the
-// stable export schema and output conventions produced by the export layer.
+// this crate. External consumers should favor the CLI and exported artifact
+// schema first; the in-process Rust API is intentionally smaller and still
+// secondary to the repository's parser/analysis workflow.
 
 pub mod experts;
 pub mod exports;
