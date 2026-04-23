@@ -22,7 +22,7 @@ use std::cmp::min;
 use std::fs::File;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use memchr::memmem;
 use memmap2::Mmap;
 

@@ -629,6 +629,82 @@ pub struct CandidateTensorManifest {
     pub schema_version: u32,
 }
 
+/// Compact checkpoint snapshot manifest for downstream tooling that needs
+/// inventory-level counts without the full tensor table payload.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CheckpointInventorySnapshot {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub shard_count: u32,
+    pub inferred: InferredHyperparams,
+    pub total_tensors: u64,
+    pub total_nbytes: u64,
+    pub blocks: Vec<CheckpointInventoryBlockSnapshot>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CheckpointInventoryBlockSnapshot {
+    pub label: String,
+    pub block_index: Option<u32>,
+    pub shard_range: Option<ShardRange>,
+    pub tensor_count: u32,
+    pub total_nbytes: u64,
+    pub kind_labels: Vec<String>,
+}
+
+/// Machine-readable routing-critical tensor list for downstream
+/// compression / orchestration tooling.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingCriticalTensorManifest {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub tensors: Vec<RoutingCriticalTensor>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutingCriticalTensor {
+    pub shard_ordinal: u32,
+    pub in_shard_index: u32,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub structural_name: String,
+    pub kind_label: String,
+    pub orientation: RoutingOrientation,
+    pub linked_expert_count: Option<u64>,
+    pub total_nbytes: u64,
+    pub criticality_reason: Option<String>,
+}
+
+/// Small machine-readable summary of the main findings from a single
+/// analysis artifact.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FindingsSummary {
+    pub analysis: String,
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub checkpoint_slug: String,
+    pub headline: String,
+    pub findings: Vec<FindingsSummaryItem>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FindingsSummaryItem {
+    pub severity: FindingsSeverity,
+    pub category: String,
+    pub detail: String,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingsSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaaqCandidate {
     pub rank: u32,

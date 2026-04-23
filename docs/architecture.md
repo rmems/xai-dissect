@@ -20,8 +20,11 @@ testable against a single shard or a full checkpoint directory.
         +--> [ routing analysis ]  -> router / gate geometry
         +--> [ stats ]             -> offline tensor-value profiling
         |
+        +--> [ reports ]           -> human-readable Markdown
+        +--> [ exports ]           -> full JSON + findings summaries
+        |
         v
-  [ reports / exports ]  -> JSON, CSV, Markdown
+  [ manifests ]          -> focused machine-readable inventories
 ```
 
 ## Layers
@@ -96,12 +99,11 @@ quantization runtime, and no model execution.
 ### 7. reports / exports
 Emits stable, machine-readable artifacts:
 
-- `inventory.json` - full `TensorRecord` array
-- `architecture.md` - human-readable summary (layer count, d_model,
-  n_experts, head geometry, norm placement)
-- `experts.json` / `routing.json` - structured findings from (4) and (5)
-- `stats.json` / `saaq-readiness.json` - structured profiling outputs from (6)
-- `candidate-manifest.json` - ranked machine-readable target list for future experiments
+- `reports/<slug>/*.md` - human-readable summaries for inspection
+- `exports/<slug>/*.json` - full structured outputs plus compact findings summaries
+- `manifests/<slug>/*.json` - focused machine-readable lists such as:
+  checkpoint inventory snapshots, routing-critical tensors, and ranked SAAQ
+  target candidates
 
 Exports are the only supported integration surface for downstream repos
 (`corinth-canal`, `SAAQ-latent`, `Surrogate_Viz.jl`). No in-process API is
@@ -125,6 +127,8 @@ xai-dissect/
       mod.rs                 # TensorRecord, Role, Dtype
     inventory/
       mod.rs                 # checkpoint walk, dedup, verification
+    exports/
+      mod.rs                 # output-tree planning and manifest bundles
     analysis/
       mod.rs
       experts.rs             # MoE geometry from shapes

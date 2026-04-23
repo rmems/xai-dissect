@@ -5,9 +5,10 @@
 //
 // Library entry point. The binary (src/main.rs) is a thin CLI on top of
 // this crate; external consumers should depend on the library and the
-// stable export schema produced by `xai_dissect::report`.
+// stable export schema and output conventions produced by the export layer.
 
 pub mod experts;
+pub mod exports;
 pub mod inventory;
 pub mod parser;
 pub mod report;

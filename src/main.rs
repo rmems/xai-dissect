@@ -8,10 +8,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
 
 use xai_dissect::experts::build_expert_atlas;
+use xai_dissect::exports;
 use xai_dissect::inventory::{InventoryConfig, build_inventory};
 use xai_dissect::parser;
 use xai_dissect::report;
@@ -30,6 +31,18 @@ use xai_dissect::stats::{StatsConfig, build_saaq_readiness_report, build_stats_r
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+struct OutputTreeArgs {
+    /// If set, also write artifacts into
+    /// `<root>/{reports,exports,manifests}/<checkpoint-slug>/...`.
+    #[arg(long)]
+    output_root: Option<PathBuf>,
+    /// Optional override for the checkpoint slug used under the unified
+    /// output tree. If unset, the slug is inferred from the checkpoint path.
+    #[arg(long)]
+    checkpoint_slug: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -68,6 +81,8 @@ enum Command {
         /// Markdown summary is printed to stdout.
         #[arg(long)]
         md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
     },
     /// Build an expert-level atlas of a checkpoint directory: discover
     /// expert-stacked tensors, map blocks to expert counts, and optionally
@@ -92,6 +107,8 @@ enum Command {
         /// unset, the Markdown report is printed to stdout.
         #[arg(long)]
         md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
     },
     /// Build a routing-structure report for a checkpoint directory:
     /// identify likely router tensors, summarize their geometry, and
@@ -116,6 +133,8 @@ enum Command {
         /// unset, the Markdown report is printed to stdout.
         #[arg(long)]
         md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
     },
     /// Profile tensor payload statistics for offline analysis.
     Stats {
@@ -141,6 +160,8 @@ enum Command {
         /// the Markdown report is printed to stdout.
         #[arg(long)]
         md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
     },
     /// Rank likely SAAQ experiment targets without applying SAAQ itself.
     SaaqReadiness {
@@ -169,6 +190,8 @@ enum Command {
         /// If set, write the machine-readable candidate manifest as pretty JSON.
         #[arg(long)]
         manifest: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
     },
 }
 
@@ -187,6 +210,7 @@ fn main() -> Result<()> {
             family,
             json,
             md,
+            output_tree,
         } => run_inventory(
             &path,
             &prefix,
@@ -194,6 +218,7 @@ fn main() -> Result<()> {
             &family,
             json.as_deref(),
             md.as_deref(),
+            &output_tree,
         ),
         Command::Experts {
             path,
@@ -202,6 +227,7 @@ fn main() -> Result<()> {
             family,
             json,
             md,
+            output_tree,
         } => run_experts(
             &path,
             &prefix,
@@ -209,6 +235,7 @@ fn main() -> Result<()> {
             &family,
             json.as_deref(),
             md.as_deref(),
+            &output_tree,
         ),
         Command::RoutingReport {
             path,
@@ -217,6 +244,7 @@ fn main() -> Result<()> {
             family,
             json,
             md,
+            output_tree,
         } => run_routing_report(
             &path,
             &prefix,
@@ -224,6 +252,7 @@ fn main() -> Result<()> {
             &family,
             json.as_deref(),
             md.as_deref(),
+            &output_tree,
         ),
         Command::Stats {
             path,
@@ -233,6 +262,7 @@ fn main() -> Result<()> {
             sample_values,
             json,
             md,
+            output_tree,
         } => run_stats(
             &path,
             &prefix,
@@ -241,6 +271,7 @@ fn main() -> Result<()> {
             sample_values,
             json.as_deref(),
             md.as_deref(),
+            &output_tree,
         ),
         Command::SaaqReadiness {
             path,
@@ -251,6 +282,7 @@ fn main() -> Result<()> {
             json,
             md,
             manifest,
+            output_tree,
         } => run_saaq_readiness(
             &path,
             &prefix,
@@ -260,6 +292,7 @@ fn main() -> Result<()> {
             json.as_deref(),
             md.as_deref(),
             manifest.as_deref(),
+            &output_tree,
         ),
     }
 }
@@ -336,6 +369,7 @@ fn run_inventory(
     family: &str,
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
@@ -360,6 +394,11 @@ fn run_inventory(
         println!();
         println!("{}", report::render_markdown(&inv));
     }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle =
+            exports::write_inventory_bundle(&inv, root, output_tree.checkpoint_slug.as_deref())?;
+        print_output_bundle("inventory bundle", root, &bundle);
+    }
 
     Ok(())
 }
@@ -373,6 +412,7 @@ fn run_experts(
     family: &str,
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
@@ -395,6 +435,11 @@ fn run_experts(
         println!();
         println!("{}", report::render_expert_markdown(&atlas));
     }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle =
+            exports::write_expert_bundle(&atlas, root, output_tree.checkpoint_slug.as_deref())?;
+        print_output_bundle("expert bundle", root, &bundle);
+    }
 
     Ok(())
 }
@@ -408,6 +453,7 @@ fn run_routing_report(
     family: &str,
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
@@ -430,6 +476,14 @@ fn run_routing_report(
         println!();
         println!("{}", report::render_routing_markdown(&report_doc));
     }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle = exports::write_routing_bundle(
+            &report_doc,
+            root,
+            output_tree.checkpoint_slug.as_deref(),
+        )?;
+        print_output_bundle("routing bundle", root, &bundle);
+    }
 
     Ok(())
 }
@@ -444,6 +498,7 @@ fn run_stats(
     sample_values: usize,
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
@@ -470,6 +525,11 @@ fn run_stats(
         println!();
         println!("{}", report::render_stats_markdown(&report_doc));
     }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle =
+            exports::write_stats_bundle(&report_doc, root, output_tree.checkpoint_slug.as_deref())?;
+        print_output_bundle("stats bundle", root, &bundle);
+    }
 
     Ok(())
 }
@@ -485,6 +545,7 @@ fn run_saaq_readiness(
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
     manifest_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
@@ -516,8 +577,21 @@ fn run_saaq_readiness(
         report::write_candidate_manifest_json(&readiness.manifest, p)?;
         eprintln!("wrote candidate manifest -> {}", p.display());
     }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle =
+            exports::write_saaq_bundle(&readiness, root, output_tree.checkpoint_slug.as_deref())?;
+        print_output_bundle("saaq bundle", root, &bundle);
+    }
 
     Ok(())
+}
+
+fn print_output_bundle(label: &str, root: &std::path::Path, bundle: &exports::OutputBundle) {
+    eprintln!(
+        "wrote {label} -> {}/{{reports,exports,manifests}}/{}/...",
+        root.display(),
+        bundle.checkpoint_slug
+    );
 }
 
 fn print_console_summary(inv: &ModelInventory) {

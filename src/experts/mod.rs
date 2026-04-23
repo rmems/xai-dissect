@@ -646,14 +646,18 @@ mod tests {
 
         let atlas = build_expert_atlas(&inv);
 
-        assert!(atlas
-            .anomalies
-            .iter()
-            .any(|issue| issue.message.contains("canonical pattern")));
-        assert!(atlas
-            .naming_checks
-            .iter()
-            .any(|check| check.check == "expert_family_count_consistent" && !check.passed));
+        assert!(
+            atlas
+                .anomalies
+                .iter()
+                .any(|issue| issue.message.contains("canonical pattern"))
+        );
+        assert!(
+            atlas
+                .naming_checks
+                .iter()
+                .any(|check| check.check == "expert_family_count_consistent" && !check.passed)
+        );
     }
 
     fn inventory_with_blocks(blocks: Vec<Vec<TensorInfo>>) -> ModelInventory {

@@ -39,6 +39,8 @@ here.
   quantized vs. unquantized byte budgets, shard-size histograms.
 - Exportable findings: stable, machine-readable artifacts (JSON / CSV /
   Markdown tables) suitable for downstream consumers.
+- Unified output conventions for reusable `reports/`, `exports/`, and
+  `manifests/` trees keyed by checkpoint slug.
 
 ## What this repo does NOT own
 
@@ -104,6 +106,10 @@ cargo build --release
 # Offline profiling for future SAAQ work.
 ./target/release/xai-dissect stats /path/to/grok-1/ckpt-0
 ./target/release/xai-dissect saaq-readiness /path/to/grok-1/ckpt-0
+
+# Write a predictable artifact tree for downstream tooling.
+./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0 \
+  --output-root out
 ```
 
 The parser-oriented commands memory-map each shard, validate the PROTO 4
@@ -113,7 +119,8 @@ reuse those offsets and sample tensor payload values for offline profiling;
 they still do not mutate weights or run inference.
 
 See `docs/architecture.md` for the intended layer breakdown and
-`docs/non_goals.md` for the full non-goals list.
+`docs/non_goals.md` for the full non-goals list. Unified artifact naming and
+directory conventions are documented in `docs/output-conventions.md`.
 
 ## Legal / ethical scope
 
