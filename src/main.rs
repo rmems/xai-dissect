@@ -1,4 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
 // xai-dissect: zero-copy metadata extractor for Grok-1 raw JAX/Pickle shards.
+// Copyright (C) 2026 xai-dissect contributors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details. You should have received a copy of the
+// GNU General Public License along with this program. If not, see
+// <https://www.gnu.org/licenses/>.
 //
 // The shards are `pickle.dump(obj, protocol=4)` blobs where `obj` is either
 // a bare `numpy.ndarray` or a `__main__.QuantizedWeight8bit` dataclass

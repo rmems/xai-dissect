@@ -3,9 +3,10 @@
 [package]
 name = "xai-dissect"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 description = "Zero-copy dissector for Grok-1 raw JAX/Pickle tensor shards"
-license = "MIT"
+license = "GPL-3.0-only"
 repository = "https://github.com/rmems/xai-dissect"
 
 [dependencies]

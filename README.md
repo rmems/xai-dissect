@@ -62,4 +62,8 @@ cargo build --release
 
 ## License
 
-MIT.
+GPL-3.0-only. See [LICENSE](LICENSE).
+
+The Grok-1 model weights themselves are distributed by xAI under
+Apache-2.0 and are NOT included in or redistributed by this repository;
+this tool only reads them out-of-band.
