@@ -1,138 +1,212 @@
 # xai-dissect
 
-Static structural analysis of the Grok family of open-weight checkpoints.
+Static structural analysis of Grok-family open-weight checkpoints.
 
-`xai-dissect` parses raw xAI weight shards (Pickle Protocol 4 / JAX dumps),
-builds a tensor inventory, and emits architecture, expert, routing, and
-offline profiling reports. It is a read-only analysis tool: it never mutates
-weights, never runs the model, and never produces inference output. The
-inventory/expert/routing paths stay parser-driven; the stats/SAAQ-readiness
-paths may sample tensor payload values for profiling.
+`xai-dissect` is a read-only checkpoint dissector. It parses raw xAI shard
+files, builds a normalized tensor inventory, and emits structural reports for
+experts, routing, and future SAAQ-oriented profiling. It does not run the
+model, mutate weights, or act as an inference runtime.
 
-Current target:
+Current release target:
 
-- **Grok-1** (xAI official release, Apache-2.0 weights). First-class, actively
-  developed.
-- **Grok-2** (if/when public weights are released under a compatible license).
-  Not supported yet. Scoped as a deliberate follow-on, not a promise.
+- **Grok-1**: supported now
+- **Grok-2**: not supported yet; tracked as a future follow-on only if public
+  weights are released under a compatible license
 
-Only open/public weights are in scope. This repo is for lawful analysis of
-weights you already have legitimate access to. No weights are redistributed
-here.
+Only open/public weights are in scope. This repo analyzes weights you already
+have lawful access to and does not redistribute them.
 
-## What this repo owns
+## What It Does
 
-- Parsing xAI Pickle/JAX shard files without a Python unpickler.
-- A normalized tensor schema (dtype, shape, role, offsets, shard provenance).
-- A full tensor inventory across a checkpoint directory.
-- Architecture reports: layer count, embedding shapes, attention/MoE shape
-  families, norm placement, head/vocab geometry.
-- Expert analysis: per-layer expert count, expert-projection shapes
-  (up / gate / down), quantization layout (`int8` weight + `f32` scales).
-- Routing analysis: router/gate tensor identification, shape consistency
-  across layers, top-k inference from shape alone where possible.
-- Offline stats profiling: sampled norm / variance / outlier / sparsity-ish
-  heuristics per tensor and per layer.
-- SAAQ-readiness profiling: routing-critical vs. potentially compressible
-  regions, plus ranked candidate target manifests for future experiments.
-- Summary statistics: parameter counts (raw / effective / per-expert),
-  quantized vs. unquantized byte budgets, shard-size histograms.
-- Exportable findings: stable, machine-readable artifacts (JSON / CSV /
-  Markdown tables) suitable for downstream consumers.
-- Unified output conventions for reusable `reports/`, `exports/`, and
-  `manifests/` trees keyed by checkpoint slug.
+- Parses raw Grok shard files without a Python unpickler
+- Builds a stable tensor inventory with dtype, shape, role, offsets, and shard
+  provenance
+- Maps MoE expert structure and block-to-expert organization
+- Identifies likely routing tensors and routing-critical regions
+- Profiles offline tensor statistics for future SAAQ experimentation
+- Writes predictable Markdown, JSON, and manifest artifacts for downstream
+  tooling
 
-## What this repo does NOT own
+## What It Does Not Do
 
-- A full inference runtime. No forward pass, no sampler, no decode loop.
-- Projector logic (neuromorphic or otherwise).
-- SAAQ latent calibration, SAAQ scoring, or latent-space experiments beyond
-  offline readiness profiling.
-- GPU kernels, CUDA/Metal/ROCm code, or perf tuning of matmul paths.
-- Symbolic regression over weights or activations.
-- Plot-heavy / dashboard-heavy interactive analysis.
-- Orchestration, hybrid runtime glue, or multi-repo scheduling.
-- Dequantization, format conversion, or emission of runnable checkpoints.
-- Redistribution of model weights.
+- No forward pass, logits, decode loop, or runtime inference
+- No quantization runtime, checkpoint mutation, or format conversion
+- No projector logic, dashboard UI, or orchestration layer
+- No redistribution of model weights
 
-Anything in that list belongs in a sibling repo (see below) or is explicitly
-out of scope.
+See [docs/non_goals.md](docs/non_goals.md) for the full non-goals list.
 
-## Relationship to sibling repos
+## Quick Start
+
+```bash
+cargo build --release
+cargo test
+
+# Show the available commands
+./target/release/xai-dissect --help
+```
+
+Main commands:
+
+- `inventory`: full checkpoint inventory and architecture-oriented summary
+- `experts`: expert atlas for MoE block structure
+- `routing-report`: routing/gating structure inspection
+- `stats`: offline tensor-statistics profiling
+- `saaq-readiness`: candidate scouting for future SAAQ experiments
+
+## Usage Examples
+
+All examples assume a checkpoint directory such as
+`/path/to/grok-1/ckpt-0`.
+
+### Inventory
+
+```bash
+./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0 \
+  --json out/inventory.json \
+  --md out/inventory.md
+```
+
+### Experts
+
+```bash
+./target/release/xai-dissect experts /path/to/grok-1/ckpt-0 \
+  --json out/experts.json \
+  --md out/experts.md
+```
+
+### Routing Report
+
+```bash
+./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0 \
+  --json out/routing-report.json \
+  --md out/routing-report.md
+```
+
+### Stats
+
+```bash
+./target/release/xai-dissect stats /path/to/grok-1/ckpt-0 \
+  --sample-values 65536 \
+  --json out/stats.json \
+  --md out/stats.md
+```
+
+### SAAQ Readiness
+
+```bash
+./target/release/xai-dissect saaq-readiness /path/to/grok-1/ckpt-0 \
+  --sample-values 65536 \
+  --json out/saaq-readiness.json \
+  --md out/saaq-readiness.md \
+  --manifest out/candidate-saaq-targets.json
+```
+
+### Unified Output Tree
+
+```bash
+./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0 \
+  --output-root out
+```
+
+That produces a predictable artifact layout such as:
+
+```text
+out/
+  reports/<checkpoint_slug>/
+  exports/<checkpoint_slug>/
+  manifests/<checkpoint_slug>/
+```
+
+See [docs/output-conventions.md](docs/output-conventions.md) for the full
+artifact naming convention.
+
+## Outputs
+
+The repo writes three artifact families:
+
+- `reports/`: human-readable Markdown for inspection and review
+- `exports/`: full JSON plus compact findings summaries
+- `manifests/`: focused machine-readable lists for downstream selection and
+  orchestration
+
+Examples:
+
+- `inventory` writes a checkpoint inventory plus an inventory snapshot manifest
+- `routing-report` writes a routing report plus a routing-critical tensor list
+- `saaq-readiness` writes a readiness report plus a ranked candidate manifest
+
+## Stability Notes
+
+This milestone is intended to feel like a coherent tool, not a runtime:
+
+- CLI-first workflow
+- parser/analysis orientation
+- stable export schema favored over a broad in-process Rust API
+- current checkpoint support centered on Grok-1 `f32` and `int8` shard layouts
+
+Release notes live in [CHANGELOG.md](CHANGELOG.md).
+
+## Future Grok-2 Support
+
+Grok-2 is not yet in scope for implementation, but the repo now includes a
+future-support checklist and issue template to keep that work bounded when the
+time comes:
+
+- [docs/grok2-future-support.md](docs/grok2-future-support.md)
+- [.github/ISSUE_TEMPLATE/grok2-support.md](.github/ISSUE_TEMPLATE/grok2-support.md)
+
+## Relationship To Sibling Repos
 
 ### corinth-canal
+
 `corinth-canal` owns orchestration and hybrid-runtime glue: it wires models,
 projectors, and downstream consumers together. `xai-dissect` is strictly
-upstream of that: it produces structural descriptions of a frozen
-checkpoint. If `corinth-canal` needs "what is the shape of expert 3's
-down-projection in layer 17", it consumes an `xai-dissect` export. It does
-not call into this repo at runtime.
+upstream of that: it produces structural descriptions of a frozen checkpoint.
+If `corinth-canal` needs "what is the shape of expert 3's down-projection in
+layer 17", it consumes an `xai-dissect` export. It does not call into this
+repo at runtime.
 
 ### snn-projector
+
 `snn-projector` owns projector logic, including any spiking / neuromorphic
 projection of activations. `xai-dissect` does not implement, test, or depend
-on projector math. It may describe the *shape* of tensors that a projector
-would later consume (e.g. embedding width, expert output dimension), but it
-never projects anything itself.
+on projector math. It may describe the shape of tensors that a projector would
+later consume (e.g. embedding width, expert output dimension), but it never
+projects anything itself.
 
 ### SAAQ-latent
+
 `SAAQ-latent` owns SAAQ latent calibration and latent-space analysis.
-`xai-dissect` does not compute SAAQ scores and does not calibrate latents.
-Its role is upstream reconnaissance: sampled tensor statistics, routing-risk
-flags, and candidate-target manifests that help decide where future SAAQ work
-should focus.
+`xai-dissect` does not compute SAAQ scores and does not calibrate latents. Its
+role is upstream reconnaissance: sampled tensor statistics, routing-risk flags,
+and candidate-target manifests that help decide where future SAAQ work should
+focus.
 
 ### Surrogate_Viz.jl
+
 `Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
 structured, exportable findings (JSON / CSV / Markdown). It does not render
 plots, does not ship a UI, and does not embed a plotting stack.
 `Surrogate_Viz.jl` is a downstream consumer of `xai-dissect` exports.
 
-## Usage (current)
+## Architecture
 
-```bash
-cargo build --release
+See:
 
-# Inventory an entire checkpoint directory.
-./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
+- [docs/architecture.md](docs/architecture.md)
+- [docs/tensor-schema.md](docs/tensor-schema.md)
+- [docs/output-conventions.md](docs/output-conventions.md)
 
-# Peek at a single shard.
-./target/release/xai-dissect dissect /path/to/grok-1/ckpt-0 --limit 1
+## Legal / Ethical Scope
 
-# Expert and routing structure.
-./target/release/xai-dissect experts /path/to/grok-1/ckpt-0
-./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0
-
-# Offline profiling for future SAAQ work.
-./target/release/xai-dissect stats /path/to/grok-1/ckpt-0
-./target/release/xai-dissect saaq-readiness /path/to/grok-1/ckpt-0
-
-# Write a predictable artifact tree for downstream tooling.
-./target/release/xai-dissect routing-report /path/to/grok-1/ckpt-0 \
-  --output-root out
-```
-
-The parser-oriented commands memory-map each shard, validate the PROTO 4
-header, scan the pickle byte grammar for ndarray anchors, and classify the
-resulting tensors without executing model code. The stats-oriented commands
-reuse those offsets and sample tensor payload values for offline profiling;
-they still do not mutate weights or run inference.
-
-See `docs/architecture.md` for the intended layer breakdown and
-`docs/non_goals.md` for the full non-goals list. Unified artifact naming and
-directory conventions are documented in `docs/output-conventions.md`.
-
-## Legal / ethical scope
-
-- Analyze only weights you have lawful access to under their original
-  license (Grok-1: Apache-2.0, distributed by xAI).
-- This repository does not contain, mirror, or redistribute model weights.
-- This repository does not ship circumvention tooling; it reads files the
-  operator already possesses.
+- Analyze only weights you have lawful access to under the original license
+- This repository does not contain or mirror model weights
+- This repository is not a circumvention or scraping tool
 
 ## License
 
 GPL-3.0-only. See [LICENSE](LICENSE).
 
-Grok model weights are the property of their respective rights holders and
+Grok model weights remain the property of their respective rights holders and
 are not covered by this repository's license.
