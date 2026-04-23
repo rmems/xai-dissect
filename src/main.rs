@@ -7,15 +7,16 @@
 
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use comfy_table::{presets::UTF8_FULL, Cell, ContentArrangement, Table};
+use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
 
 use xai_dissect::experts::build_expert_atlas;
-use xai_dissect::inventory::{build_inventory, InventoryConfig};
+use xai_dissect::inventory::{InventoryConfig, build_inventory};
 use xai_dissect::parser;
 use xai_dissect::report;
-use xai_dissect::schema::{ExpertAtlas, ModelInventory, TensorInfo};
+use xai_dissect::routing::build_routing_report;
+use xai_dissect::schema::{ExpertAtlas, ModelInventory, RoutingReport, TensorInfo};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -89,6 +90,30 @@ enum Command {
         #[arg(long)]
         md: Option<PathBuf>,
     },
+    /// Build a routing-structure report for a checkpoint directory:
+    /// identify likely router tensors, summarize their geometry, and
+    /// optionally export JSON and Markdown.
+    RoutingReport {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header. Only `grok-1`
+        /// is officially supported today.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// If set, write the full routing report as pretty JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the routing Markdown report to this path. If
+        /// unset, the Markdown report is printed to stdout.
+        #[arg(long)]
+        md: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -122,6 +147,21 @@ fn main() -> Result<()> {
             json,
             md,
         } => run_experts(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            json.as_deref(),
+            md.as_deref(),
+        ),
+        Command::RoutingReport {
+            path,
+            prefix,
+            limit,
+            family,
+            json,
+            md,
+        } => run_routing_report(
             &path,
             &prefix,
             limit,
@@ -267,6 +307,41 @@ fn run_experts(
     Ok(())
 }
 
+// --- `routing-report` -----------------------------------------------------
+
+fn run_routing_report(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+) -> Result<()> {
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let report_doc = build_routing_report(&inv);
+
+    print_routing_console_summary(&report_doc);
+
+    if let Some(p) = json_out {
+        report::write_routing_json(&report_doc, p)?;
+        eprintln!("wrote JSON routing report -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_routing_markdown(&report_doc, p)?;
+        eprintln!("wrote Markdown routing report -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_routing_markdown(&report_doc));
+    }
+
+    Ok(())
+}
+
 fn print_console_summary(inv: &ModelInventory) {
     eprintln!(
         "checkpoint: {}  shards: {}  tensors: {}",
@@ -318,6 +393,27 @@ fn print_expert_console_summary(atlas: &ExpertAtlas) {
         eprintln!(
             "warn: expert atlas contains {} anomalies",
             atlas.anomalies.len()
+        );
+    }
+}
+
+fn print_routing_console_summary(report_doc: &RoutingReport) {
+    eprintln!(
+        "checkpoint: {}  routing_blocks: {}  candidates: {}",
+        report_doc.checkpoint_path.display(),
+        report_doc.relevant_block_count,
+        report_doc.candidate_tensors.len(),
+    );
+    eprintln!(
+        "expected_experts_per_router: {:?}  critical_blocks: {}  anomalies: {}",
+        report_doc.expected_experts_per_router,
+        report_doc.likely_routing_critical_blocks.len(),
+        report_doc.anomalies.len(),
+    );
+    if !report_doc.anomalies.is_empty() {
+        eprintln!(
+            "warn: routing report contains {} anomalies",
+            report_doc.anomalies.len()
         );
     }
 }
