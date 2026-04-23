@@ -7,14 +7,15 @@
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
+use comfy_table::{presets::UTF8_FULL, Cell, ContentArrangement, Table};
 
-use xai_dissect::inventory::{InventoryConfig, build_inventory};
+use xai_dissect::experts::build_expert_atlas;
+use xai_dissect::inventory::{build_inventory, InventoryConfig};
 use xai_dissect::parser;
 use xai_dissect::report;
-use xai_dissect::schema::{ModelInventory, TensorInfo};
+use xai_dissect::schema::{ExpertAtlas, ModelInventory, TensorInfo};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -64,15 +65,70 @@ enum Command {
         #[arg(long)]
         md: Option<PathBuf>,
     },
+    /// Build an expert-level atlas of a checkpoint directory: discover
+    /// expert-stacked tensors, map blocks to expert counts, and optionally
+    /// export JSON and Markdown.
+    Experts {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header. Only `grok-1`
+        /// is officially supported today.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// If set, write the full expert atlas as pretty JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the expert atlas Markdown report to this path. If
+        /// unset, the Markdown report is printed to stdout.
+        #[arg(long)]
+        md: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Dissect { path, limit, prefix } => run_dissect(&path, limit, &prefix),
-        Command::Inventory { path, prefix, limit, family, json, md } => {
-            run_inventory(&path, &prefix, limit, &family, json.as_deref(), md.as_deref())
-        }
+        Command::Dissect {
+            path,
+            limit,
+            prefix,
+        } => run_dissect(&path, limit, &prefix),
+        Command::Inventory {
+            path,
+            prefix,
+            limit,
+            family,
+            json,
+            md,
+        } => run_inventory(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            json.as_deref(),
+            md.as_deref(),
+        ),
+        Command::Experts {
+            path,
+            prefix,
+            limit,
+            family,
+            json,
+            md,
+        } => run_experts(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            json.as_deref(),
+            md.as_deref(),
+        ),
     }
 }
 
@@ -97,7 +153,11 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
         .collect();
     shards.sort();
     if shards.is_empty() {
-        bail!("no shards found under {} with prefix '{}'", path.display(), prefix);
+        bail!(
+            "no shards found under {} with prefix '{}'",
+            path.display(),
+            prefix
+        );
     }
     if let Some(n) = limit {
         shards.truncate(n);
@@ -172,6 +232,41 @@ fn run_inventory(
     Ok(())
 }
 
+// --- `experts` -------------------------------------------------------------
+
+fn run_experts(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+) -> Result<()> {
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let atlas = build_expert_atlas(&inv);
+
+    print_expert_console_summary(&atlas);
+
+    if let Some(p) = json_out {
+        report::write_expert_json(&atlas, p)?;
+        eprintln!("wrote JSON expert atlas -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_expert_markdown(&atlas, p)?;
+        eprintln!("wrote Markdown expert atlas -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_expert_markdown(&atlas));
+    }
+
+    Ok(())
+}
+
 fn print_console_summary(inv: &ModelInventory) {
     eprintln!(
         "checkpoint: {}  shards: {}  tensors: {}",
@@ -200,5 +295,29 @@ fn print_console_summary(inv: &ModelInventory) {
         .count();
     if unknown > 0 {
         eprintln!("warn: {} tensors classified as Unknown", unknown);
+    }
+}
+
+fn print_expert_console_summary(atlas: &ExpertAtlas) {
+    eprintln!(
+        "checkpoint: {}  blocks: {}  expected_experts_per_block: {:?}",
+        atlas.checkpoint_path.display(),
+        atlas.relevant_block_count,
+        atlas.expected_experts_per_block,
+    );
+    eprintln!(
+        "naming_checks: {}  anomalies: {}",
+        atlas
+            .naming_checks
+            .iter()
+            .filter(|check| check.passed)
+            .count(),
+        atlas.anomalies.len(),
+    );
+    if !atlas.anomalies.is_empty() {
+        eprintln!(
+            "warn: expert atlas contains {} anomalies",
+            atlas.anomalies.len()
+        );
     }
 }

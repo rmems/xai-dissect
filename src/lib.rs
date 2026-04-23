@@ -7,7 +7,8 @@
 // this crate; external consumers should depend on the library and the
 // stable export schema produced by `xai_dissect::report`.
 
-pub mod schema;
-pub mod parser;
+pub mod experts;
 pub mod inventory;
+pub mod parser;
 pub mod report;
+pub mod schema;
