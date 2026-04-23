@@ -744,18 +744,13 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
     }
 }
 
-fn rank(
-    structural_name: &str,
-    kind_label: &str,
-    block_index: Option<u32>,
-    value: f64,
-) -> RankedTensorStat {
+fn rank(stats: &TensorStats, kind_label: &str, value: f64) -> RankedTensorStat {
     RankedTensorStat {
-        shard_ordinal: 0,
-        in_shard_index: 0,
-        structural_name: structural_name.into(),
+        shard_ordinal: stats.shard_ordinal,
+        in_shard_index: stats.in_shard_index,
+        structural_name: stats.structural_name.clone(),
         kind_label: kind_label.into(),
-        block_index,
+        block_index: stats.block_index,
         value,
     }
 }
