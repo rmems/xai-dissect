@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 
 use crate::parser::{self, RawTensor};
 use crate::schema::{
@@ -49,8 +49,7 @@ impl Default for InventoryConfig {
 
 /// Build a full `ModelInventory` for the checkpoint directory at `path`.
 pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInventory> {
-    let md = std::fs::metadata(path)
-        .with_context(|| format!("stat {}", path.display()))?;
+    let md = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
     if !md.is_dir() {
         bail!("{} is not a directory", path.display());
     }
@@ -81,8 +80,7 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 3: classify each raw tensor into a TensorKind.
     let mut tensors: Vec<TensorInfo> = Vec::new();
-    for (shard_ordinal, (shard_path, raws)) in
-        shards.iter().zip(raws_per_shard.iter()).enumerate()
+    for (shard_ordinal, (shard_path, raws)) in shards.iter().zip(raws_per_shard.iter()).enumerate()
     {
         for (in_shard_index, raw) in raws.iter().enumerate() {
             let kind = classify_tensor(raw, &hp);
@@ -114,10 +112,7 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         model_family: cfg.model_family.clone(),
         checkpoint_path: path.to_path_buf(),
         shard_count: shards.len() as u32,
-        inferred: InferredHyperparams {
-            n_blocks,
-            ..hp
-        },
+        inferred: InferredHyperparams { n_blocks, ..hp },
         tensors,
         blocks,
         totals,
@@ -294,7 +289,10 @@ fn classify_tensor(t: &RawTensor, hp: &InferredHyperparams) -> TensorKind {
     }
 
     TensorKind::Unknown {
-        reason: format!("unhandled rank={} dtype={:?} dims={:?}", rank, t.dtype, dims),
+        reason: format!(
+            "unhandled rank={} dtype={:?} dims={:?}",
+            rank, t.dtype, dims
+        ),
     }
 }
 
@@ -318,7 +316,7 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
         return None;
     }
     let interior = shard_count - 2; // drop embedding + final-norm singletons
-    // Candidate block sizes we try, in priority order.
+                                    // Candidate block sizes we try, in priority order.
     let candidates = [12usize];
     let mut chosen: Option<(usize, usize)> = None; // (k_per_block, n_blocks)
     for &k in &candidates {
@@ -386,12 +384,7 @@ fn summarize_blocks(tensors: &[TensorInfo]) -> Vec<BlockSummary> {
             .collect();
         let other: Vec<&&TensorInfo> = singletons
             .iter()
-            .filter(|t| {
-                !matches!(
-                    t.kind,
-                    TensorKind::TokenEmbedding | TensorKind::FinalNorm
-                )
-            })
+            .filter(|t| !matches!(t.kind, TensorKind::TokenEmbedding | TensorKind::FinalNorm))
             .collect();
 
         if !embed.is_empty() {
@@ -402,11 +395,7 @@ fn summarize_blocks(tensors: &[TensorInfo]) -> Vec<BlockSummary> {
             ));
         }
         for (i, b) in by_block {
-            out.push(build_summary(
-                i,
-                &format!("block_{:03}", i.unwrap_or(0)),
-                b,
-            ));
+            out.push(build_summary(i, &format!("block_{:03}", i.unwrap_or(0)), b));
         }
         if !finals.is_empty() {
             out.push(build_summary(
@@ -424,11 +413,7 @@ fn summarize_blocks(tensors: &[TensorInfo]) -> Vec<BlockSummary> {
         }
     } else {
         for (i, b) in by_block {
-            out.push(build_summary(
-                i,
-                &format!("block_{:03}", i.unwrap_or(0)),
-                b,
-            ));
+            out.push(build_summary(i, &format!("block_{:03}", i.unwrap_or(0)), b));
         }
     }
 
@@ -447,7 +432,10 @@ fn build_summary(block_index: Option<u32>, label: &str, members: Vec<&TensorInfo
             lo = lo.min(t.shard_ordinal);
             hi = hi.max(t.shard_ordinal);
         }
-        Some(ShardRange { start: lo, end_inclusive: hi })
+        Some(ShardRange {
+            start: lo,
+            end_inclusive: hi,
+        })
     };
 
     let tensor_count = members.len() as u32;
@@ -469,7 +457,11 @@ fn build_summary(block_index: Option<u32>, label: &str, members: Vec<&TensorInfo
     }
     let kinds: Vec<KindCount> = by_kind
         .into_iter()
-        .map(|(k, (c, n))| KindCount { kind_label: k, count: c, nbytes: n })
+        .map(|(k, (c, n))| KindCount {
+            kind_label: k,
+            count: c,
+            nbytes: n,
+        })
         .collect();
 
     BlockSummary {

@@ -22,7 +22,7 @@ use std::cmp::min;
 use std::fs::File;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use memchr::memmem;
 use memmap2::Mmap;
 
@@ -36,12 +36,12 @@ const OP_SHORT_BINUNICODE: u8 = 0x8c;
 const OP_MEMOIZE: u8 = 0x94;
 const OP_STACK_GLOBAL: u8 = 0x93;
 
-const OP_BINGET: u8 = b'h';      // 0x68  u8 index
+const OP_BINGET: u8 = b'h'; // 0x68  u8 index
 const OP_LONG_BINGET: u8 = b'j'; // 0x6a  u32 index
 
 const OP_SHORT_BINBYTES: u8 = b'C'; // 0x43  u8 len
-const OP_BINBYTES: u8 = b'B';       // 0x42  u32 len
-const OP_BINBYTES8: u8 = 0x8e;      // u64 len
+const OP_BINBYTES: u8 = b'B'; // 0x42  u32 len
+const OP_BINBYTES8: u8 = 0x8e; // u64 len
 
 const OP_MARK: u8 = b'(';
 const OP_TUPLE: u8 = b't';
@@ -52,7 +52,7 @@ const OP_EMPTY_TUPLE: u8 = b')';
 
 const OP_BININT1: u8 = b'K'; // 0x4b  u8
 const OP_BININT2: u8 = b'M'; // 0x4d  u16
-const OP_BININT: u8 = b'J';  // 0x4a  i32
+const OP_BININT: u8 = b'J'; // 0x4a  i32
 
 const OP_NEWTRUE: u8 = 0x88;
 const OP_NEWFALSE: u8 = 0x89;
@@ -106,7 +106,12 @@ pub fn dissect_shard(path: &Path) -> Result<Vec<RawTensor>> {
             Ok(t) => tensors.push(t),
             Err(err) => {
                 // Non-fatal: one bad anchor never aborts a shard.
-                eprintln!("  skip anchor @ {:#x} in {}: {:#}", a.tag_pos, path.display(), err);
+                eprintln!(
+                    "  skip anchor @ {:#x} in {}: {:#}",
+                    a.tag_pos,
+                    path.display(),
+                    err
+                );
             }
         }
     }
@@ -139,7 +144,11 @@ fn find_dtype_anchors(bytes: &[u8]) -> Vec<DtypeAnchor> {
         for pos in memmem::find_iter(bytes, tag) {
             let after = pos + tag.len();
             if has_dtype_postamble(bytes, after) {
-                out.push(DtypeAnchor { tag_pos: pos, after_tag: after, dtype });
+                out.push(DtypeAnchor {
+                    tag_pos: pos,
+                    after_tag: after,
+                    dtype,
+                });
             }
         }
     }
@@ -160,7 +169,10 @@ fn extract_tensor(bytes: &[u8], anchor: &DtypeAnchor) -> Result<RawTensor> {
     let shape_dims = parse_shape_backward(bytes, anchor.tag_pos)?;
     let (offset, nbytes) = find_payload_forward(bytes, anchor.after_tag)?;
     let expected = anchor.dtype.itemsize() as u64
-        * shape_dims.iter().copied().fold(1u64, |a, d| a.saturating_mul(d));
+        * shape_dims
+            .iter()
+            .copied()
+            .fold(1u64, |a, d| a.saturating_mul(d));
     if expected != 0 && expected != nbytes {
         return Err(anyhow!(
             "shape/payload mismatch: shape={:?} dtype={} nbytes={} expected={}",
@@ -200,7 +212,11 @@ fn parse_shape_backward(bytes: &[u8], tag_pos: usize) -> Result<Vec<u64>> {
 }
 
 fn skip_memoize_back(bytes: &[u8], p: usize) -> usize {
-    if p >= 1 && bytes[p - 1] == OP_MEMOIZE { p - 1 } else { p }
+    if p >= 1 && bytes[p - 1] == OP_MEMOIZE {
+        p - 1
+    } else {
+        p
+    }
 }
 
 fn skip_string_push_back(bytes: &[u8], p: usize) -> Result<usize> {
@@ -220,7 +236,10 @@ fn skip_string_push_back(bytes: &[u8], p: usize) -> Result<usize> {
             return Ok(p - len - 2);
         }
     }
-    Err(anyhow!("cannot unwind string push ending at {:#x}", p.saturating_sub(1)))
+    Err(anyhow!(
+        "cannot unwind string push ending at {:#x}",
+        p.saturating_sub(1)
+    ))
 }
 
 fn skip_binget_back(bytes: &[u8], p: usize) -> Result<usize> {
@@ -300,7 +319,10 @@ fn read_int_backward(bytes: &[u8], end_exclusive: usize) -> Result<(u64, usize)>
     if end_exclusive >= 2 && bytes[end_exclusive - 2] == OP_BININT1 {
         return Ok((bytes[end_exclusive - 1] as u64, end_exclusive - 2));
     }
-    Err(anyhow!("no BININT* opcode ending at offset {:#x}", end_exclusive - 1))
+    Err(anyhow!(
+        "no BININT* opcode ending at offset {:#x}",
+        end_exclusive - 1
+    ))
 }
 
 fn find_payload_forward(bytes: &[u8], after_tag: usize) -> Result<(u64, u64)> {
