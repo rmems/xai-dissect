@@ -158,13 +158,37 @@ time comes:
 
 ## Relationship To Sibling Repos
 
-- `corinth-canal`: orchestration and runtime glue
-- `snn-projector`: projector logic
-- `SAAQ-latent`: latent calibration and latent-space analysis
-- `Surrogate_Viz.jl`: visualization and dashboards
+### corinth-canal
 
-`xai-dissect` stays upstream of those projects. Its job is to emit structural
-artifacts from a frozen checkpoint.
+`corinth-canal` owns orchestration and hybrid-runtime glue: it wires models,
+projectors, and downstream consumers together. `xai-dissect` is strictly
+upstream of that: it produces structural descriptions of a frozen checkpoint.
+If `corinth-canal` needs "what is the shape of expert 3's down-projection in
+layer 17", it consumes an `xai-dissect` export. It does not call into this
+repo at runtime.
+
+### snn-projector
+
+`snn-projector` owns projector logic, including any spiking / neuromorphic
+projection of activations. `xai-dissect` does not implement, test, or depend
+on projector math. It may describe the shape of tensors that a projector would
+later consume (e.g. embedding width, expert output dimension), but it never
+projects anything itself.
+
+### SAAQ-latent
+
+`SAAQ-latent` owns SAAQ latent calibration and latent-space analysis.
+`xai-dissect` does not compute SAAQ scores and does not calibrate latents. Its
+role is upstream reconnaissance: sampled tensor statistics, routing-risk flags,
+and candidate-target manifests that help decide where future SAAQ work should
+focus.
+
+### Surrogate_Viz.jl
+
+`Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
+structured, exportable findings (JSON / CSV / Markdown). It does not render
+plots, does not ship a UI, and does not embed a plotting stack.
+`Surrogate_Viz.jl` is a downstream consumer of `xai-dissect` exports.
 
 ## Architecture
 
