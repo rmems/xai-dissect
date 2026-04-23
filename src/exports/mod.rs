@@ -59,10 +59,13 @@ pub fn resolve_checkpoint_slug(
     checkpoint_path: &Path,
     slug_override: Option<&str>,
 ) -> Result<String> {
-    if let Some(slug) = slug_override {
-        let slug = sanitize_slug_component(slug);
+    if let Some(slug_override) = slug_override {
+        let slug = sanitize_slug_component(slug_override);
         if slug.is_empty() {
-            bail!("checkpoint slug override resolved to an empty value");
+            bail!(
+                "checkpoint slug override {:?} resolved to an empty value after sanitization; provide an override containing retained ASCII alphanumeric characters",
+                slug_override
+            );
         }
         return Ok(slug);
     }
