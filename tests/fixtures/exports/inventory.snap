@@ -1,0 +1,269 @@
+=== exports/grok-1-official__ckpt-0/inventory-findings.json ===
+{
+  "analysis": "inventory",
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "checkpoint_slug": "grok-1-official__ckpt-0",
+  "headline": "4 tensors across 2 shards",
+  "findings": [
+    {
+      "severity": "info",
+      "category": "checkpoint_scale",
+      "detail": "2 shards, 4 tensors, 368 bytes"
+    },
+    {
+      "severity": "info",
+      "category": "block_structure",
+      "detail": "2 block summaries, inferred d_model 4, inferred experts 2"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== exports/grok-1-official__ckpt-0/inventory.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 2,
+  "inferred": {
+    "vocab_size": 16,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": 6,
+    "n_blocks": 1
+  },
+  "tensors": [
+    {
+      "shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0000",
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        16,
+        4
+      ],
+      "offset": 128,
+      "nbytes": 256,
+      "kind": {
+        "kind": "token_embedding"
+      },
+      "block_index": null,
+      "block_slot": null
+    },
+    {
+      "shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0001",
+      "shard_ordinal": 1,
+      "in_shard_index": 0,
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        4,
+        2
+      ],
+      "offset": 32,
+      "nbytes": 32,
+      "kind": {
+        "kind": "router"
+      },
+      "block_index": 0,
+      "block_slot": 0
+    },
+    {
+      "shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0001",
+      "shard_ordinal": 1,
+      "in_shard_index": 1,
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        4,
+        4
+      ],
+      "offset": 96,
+      "nbytes": 64,
+      "kind": {
+        "kind": "attn_proj_f32"
+      },
+      "block_index": 0,
+      "block_slot": 1
+    },
+    {
+      "shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0001",
+      "shard_ordinal": 1,
+      "in_shard_index": 2,
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        4
+      ],
+      "offset": 176,
+      "nbytes": 16,
+      "kind": {
+        "kind": "block_norm"
+      },
+      "block_index": 0,
+      "block_slot": 2
+    }
+  ],
+  "blocks": [
+    {
+      "block_index": null,
+      "label": "embedding",
+      "shard_range": {
+        "start": 0,
+        "end_inclusive": 0
+      },
+      "tensor_count": 1,
+      "total_nbytes": 256,
+      "dtypes": [
+        "f32"
+      ],
+      "kinds": [
+        {
+          "kind_label": "token_embedding",
+          "count": 1,
+          "nbytes": 256
+        }
+      ]
+    },
+    {
+      "block_index": 0,
+      "label": "block_000",
+      "shard_range": {
+        "start": 1,
+        "end_inclusive": 1
+      },
+      "tensor_count": 3,
+      "total_nbytes": 112,
+      "dtypes": [
+        "f32"
+      ],
+      "kinds": [
+        {
+          "kind_label": "router",
+          "count": 1,
+          "nbytes": 32
+        },
+        {
+          "kind_label": "attn_proj_f32",
+          "count": 1,
+          "nbytes": 64
+        },
+        {
+          "kind_label": "block_norm",
+          "count": 1,
+          "nbytes": 16
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "tensors": 4,
+    "quant_tensors": 0,
+    "f32_tensors": 4,
+    "i8_tensors": 0,
+    "total_nbytes": 368,
+    "total_elements": 92
+  },
+  "schema_version": 1
+}
+
+=== manifests/grok-1-official__ckpt-0/checkpoint-inventory-snapshot.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 2,
+  "inferred": {
+    "vocab_size": 16,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": 6,
+    "n_blocks": 1
+  },
+  "total_tensors": 4,
+  "total_nbytes": 368,
+  "blocks": [
+    {
+      "label": "embedding",
+      "block_index": null,
+      "shard_range": {
+        "start": 0,
+        "end_inclusive": 0
+      },
+      "tensor_count": 1,
+      "total_nbytes": 256,
+      "kind_labels": [
+        "token_embedding"
+      ]
+    },
+    {
+      "label": "block_000",
+      "block_index": 0,
+      "shard_range": {
+        "start": 1,
+        "end_inclusive": 1
+      },
+      "tensor_count": 3,
+      "total_nbytes": 112,
+      "kind_labels": [
+        "router",
+        "attn_proj_f32",
+        "block_norm"
+      ]
+    }
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/inventory.md ===
+# xai-dissect inventory
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **shards**: 2
+- **schema_version**: 1
+
+## Inferred hyperparameters
+
+| Field | Value |
+| ----- | ----- |
+| vocab_size | 16 |
+| d_model | 4 |
+| n_experts | 2 |
+| d_ff | 6 |
+| n_blocks | 1 |
+
+## Totals
+
+| Metric | Value |
+| ------ | ----- |
+| tensors | 4 |
+| f32 tensors | 4 |
+| int8 tensors | 0 |
+| quant tensors | 0 |
+| total elements | 92 |
+| total bytes | 368 (368 B) |
+
+## Tensor kinds
+
+| Kind | Count | Bytes |
+| ---- | ----: | ----: |
+| attn_proj_f32 | 1 | 64 (64 B) |
+| block_norm | 1 | 16 (16 B) |
+| router | 1 | 32 (32 B) |
+| token_embedding | 1 | 256 (256 B) |
+
+## Blocks
+
+| Label | Block | Shards | Tensors | Bytes | Kinds |
+| ----- | ----: | ------ | ------: | ----: | ----- |
+| embedding | - | 0..=0 | 1 | 256 (256 B) | 1xtoken_embedding |
+| block_000 | 0 | 1..=1 | 3 | 112 (112 B) | 1xrouter, 1xattn_proj_f32, 1xblock_norm |
+
+## Exemplar block (`block_000`)
+
+| Shard | In-shard | Role | Dtype | Shape | Kind | Slot |
+| ----: | -------: | ---- | ----- | ----- | ---- | ---: |
+| 1 | 0 | tensor | f32 | `(4, 2)` | router | 0 |
+| 1 | 1 | tensor | f32 | `(4, 4)` | attn_proj_f32 | 1 |
+| 1 | 2 | tensor | f32 | `(4,)` | block_norm | 2 |

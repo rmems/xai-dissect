@@ -1,7 +1,7 @@
 # Tensor schema and naming heuristics
 
-This document defines the exported data model of `xai-dissect` and the
-rules the inventory layer uses to classify Grok-1 tensors by shape. The
+This document defines the exported inventory data model of `xai-dissect` and
+the rules the inventory layer uses to classify Grok-1 tensors by shape. The
 JSON export is produced by `report::write_json` and matches the
 `ModelInventory` struct in `src/schema/mod.rs` byte-for-byte via serde.
 
@@ -163,8 +163,9 @@ assignment succeeds.
 - Attention head count, head dimension, KV-head grouping. The f32
   attention projections are reported as `AttnProjF32` without further
   split.
-- Any numerical property of the weights. `xai-dissect` never reads tensor
-  bodies.
+- Any numerical property of the weights inside the inventory layer. The
+  parser/inventory path does not read tensor bodies; the separate stats layer
+  may sample payload values for offline profiling.
 - Per-layer routing top-k, dropout layout, or anything that depends on
   training-time hyperparameters.
 

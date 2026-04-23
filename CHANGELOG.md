@@ -28,12 +28,15 @@ Initial coherent milestone release.
 - The stable integration surface is the export schema and CLI artifact layout
 - The in-process Rust API remains intentionally small and secondary to the CLI
 - Current shard assumptions center on Grok-1-style `f32` and `int8` layouts
+- Docs, CLI help, and output conventions are kept aligned for the milestone
+- Export bundles are covered by fixture-driven snapshot tests
 
 ### Validation
 
 - `cargo test` passes on this milestone
 - CLI help and per-command usage examples are documented in `README.md`
 - Output conventions are documented in `docs/output-conventions.md`
+- Export schema contracts are documented in `docs/export-contracts.md`
 
 ### Follow-ons
 

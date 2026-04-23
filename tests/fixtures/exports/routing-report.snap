@@ -1,0 +1,228 @@
+=== exports/grok-1-official__ckpt-0/routing-report-findings.json ===
+{
+  "analysis": "routing-report",
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "checkpoint_slug": "grok-1-official__ckpt-0",
+  "headline": "1 routing candidates discovered",
+  "findings": [
+    {
+      "severity": "info",
+      "category": "routing_candidates",
+      "detail": "1 routing candidates across 1 relevant blocks"
+    },
+    {
+      "severity": "info",
+      "category": "expert_linkage",
+      "detail": "expected experts per router 2"
+    },
+    {
+      "severity": "info",
+      "category": "orientations",
+      "detail": "d_model_to_experts x1"
+    },
+    {
+      "severity": "info",
+      "category": "routing_critical_blocks",
+      "detail": "1 blocks marked routing-critical"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== exports/grok-1-official__ckpt-0/routing-report.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 2,
+  "inferred": {
+    "vocab_size": null,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": null,
+    "n_blocks": 1
+  },
+  "relevant_block_count": 1,
+  "expected_experts_per_router": 2,
+  "candidate_tensors": [
+    {
+      "shard_ordinal": 1,
+      "in_shard_index": 0,
+      "block_index": 0,
+      "block_slot": 0,
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        4,
+        2
+      ],
+      "kind_label": "router",
+      "orientation": "d_model_to_experts",
+      "expert_axis": 1,
+      "linked_expert_count": 2,
+      "matches_inferred_expert_count": true,
+      "structural_name": "block_000.routing_slot_00",
+      "gate_metrics": {
+        "total_elements": 8,
+        "total_nbytes": 32,
+        "input_width": 4,
+        "output_width": 2,
+        "expert_count": 2,
+        "logits_per_input": 2
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "block_index": 0,
+      "label": "block_000",
+      "shard_range": {
+        "start": 1,
+        "end_inclusive": 1
+      },
+      "local_expert_count": 2,
+      "primary_candidate": {
+        "shard_ordinal": 1,
+        "in_shard_index": 0,
+        "block_slot": 0
+      },
+      "candidates": [
+        {
+          "shard_ordinal": 1,
+          "in_shard_index": 0,
+          "block_index": 0,
+          "block_slot": 0,
+          "role": "tensor",
+          "dtype": "f32",
+          "shape": [
+            4,
+            2
+          ],
+          "kind_label": "router",
+          "orientation": "d_model_to_experts",
+          "expert_axis": 1,
+          "linked_expert_count": 2,
+          "matches_inferred_expert_count": true,
+          "structural_name": "block_000.routing_slot_00",
+          "gate_metrics": {
+            "total_elements": 8,
+            "total_nbytes": 32,
+            "input_width": 4,
+            "output_width": 2,
+            "expert_count": 2,
+            "logits_per_input": 2
+          }
+        }
+      ]
+    }
+  ],
+  "orientation_summaries": [
+    {
+      "orientation": "d_model_to_experts",
+      "count": 1,
+      "observed_shapes": [
+        [
+          4,
+          2
+        ]
+      ],
+      "observed_blocks": 1
+    }
+  ],
+  "likely_routing_critical_blocks": [
+    {
+      "block_index": 0,
+      "label": "block_000",
+      "reason": "contains a primary routing candidate linked to a 2-expert MoE block",
+      "primary_candidate": {
+        "shard_ordinal": 1,
+        "in_shard_index": 0,
+        "block_slot": 0
+      }
+    }
+  ],
+  "grok_layout_notes": [
+    "routers use (d_model, n_experts) orientation in this sample"
+  ],
+  "anomalies": [],
+  "schema_version": 1
+}
+
+=== manifests/grok-1-official__ckpt-0/routing-critical-tensors.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "tensors": [
+    {
+      "shard_ordinal": 1,
+      "in_shard_index": 0,
+      "block_index": 0,
+      "block_slot": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "kind_label": "router",
+      "orientation": "d_model_to_experts",
+      "linked_expert_count": 2,
+      "total_nbytes": 32,
+      "criticality_reason": "contains a primary routing candidate linked to a 2-expert MoE block"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/routing-report.md ===
+# xai-dissect routing report
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **shards**: 2
+- **relevant_blocks**: 1
+- **expected_experts_per_router**: 2
+- **schema_version**: 1
+
+## Candidate routing tensors
+
+| Block | Slot | Shape | Orientation | Experts | Kind | Structural name |
+| ----: | ---: | ----- | ----------- | ------: | ---- | --------------- |
+| 0 | 0 | `(4, 2)` | d_model_to_experts | 2 | router | `block_000.routing_slot_00` |
+
+## Shape and orientation summaries
+
+| Orientation | Count | Blocks | Shapes |
+| ----------- | ----: | -----: | ------ |
+| d_model_to_experts | 1 | 1 | (4, 2) |
+
+## Layer-by-layer routing metadata
+
+| Label | Block | Local experts | Primary candidate | Candidate count |
+| ----- | ----: | ------------: | ----------------- | --------------: |
+| block_000 | 0 | 2 | shard 1 idx 0 slot 0 | 1 |
+
+## Gate tensor structural metrics
+
+| Structural name | Input width | Output width | Logits/input | Bytes |
+| --------------- | ----------: | -----------: | -----------: | ----: |
+| `block_000.routing_slot_00` | 4 | 2 | 2 | 32 (32 B) |
+
+## Expert count linkage
+
+| Structural name | Linked experts | Matches inferred experts |
+| --------------- | -------------: | ----------------------- |
+| `block_000.routing_slot_00` | 2 | yes |
+
+## Likely routing-critical blocks
+
+| Block | Label | Reason |
+| ----: | ----- | ------ |
+| 0 | block_000 | contains a primary routing candidate linked to a 2-expert MoE block |
+
+## Grok-specific layout notes
+
+- routers use (d_model, n_experts) orientation in this sample
+
+## Routing anomalies
+
+None detected.
+
+## Missing routing candidates
+
+None detected.

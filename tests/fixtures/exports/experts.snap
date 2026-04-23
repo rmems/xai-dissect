@@ -1,0 +1,242 @@
+=== exports/grok-1-official__ckpt-0/experts-findings.json ===
+{
+  "analysis": "experts",
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "checkpoint_slug": "grok-1-official__ckpt-0",
+  "headline": "1 relevant expert blocks",
+  "findings": [
+    {
+      "severity": "info",
+      "category": "expert_blocks",
+      "detail": "1 relevant blocks, expected experts per block 2"
+    },
+    {
+      "severity": "info",
+      "category": "expert_count_consistency",
+      "detail": "expert count is structurally consistent at 2"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== exports/grok-1-official__ckpt-0/experts.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 3,
+  "inferred": {
+    "vocab_size": null,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": 6,
+    "n_blocks": 1
+  },
+  "relevant_block_count": 1,
+  "expected_experts_per_block": 2,
+  "blocks": [
+    {
+      "block_index": 0,
+      "shard_range": {
+        "start": 1,
+        "end_inclusive": 2
+      },
+      "expert_count": 2,
+      "tensors": [
+        {
+          "shard_ordinal": 1,
+          "in_shard_index": 0,
+          "block_slot": 3,
+          "role": "quant_weight",
+          "dtype": "i8",
+          "shape": [
+            2,
+            4,
+            6
+          ],
+          "kind_label": "moe_expert.unresolved",
+          "projection": "unresolved",
+          "expert_axis": 0,
+          "expert_count": 2,
+          "family_label": "ffn_up_or_gate",
+          "structural_name": "block_000.slot_03.ffn_up_or_gate"
+        },
+        {
+          "shard_ordinal": 2,
+          "in_shard_index": 0,
+          "block_slot": 4,
+          "role": "quant_weight",
+          "dtype": "i8",
+          "shape": [
+            2,
+            6,
+            4
+          ],
+          "kind_label": "moe_expert.down",
+          "projection": "down",
+          "expert_axis": 0,
+          "expert_count": 2,
+          "family_label": "ffn_down",
+          "structural_name": "block_000.slot_04.ffn_down"
+        }
+      ],
+      "experts": [
+        {
+          "expert_index": 0,
+          "tensors": [
+            {
+              "family_label": "ffn_up_or_gate",
+              "structural_name": "block_000.expert_00.ffn_up_or_gate",
+              "source_shard_ordinal": 1,
+              "source_in_shard_index": 0,
+              "source_block_slot": 3,
+              "projection": "unresolved",
+              "dtype": "i8",
+              "slice_shape": [
+                4,
+                6
+              ]
+            },
+            {
+              "family_label": "ffn_down",
+              "structural_name": "block_000.expert_00.ffn_down",
+              "source_shard_ordinal": 2,
+              "source_in_shard_index": 0,
+              "source_block_slot": 4,
+              "projection": "down",
+              "dtype": "i8",
+              "slice_shape": [
+                6,
+                4
+              ]
+            }
+          ]
+        },
+        {
+          "expert_index": 1,
+          "tensors": [
+            {
+              "family_label": "ffn_up_or_gate",
+              "structural_name": "block_000.expert_01.ffn_up_or_gate",
+              "source_shard_ordinal": 1,
+              "source_in_shard_index": 0,
+              "source_block_slot": 3,
+              "projection": "unresolved",
+              "dtype": "i8",
+              "slice_shape": [
+                4,
+                6
+              ]
+            },
+            {
+              "family_label": "ffn_down",
+              "structural_name": "block_000.expert_01.ffn_down",
+              "source_shard_ordinal": 2,
+              "source_in_shard_index": 0,
+              "source_block_slot": 4,
+              "projection": "down",
+              "dtype": "i8",
+              "slice_shape": [
+                6,
+                4
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "naming_patterns": [
+    {
+      "family_label": "ffn_up_or_gate",
+      "pattern": "block_{block}.slot_03.ffn_up_or_gate",
+      "projection": "unresolved",
+      "block_slots": [
+        3
+      ],
+      "observed_shapes": [
+        [
+          2,
+          4,
+          6
+        ]
+      ],
+      "observed_blocks": 1
+    },
+    {
+      "family_label": "ffn_down",
+      "pattern": "block_{block}.slot_04.ffn_down",
+      "projection": "down",
+      "block_slots": [
+        4
+      ],
+      "observed_shapes": [
+        [
+          2,
+          6,
+          4
+        ]
+      ],
+      "observed_blocks": 1
+    }
+  ],
+  "naming_checks": [
+    {
+      "check": "expert_count_consistent",
+      "passed": true,
+      "detail": "all expert tensors agree on 2 experts"
+    },
+    {
+      "check": "expert_family_count_consistent",
+      "passed": true,
+      "detail": "each relevant block exposes two expert tensor families"
+    }
+  ],
+  "anomalies": [],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/experts.md ===
+# xai-dissect expert atlas
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **shards**: 3
+- **relevant_blocks**: 1
+- **expected_experts_per_block**: 2
+- **schema_version**: 1
+
+## Expert counts by block
+
+| Block | Experts | Expert tensors | Slots | Shapes |
+| ----: | ------: | -------------: | ----- | ------ |
+| 0 | 2 | 2 | 3, 4 | ffn_up_or_gate (2, 4, 6)<br>ffn_down (2, 6, 4) |
+
+## Tensor naming patterns
+
+| Family | Pattern | Projection | Slots | Shapes | Blocks |
+| ------ | ------- | ---------- | ----- | ------ | -----: |
+| ffn_up_or_gate | `block_{block}.slot_03.ffn_up_or_gate` | unresolved | 3 | (2, 4, 6) | 1 |
+| ffn_down | `block_{block}.slot_04.ffn_down` | down | 4 | (2, 6, 4) | 1 |
+
+## Naming consistency checks
+
+| Check | Result | Detail |
+| ----- | ------ | ------ |
+| expert_count_consistent | pass | all expert tensors agree on 2 experts |
+| expert_family_count_consistent | pass | each relevant block exposes two expert tensor families |
+
+## Missing or irregular expert tensors
+
+None detected.
+
+## Layout anomalies
+
+None detected.
+
+## Exemplar block (`block_000`)
+
+| Expert | Tensor associations |
+| -----: | ------------------- |
+| 0 | `block_000.expert_00.ffn_up_or_gate` unresolved `(4, 6)`<br>`block_000.expert_00.ffn_down` down `(6, 4)` |
+| 1 | `block_000.expert_01.ffn_up_or_gate` unresolved `(4, 6)`<br>`block_000.expert_01.ffn_down` down `(6, 4)` |

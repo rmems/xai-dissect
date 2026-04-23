@@ -119,7 +119,8 @@ out/
 ```
 
 See [docs/output-conventions.md](docs/output-conventions.md) for the full
-artifact naming convention.
+artifact naming convention, and [docs/export-contracts.md](docs/export-contracts.md)
+for the stable schema types behind those files.
 
 ## Outputs
 
@@ -183,6 +184,15 @@ role is upstream reconnaissance: sampled tensor statistics, routing-risk flags,
 and candidate-target manifests that help decide where future SAAQ work should
 focus.
 
+### grok-ozempic
+
+`grok-ozempic` is where compression, packing, and runtime ideas actually get
+applied once the checkpoint structure is understood. `xai-dissect` stays
+upstream of that work: it tells you what you are touching before any
+compression-oriented repo starts changing representation or execution.
+`grok-ozempic` is still under construction for further upgrades, and the
+"ozempic" part of the name is meant to make that repo's purpose obvious.
+
 ### Surrogate_Viz.jl
 
 `Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
@@ -195,6 +205,7 @@ plots, does not ship a UI, and does not embed a plotting stack.
 See:
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/export-contracts.md](docs/export-contracts.md)
 - [docs/tensor-schema.md](docs/tensor-schema.md)
 - [docs/output-conventions.md](docs/output-conventions.md)
 

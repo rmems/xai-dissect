@@ -1,0 +1,373 @@
+=== exports/grok-1-official__ckpt-0/stats-findings.json ===
+{
+  "analysis": "stats",
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "checkpoint_slug": "grok-1-official__ckpt-0",
+  "headline": "2 tensors profiled",
+  "findings": [
+    {
+      "severity": "info",
+      "category": "sampling",
+      "detail": "2 tensors profiled with up to 64 sampled values each"
+    },
+    {
+      "severity": "info",
+      "category": "highest_rms",
+      "detail": "highest RMS: block_000.routing_slot_00 (1.118034)"
+    },
+    {
+      "severity": "info",
+      "category": "highest_variance",
+      "detail": "highest variance: block_000.routing_slot_00 (1.250000)"
+    },
+    {
+      "severity": "info",
+      "category": "outlier_heavy",
+      "detail": "most outlier-heavy tensor: block_000.routing_slot_00 (0.125000)"
+    }
+  ],
+  "schema_version": 1
+}
+
+=== exports/grok-1-official__ckpt-0/stats.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "shard_count": 2,
+  "inferred": {
+    "vocab_size": 16,
+    "d_model": 4,
+    "n_experts": 2,
+    "d_ff": null,
+    "n_blocks": 1
+  },
+  "sampling": {
+    "max_sample_values": 64,
+    "f32_near_zero_abs": 0.001,
+    "i8_near_zero_abs": 1
+  },
+  "tensors": [
+    {
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "block_index": null,
+      "block_slot": null,
+      "structural_name": "embedding.slot_00.token_embedding",
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        16,
+        4
+      ],
+      "kind_label": "token_embedding",
+      "sampled": true,
+      "total_values": 64,
+      "sample_values": 64,
+      "total_nbytes": 256,
+      "mean": 0.125,
+      "variance": 0.0625,
+      "stddev": 0.25,
+      "min": -0.25,
+      "max": 0.75,
+      "max_abs": 0.75,
+      "l1_norm": 12.0,
+      "l2_norm": 2.5,
+      "rms": 0.3125,
+      "zero_fraction": 0.1,
+      "near_zero_fraction": 0.25,
+      "positive_fraction": 0.6,
+      "negative_fraction": 0.3,
+      "outlier_fraction": 0.0,
+      "peak_to_rms": 2.4,
+      "distribution_label": "dense_balanced"
+    },
+    {
+      "shard_ordinal": 1,
+      "in_shard_index": 0,
+      "block_index": 0,
+      "block_slot": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "role": "tensor",
+      "dtype": "f32",
+      "shape": [
+        4,
+        2
+      ],
+      "kind_label": "router",
+      "sampled": true,
+      "total_values": 8,
+      "sample_values": 8,
+      "total_nbytes": 32,
+      "mean": 0.0,
+      "variance": 1.25,
+      "stddev": 1.11803398875,
+      "min": -1.0,
+      "max": 2.0,
+      "max_abs": 2.0,
+      "l1_norm": 7.0,
+      "l2_norm": 3.16227766017,
+      "rms": 1.11803398875,
+      "zero_fraction": 0.0,
+      "near_zero_fraction": 0.125,
+      "positive_fraction": 0.5,
+      "negative_fraction": 0.375,
+      "outlier_fraction": 0.125,
+      "peak_to_rms": 1.78885438199,
+      "distribution_label": "outlier_heavy"
+    }
+  ],
+  "layers": [
+    {
+      "block_index": null,
+      "label": "embedding",
+      "tensor_count": 1,
+      "sampled_tensor_count": 1,
+      "total_nbytes": 256,
+      "mean_rms": 0.3125,
+      "mean_variance": 0.0625,
+      "mean_outlier_fraction": 0.0,
+      "routing_tensor_count": 0,
+      "compressible_candidate_count": 1
+    },
+    {
+      "block_index": 0,
+      "label": "block_000",
+      "tensor_count": 1,
+      "sampled_tensor_count": 1,
+      "total_nbytes": 32,
+      "mean_rms": 1.11803398875,
+      "mean_variance": 1.25,
+      "mean_outlier_fraction": 0.125,
+      "routing_tensor_count": 1,
+      "compressible_candidate_count": 0
+    }
+  ],
+  "norm_summary": {
+    "mean_rms": 0.715266994375,
+    "max_rms": {
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "kind_label": "router",
+      "block_index": 0,
+      "value": 1.11803398875
+    },
+    "max_l2": {
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "kind_label": "router",
+      "block_index": 0,
+      "value": 3.16227766017
+    },
+    "top_rms": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 1.11803398875
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 0.3125
+      }
+    ],
+    "top_l2": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 3.16227766017
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 2.5
+      }
+    ]
+  },
+  "variance_summary": {
+    "mean_variance": 0.65625,
+    "max_variance": {
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "structural_name": "block_000.routing_slot_00",
+      "kind_label": "router",
+      "block_index": 0,
+      "value": 1.25
+    },
+    "min_variance": {
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "structural_name": "embedding.slot_00.token_embedding",
+      "kind_label": "token_embedding",
+      "block_index": null,
+      "value": 0.0625
+    },
+    "top_variance": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 1.25
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 0.0625
+      }
+    ],
+    "lowest_variance": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 0.0625
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 1.25
+      }
+    ]
+  },
+  "outlier_summary": {
+    "mean_outlier_fraction": 0.0625,
+    "most_outlier_heavy": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 0.125
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 0.0
+      }
+    ],
+    "highest_peak_to_rms": [
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "embedding.slot_00.token_embedding",
+        "kind_label": "token_embedding",
+        "block_index": null,
+        "value": 2.4
+      },
+      {
+        "shard_ordinal": 0,
+        "in_shard_index": 0,
+        "structural_name": "block_000.routing_slot_00",
+        "kind_label": "router",
+        "block_index": 0,
+        "value": 1.78885438199
+      }
+    ]
+  },
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/stats.md ===
+# xai-dissect stats report
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **shards**: 2
+- **sample_values_per_tensor**: 64
+- **schema_version**: 1
+
+## Norm summary
+
+- **mean_rms**: 0.715267
+
+### Top RMS tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `block_000.routing_slot_00` | router | 0 | 1.118034 |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 0.312500 |
+
+### Top L2 tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `block_000.routing_slot_00` | router | 0 | 3.162278 |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 2.500000 |
+
+## Variance summary
+
+- **mean_variance**: 0.656250
+
+### Top variance tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `block_000.routing_slot_00` | router | 0 | 1.250000 |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 0.062500 |
+
+### Lowest variance tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 0.062500 |
+| `block_000.routing_slot_00` | router | 0 | 1.250000 |
+
+## Outlier summary
+
+- **mean_outlier_fraction**: 0.062500
+
+### Most outlier-heavy tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `block_000.routing_slot_00` | router | 0 | 0.125000 |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 0.000000 |
+
+### Highest peak-to-RMS tensors
+
+| Tensor | Kind | Block | Value |
+| ------ | ---- | ----: | ----: |
+| `embedding.slot_00.token_embedding` | token_embedding | - | 2.400000 |
+| `block_000.routing_slot_00` | router | 0 | 1.788854 |
+
+## Per-layer metrics
+
+| Label | Block | Tensors | Bytes | Mean RMS | Mean variance | Mean outlier frac | Routing tensors | Candidate-like tensors |
+| ----- | ----: | ------: | ----: | -------: | ------------: | ----------------: | --------------: | ---------------------: |
+| embedding | - | 1 | 256 (256 B) | 0.312500 | 0.062500 | 0.000000 | 0 | 1 |
+| block_000 | 0 | 1 | 32 (32 B) | 1.118034 | 1.250000 | 0.125000 | 1 | 0 |
+
+## Per-tensor metrics
+
+| Tensor | Kind | Dtype | Shape | RMS | Variance | Zero frac | Near-zero frac | Outlier frac | Distribution |
+| ------ | ---- | ----- | ----- | ---: | -------: | --------: | -------------: | -----------: | ------------ |
+| `embedding.slot_00.token_embedding` | token_embedding | f32 | `(16, 4)` | 0.312500 | 0.062500 | 0.1000 | 0.2500 | 0.0000 | dense_balanced |
+| `block_000.routing_slot_00` | router | f32 | `(4, 2)` | 1.118034 | 1.250000 | 0.0000 | 0.1250 | 0.1250 | outlier_heavy |
