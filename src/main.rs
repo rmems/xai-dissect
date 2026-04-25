@@ -496,6 +496,7 @@ fn run_routing_report(
 
 // --- `stats` --------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn run_stats(
     path: &std::path::Path,
     prefix: &str,
@@ -542,6 +543,7 @@ fn run_stats(
 
 // --- `saaq-readiness` -----------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn run_saaq_readiness(
     path: &std::path::Path,
     prefix: &str,

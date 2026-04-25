@@ -127,13 +127,14 @@ Applied in order; the first matching rule wins.
 ## Block assignment
 
 Grok-1 emits one shard per top-level JAX leaf. The observed layout for
-`ckpt-0` is:
+`ckpt-0` is one token-embedding singleton, one norm singleton, and 64
+equal-sized transformer-block windows:
 
 ```
-  shard   0             : token embedding          (1 shard)
-  shards  1 .. 1+64*K-1 : 64 transformer blocks    (K = 12 shards / block)
-  shard   1 + 64*K      : final norm               (1 shard)
-                          total = 770
+  shard   0              : token embedding          (1 shard)
+  one edge singleton     : final/pre-head norm      (1 shard)
+  remaining 64*K shards  : 64 transformer blocks    (K = 12 shards / block)
+                           total = 770
 ```
 
 The inventory layer computes:
@@ -143,16 +144,22 @@ The inventory layer computes:
   if interior % 12 == 0 and shard_count >= 3:
       k_per_block = 12
       n_blocks    = interior / 12
-      block_index = (shard_ordinal - 1) / k_per_block
-      block_slot  = (shard_ordinal - 1) % k_per_block
+      choose the edge norm singleton from observed tensor kinds
+      block_index = (shard_ordinal - first_block_shard) / k_per_block
+      block_slot  = (shard_ordinal - first_block_shard) % k_per_block
 ```
 
 If the divisor check fails the assignment is skipped; `block_index` and
 `block_slot` remain `null` and downstream consumers should fall back to
 `shard_ordinal` and `kind`.
 
-The last shard's `BlockNorm` record is promoted to `FinalNorm` once block
-assignment succeeds.
+The norm singleton's `BlockNorm` record is promoted to `FinalNorm` once
+block assignment succeeds. For Grok-1 router canonicalization, the layout
+choice is conservative: if the norm singleton appears immediately after the
+embedding and the tail shard is router-shaped, the block window starts after
+that singleton so all 64 `(d_model, n_experts)` routers receive canonical
+`block_NNN.routing_slot_SS` names. If the evidence is insufficient, router
+candidates remain unassigned and the routing report records a layout note.
 
 ## What is *not* inferred here
 
