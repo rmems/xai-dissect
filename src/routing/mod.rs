@@ -643,10 +643,16 @@ mod tests {
     }
 
     fn inventory(tensors: Vec<TensorInfo>) -> ModelInventory {
+        let shard_count = tensors
+            .iter()
+            .map(|tensor| tensor.shard_ordinal)
+            .max()
+            .map(|max| max + 1)
+            .unwrap_or(0);
         ModelInventory {
             model_family: "grok-1".to_string(),
             checkpoint_path: PathBuf::from("/tmp/grok-1"),
-            shard_count: tensors.len() as u32,
+            shard_count,
             inferred: InferredHyperparams {
                 vocab_size: Some(131072),
                 d_model: Some(6144),

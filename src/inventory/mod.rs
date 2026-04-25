@@ -311,7 +311,7 @@ fn classify_tensor(t: &RawTensor, hp: &InferredHyperparams) -> TensorKind {
 /// them unassigned.
 ///
 /// If the shard count does not fit this layout exactly, we leave
-/// `block_index` unset and the tail norm un-promoted; downstream consumers
+/// `block_index` unset and the norm singleton un-promoted; downstream consumers
 /// can still use `kind`, shape, and shard_ordinal directly.
 fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Option<u32> {
     // Try to divide the interior shards into equally-sized blocks, preferring
@@ -364,7 +364,7 @@ struct GrokBlockLayout {
     last_block_shard: usize,
     norm_singleton_shard: usize,
     assigned_routers: usize,
-    singleton_routers: usize,
+    terminal_router_evidence: bool,
 }
 
 fn choose_grok_block_layout(
@@ -379,15 +379,13 @@ fn choose_grok_block_layout(
     let leading_norm = grok_layout_candidate(tensors, 2, 1, block_shards);
 
     match (tail_norm, leading_norm) {
-        (Some(tail), Some(leading))
-            if leading.assigned_routers > tail.assigned_routers
-                && leading.singleton_routers < tail.singleton_routers =>
-        {
+        (Some(tail), Some(leading)) if leading.assigned_routers > tail.assigned_routers => {
             Some(leading)
         }
         (Some(tail), _) => Some(tail),
-        (None, Some(leading)) => Some(leading),
+        (None, Some(leading)) if leading.terminal_router_evidence => Some(leading),
         (None, None) => None,
+        (None, Some(_)) => None,
     }
 }
 
@@ -421,20 +419,21 @@ fn grok_layout_candidate(
                 && (first_block_shard..=last_block_shard).contains(&(tensor.shard_ordinal as usize))
         })
         .count();
-    let singleton_routers = tensors
+    let terminal_router_evidence = tensors
         .iter()
         .filter(|tensor| {
             matches!(tensor.kind, TensorKind::Router)
-                && tensor.shard_ordinal as usize == norm_singleton_shard
+                && tensor.shard_ordinal as usize == last_block_shard
         })
-        .count();
+        .count()
+        > 0;
 
     Some(GrokBlockLayout {
         first_block_shard,
         last_block_shard,
         norm_singleton_shard,
         assigned_routers,
-        singleton_routers,
+        terminal_router_evidence,
     })
 }
 
@@ -651,6 +650,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn missing_tail_norm_does_not_force_shifted_layout() {
+        let mut tensors = normal_grok_ckpt0_tensors_without_tail_norm();
+
+        let n_blocks = assign_block_indices(&mut tensors, 770);
+
+        assert_eq!(n_blocks, None);
+        assert!(
+            tensors
+                .iter()
+                .filter(|tensor| matches!(tensor.kind, TensorKind::Router))
+                .all(|tensor| tensor.block_index.is_none() && tensor.block_slot.is_none())
+        );
+    }
+
     fn shifted_grok_ckpt0_tensors() -> Vec<TensorInfo> {
         let mut tensors = Vec::new();
         tensors.push(tensor(
@@ -668,8 +682,27 @@ mod tests {
             vec![6_144],
         ));
 
+        append_grok_blocks(&mut tensors, 2);
+
+        tensors
+    }
+
+    fn normal_grok_ckpt0_tensors_without_tail_norm() -> Vec<TensorInfo> {
+        let mut tensors = Vec::new();
+        tensors.push(tensor(
+            0,
+            TensorKind::TokenEmbedding,
+            TensorRole::Tensor,
+            TensorDType::F32,
+            vec![131_072, 6_144],
+        ));
+        append_grok_blocks(&mut tensors, 1);
+        tensors
+    }
+
+    fn append_grok_blocks(tensors: &mut Vec<TensorInfo>, first_block_shard: u32) {
         for block in 0..64u32 {
-            let start = 2 + block * 12;
+            let start = first_block_shard + block * 12;
             for slot in 0..12u32 {
                 let shard = start + slot;
                 match slot {
@@ -723,8 +756,6 @@ mod tests {
                 }
             }
         }
-
-        tensors
     }
 
     fn inventory(tensors: Vec<TensorInfo>, shard_count: u32) -> ModelInventory {
