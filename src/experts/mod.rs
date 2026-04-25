@@ -206,10 +206,8 @@ fn infer_expert_projection(
 ) -> Option<MoeProjection> {
     match &tensor.kind {
         TensorKind::MoeExpertProjection { projection } => return Some(*projection),
-        TensorKind::MoeScales => {
-            if tensor.shape.dims().first().copied() == expected_experts {
-                return Some(MoeProjection::Unresolved);
-            }
+        TensorKind::MoeScales if tensor.shape.dims().first().copied() == expected_experts => {
+            return Some(MoeProjection::Unresolved);
         }
         _ => {}
     }

@@ -555,63 +555,27 @@ pub fn sample_stats_profile() -> StatsProfileReport {
         ],
         norm_summary: NormSummary {
             mean_rms: 0.715_266_994_375,
-            max_rms: Some(rank(
-                &router_stat,
-                "router",
-                1.118_033_988_75,
-            )),
-            max_l2: Some(rank(
-                &router_stat,
-                "router",
-                3.162_277_660_17,
-            )),
+            max_rms: Some(rank(&router_stat, "router", 1.118_033_988_75)),
+            max_l2: Some(rank(&router_stat, "router", 3.162_277_660_17)),
             top_rms: vec![
-                rank(
-                    &router_stat,
-                    "router",
-                    1.118_033_988_75,
-                ),
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    0.3125,
-                ),
+                rank(&router_stat, "router", 1.118_033_988_75),
+                rank(&embedding_stat, "token_embedding", 0.3125),
             ],
             top_l2: vec![
-                rank(
-                    &router_stat,
-                    "router",
-                    3.162_277_660_17,
-                ),
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    2.5,
-                ),
+                rank(&router_stat, "router", 3.162_277_660_17),
+                rank(&embedding_stat, "token_embedding", 2.5),
             ],
         },
         variance_summary: VarianceSummary {
             mean_variance: 0.65625,
             max_variance: Some(rank(&router_stat, "router", 1.25)),
-            min_variance: Some(rank(
-                &embedding_stat,
-                "token_embedding",
-                0.0625,
-            )),
+            min_variance: Some(rank(&embedding_stat, "token_embedding", 0.0625)),
             top_variance: vec![
                 rank(&router_stat, "router", 1.25),
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    0.0625,
-                ),
+                rank(&embedding_stat, "token_embedding", 0.0625),
             ],
             lowest_variance: vec![
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    0.0625,
-                ),
+                rank(&embedding_stat, "token_embedding", 0.0625),
                 rank(&router_stat, "router", 1.25),
             ],
         },
@@ -619,23 +583,11 @@ pub fn sample_stats_profile() -> StatsProfileReport {
             mean_outlier_fraction: 0.0625,
             most_outlier_heavy: vec![
                 rank(&router_stat, "router", 0.125),
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    0.0,
-                ),
+                rank(&embedding_stat, "token_embedding", 0.0),
             ],
             highest_peak_to_rms: vec![
-                rank(
-                    &embedding_stat,
-                    "token_embedding",
-                    2.4,
-                ),
-                rank(
-                    &router_stat,
-                    "router",
-                    1.788_854_381_99,
-                ),
+                rank(&embedding_stat, "token_embedding", 2.4),
+                rank(&router_stat, "router", 1.788_854_381_99),
             ],
         },
         schema_version: 1,

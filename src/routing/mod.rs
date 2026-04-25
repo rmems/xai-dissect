@@ -86,6 +86,21 @@ pub fn build_routing_report(inv: &ModelInventory) -> RoutingReport {
             });
         }
 
+        if block_index.is_none() && !candidates.is_empty() {
+            for candidate in &candidates {
+                anomalies.push(RoutingIssue {
+                    severity: RoutingIssueSeverity::Warning,
+                    category: RoutingIssueCategory::LayoutNote,
+                    block_index,
+                    tensor: Some(locator_from_candidate(candidate)),
+                    message: format!(
+                        "routing candidate `{}` is unassigned because inventory block assignment did not have enough layout evidence to map it to a canonical block",
+                        candidate.structural_name
+                    ),
+                });
+            }
+        }
+
         if let Some(primary) = select_primary_candidate(&candidates) {
             if matches!(
                 primary.orientation,
@@ -600,6 +615,31 @@ mod tests {
                 .iter()
                 .any(|issue| issue.message.contains("no routing candidate"))
         );
+    }
+
+    #[test]
+    fn report_documents_unassigned_routing_candidate() {
+        let inv = inventory(vec![tensor(
+            769,
+            None,
+            None,
+            TensorRole::Tensor,
+            TensorDType::F32,
+            vec![6144, 8],
+            TensorKind::Router,
+        )]);
+
+        let report = build_routing_report(&inv);
+
+        assert_eq!(report.candidate_tensors.len(), 1);
+        assert_eq!(
+            report.candidate_tensors[0].structural_name,
+            "unassigned.routing_candidate_00"
+        );
+        assert!(report.anomalies.iter().any(|issue| {
+            issue.category == crate::schema::RoutingIssueCategory::LayoutNote
+                && issue.message.contains("is unassigned")
+        }));
     }
 
     fn inventory(tensors: Vec<TensorInfo>) -> ModelInventory {
