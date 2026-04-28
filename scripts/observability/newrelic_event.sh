@@ -6,7 +6,7 @@ command_name="${1:-manual}"
 latency_ms="${2:-0}"
 success="${3:-true}"
 error_category="${4:-none}"
-environment="${SENTRY_ENVIRONMENT:-local}"
+environment="${NEW_RELIC_ENVIRONMENT:-${AGENTOS_ENVIRONMENT:-${SENTRY_ENVIRONMENT:-local}}}"
 git_sha="${AGENTOS_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || printf 'unknown')}"
 run_id="${AGENTOS_RUN_ID:-${repo}-${git_sha}}"
 release="${repo}@${git_sha}"
@@ -43,7 +43,7 @@ event="$(
     --arg environment "${environment}" \
     --argjson latency_ms "${latency_ms}" \
     --argjson success "${success}" \
-    '{eventType: $eventType, repo: $repo, run_id: $run_id, git_sha: $git_sha, command: $command, latency_ms: $latency_ms, success: $success, error_category: $error_category, environment: $environment}'
+    '{eventType, repo, run_id, git_sha, command, latency_ms, success, error_category, environment}'
 )"
 
 newrelic events post --event "${event}"

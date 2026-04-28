@@ -18,12 +18,16 @@ if [[ -z "${project}" ]]; then
   exit 2
 fi
 
-if ! sentry-cli releases --org "${org}" --project "${project}" info "${release}" >/dev/null 2>&1; then
-  sentry-cli releases --org "${org}" --project "${project}" new "${release}"
+sentry_cmd() {
+  sentry-cli --org "${org}" --project "${project}" "$@"
+}
+
+if ! sentry_cmd releases info "${release}" >/dev/null 2>&1; then
+  sentry_cmd releases new "${release}"
 fi
 
-sentry-cli releases --org "${org}" --project "${project}" set-commits "${release}" --auto --ignore-missing
-sentry-cli releases --org "${org}" --project "${project}" finalize "${release}"
-sentry-cli deploys --org "${org}" --project "${project}" new --release "${release}" -e "${environment}"
+sentry_cmd releases set-commits "${release}" --auto --ignore-missing
+sentry_cmd releases finalize "${release}"
+sentry_cmd deploys new --release "${release}" -e "${environment}"
 
 printf '%s\n' "${release}"

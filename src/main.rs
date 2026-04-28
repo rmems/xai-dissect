@@ -285,8 +285,8 @@ fn main() -> Result<()> {
     let run_id = observability::run_id();
     let git_sha = observability::git_sha();
 
-    tracing::info!(
-        event = "command_start",
+    let span = tracing::info_span!(
+        "command",
         repo = "xai-dissect",
         command,
         run_id,
@@ -295,8 +295,10 @@ fn main() -> Result<()> {
         prefix = fields.prefix.as_deref().unwrap_or(""),
         family = fields.family.as_deref().unwrap_or(""),
         sample_values = ?fields.sample_values,
-        "command_start"
     );
+    let _enter = span.enter();
+
+    tracing::info!(event = "command_start", "command_start");
 
     let started = Instant::now();
     let result = match cli.command {
@@ -402,17 +404,9 @@ fn main() -> Result<()> {
     let error_category = observability::error_category(result.as_ref().err());
     tracing::info!(
         event = "command_finish",
-        repo = "xai-dissect",
-        command,
-        run_id,
-        git_sha,
         latency_ms,
         success = result.is_ok(),
         error_category,
-        limit = ?fields.limit,
-        prefix = fields.prefix.as_deref().unwrap_or(""),
-        family = fields.family.as_deref().unwrap_or(""),
-        sample_values = ?fields.sample_values,
         "command_finish"
     );
 

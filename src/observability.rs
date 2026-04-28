@@ -51,7 +51,7 @@ pub fn error_category(error: Option<&Error>) -> &'static str {
         || message.contains("shard")
         || message.contains("tensor")
         || message.contains("mmap")
-        || message.contains("stat")
+        || message.contains("stat ")
     {
         "checkpoint_io_error"
     } else if message.contains("json")
@@ -63,5 +63,62 @@ pub fn error_category(error: Option<&Error>) -> &'static str {
         "artifact_error"
     } else {
         "unknown_error"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::error_category;
+    use anyhow::Error;
+
+    fn classify(message: &str) -> &'static str {
+        let error = Error::msg(message.to_owned());
+        error_category(Some(&error))
+    }
+
+    #[test]
+    fn categorizes_none_as_none() {
+        assert_eq!(error_category(None), "none");
+    }
+
+    #[test]
+    fn categorizes_config_errors_from_representative_messages() {
+        assert_eq!(classify("Not a directory"), "config_error");
+        assert_eq!(classify("No shards found in checkpoint"), "config_error");
+    }
+
+    #[test]
+    fn categorizes_checkpoint_io_errors_from_representative_messages() {
+        assert_eq!(classify("failed to parse checkpoint header"), "checkpoint_io_error");
+        assert_eq!(classify("tensor mmap failed"), "checkpoint_io_error");
+        assert_eq!(classify("shard stat failed"), "checkpoint_io_error");
+    }
+
+    #[test]
+    fn categorizes_artifact_errors_from_representative_messages() {
+        assert_eq!(classify("json serialization failed"), "artifact_error");
+        assert_eq!(classify("failed to write manifest"), "artifact_error");
+        assert_eq!(classify("markdown export failed"), "artifact_error");
+    }
+
+    #[test]
+    fn categorizes_unknown_errors_when_no_keywords_match() {
+        assert_eq!(classify("connection reset by peer"), "unknown_error");
+    }
+
+    #[test]
+    fn preserves_branch_precedence_for_overlapping_messages() {
+        assert_eq!(classify("manifest parse failed"), "checkpoint_io_error");
+        assert_eq!(classify("no shards found while exporting"), "config_error");
+    }
+
+    #[test]
+    fn does_not_match_unrelated_words_containing_stat() {
+        // Guards the narrowed `"stat "` predicate against false positives
+        // such as "statistics" or the `stats` subcommand name.
+        assert_eq!(
+            classify("stats subcommand misconfigured"),
+            "unknown_error"
+        );
     }
 }

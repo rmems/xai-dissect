@@ -3,7 +3,7 @@
 .idea/
 Cargo.lock.bak
 out/
-run_grok1_run2.sh
+run_*.sh
 ckpt-*/
 *.ckpt
 *.safetensors
