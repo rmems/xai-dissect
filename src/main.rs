@@ -12,10 +12,13 @@
 //   saaq-readiness  - candidate scouting for future SAAQ work
 
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
+
+mod observability;
 
 use xai_dissect::experts::build_expert_atlas;
 use xai_dissect::exports;
@@ -201,9 +204,104 @@ enum Command {
     },
 }
 
+struct CommandFields {
+    limit: Option<usize>,
+    prefix: Option<String>,
+    family: Option<String>,
+    sample_values: Option<usize>,
+}
+
+impl Command {
+    fn name(&self) -> &'static str {
+        match self {
+            Command::Dissect { .. } => "dissect",
+            Command::Inventory { .. } => "inventory",
+            Command::Experts { .. } => "experts",
+            Command::RoutingReport { .. } => "routing-report",
+            Command::Stats { .. } => "stats",
+            Command::SaaqReadiness { .. } => "saaq-readiness",
+        }
+    }
+
+    fn fields(&self) -> CommandFields {
+        match self {
+            Command::Dissect { limit, prefix, .. } => CommandFields {
+                limit: *limit,
+                prefix: Some(prefix.clone()),
+                family: None,
+                sample_values: None,
+            },
+            Command::Inventory {
+                limit,
+                prefix,
+                family,
+                ..
+            }
+            | Command::Experts {
+                limit,
+                prefix,
+                family,
+                ..
+            }
+            | Command::RoutingReport {
+                limit,
+                prefix,
+                family,
+                ..
+            } => CommandFields {
+                limit: *limit,
+                prefix: Some(prefix.clone()),
+                family: Some(family.clone()),
+                sample_values: None,
+            },
+            Command::Stats {
+                limit,
+                prefix,
+                family,
+                sample_values,
+                ..
+            }
+            | Command::SaaqReadiness {
+                limit,
+                prefix,
+                family,
+                sample_values,
+                ..
+            } => CommandFields {
+                limit: *limit,
+                prefix: Some(prefix.clone()),
+                family: Some(family.clone()),
+                sample_values: Some(*sample_values),
+            },
+        }
+    }
+}
+
 fn main() -> Result<()> {
+    observability::init_tracing();
     let cli = Cli::parse();
-    match cli.command {
+    let command = cli.command.name();
+    let fields = cli.command.fields();
+    let run_id = observability::run_id();
+    let git_sha = observability::git_sha();
+
+    let span = tracing::info_span!(
+        "command",
+        repo = "xai-dissect",
+        command,
+        run_id,
+        git_sha,
+        limit = ?fields.limit,
+        prefix = fields.prefix.as_deref().unwrap_or(""),
+        family = fields.family.as_deref().unwrap_or(""),
+        sample_values = ?fields.sample_values,
+    );
+    let _enter = span.enter();
+
+    tracing::info!(event = "command_start", "command_start");
+
+    let started = Instant::now();
+    let result = match cli.command {
         Command::Dissect {
             path,
             limit,
@@ -300,7 +398,19 @@ fn main() -> Result<()> {
             manifest.as_deref(),
             &output_tree,
         ),
-    }
+    };
+
+    let latency_ms = started.elapsed().as_millis() as u64;
+    let error_category = observability::error_category(result.as_ref().err());
+    tracing::info!(
+        event = "command_finish",
+        latency_ms,
+        success = result.is_ok(),
+        error_category,
+        "command_finish"
+    );
+
+    result
 }
 
 // --- `dissect` -------------------------------------------------------------
