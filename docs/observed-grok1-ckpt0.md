@@ -21,9 +21,9 @@ framing, so file size alone already tells you roughly what is inside.
 |     1 |  3,221,225,637 | 3.0 GiB      | `tensor00000_000` - token embedding `(131072, 6144) f32`. Payload = 131072 x 6144 x 4 = 3,221,225,472 B + ~165 B pickle framing. |
 |   128 |  1,611,137,347 | 1.5 GiB      | MoE / attention `QuantizedWeight8bit` shards, variant A. Int8 body is 8 x 6144 x 32768 = 1,610,612,736 B; remaining ~524 KB is f32 scales + pickle framing. 2 per layer. |
 |    64 |  1,611,399,491 | 1.5 GiB      | Same class as variant A but exactly 262,144 B (= 65,536 f32) larger - consistent with a differently-shaped `scales` block on one of the three expert projections. 1 per layer. |
-|    64 |     37,847,359 | 36 MiB       | f32 tensor sized ~9.46M elements; f32-attention projection companion, 1 per layer. |
-|    64 |     37,761,334 | 36 MiB       | Sibling shape to the row above, 1 per layer. |
-|   128 |      6,293,814 | 6.0 MiB      | f32 scales for the large quantized expert shards, 2 per layer. |
+|    64 |     37,847,359 | 36 MiB       | Rank-2 int8 attention projection, model-width bucket, 1 per layer. |
+|    64 |     37,761,334 | 36 MiB       | Sibling rank-2 int8 attention projection, model-width bucket, 1 per layer. |
+|   128 |      6,293,814 | 6.0 MiB      | Rank-2 int8 attention projection, narrow bucket, 2 per layer. |
 |    64 |        196,770 | 192 KiB      | Small f32 tensor, 1 per layer. Size matches `(6144, 8) f32 = 196,608 B + ~162 B framing` - the per-layer router / gate matrix. |
 |   257 |         24,727 | 24 KiB       | f32 vector of 6144 elements (6144 x 4 = 24,576 B + framing) - per-layer RMSNorms + the final pre-head norm. |
 
@@ -49,9 +49,9 @@ architecture:
 - **128 + 64 = 192 x ~1.5 GiB**: the three MoE expert feed-forward
   projections (up / gate / down) stacked across 8 experts per layer, for
   64 layers. `3 x 64 = 192`.
-- **64 + 64 = 128 x 36 MiB**: two f32 attention-projection companions per
-  layer for 64 layers. `2 x 64 = 128`.
-- **128 x 6 MiB**: f32 scales for the large quantized expert shards, 2
+- **64 + 64 = 128 x 36 MiB**: two model-width rank-2 int8
+  attention-projection tensors per layer for 64 layers. `2 x 64 = 128`.
+- **128 x 6 MiB**: two narrow rank-2 int8 attention-projection tensors
   per layer for 64 layers. `2 x 64 = 128`.
 - **64 x 192 KiB**: one router / gate tensor per layer, `(d_model,
   n_experts) = (6144, 8) f32`, 64 layers. `1 x 64 = 64`.
@@ -87,17 +87,18 @@ The 12 shards per layer decompose as:
 
 ```
 3 quantized MoE expert projections (up / gate / down, 8 experts stacked)
-+ 2 f32 attention projection companions
-+ 2 f32 scales blocks for the large quantized experts
++ 4 rank-2 int8 attention projections (two full-width, two narrow)
 + 1 router / gate
 + 4 RMSNorms
 = 12
 ```
 
 Close enough without a full `run.py` trace; the remaining ambiguity is
-which quantized projection is `up` vs `gate` (they share the
-`(8, 6144, 32768)` signature on disk). That is a downstream disambiguation
-problem for a later analysis pass, not a cartography problem.
+which quantized MoE projection is `up` vs `gate` (they share the
+`(8, 6144, 32768)` signature on disk), and which exact Q/K/V/O role each
+rank-2 int8 attention projection plays. Those are downstream
+disambiguation problems for a later analysis pass, not cartography
+problems.
 
 ## Dissecting a single shard
 

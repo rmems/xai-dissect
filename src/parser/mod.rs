@@ -406,28 +406,78 @@ fn find_qw8_sites(bytes: &[u8]) -> Vec<usize> {
 }
 
 fn assign_qw8_roles(tensors: &mut [RawTensor], sites: &[usize]) {
-    for &site in sites {
+    for (site_index, &site) in sites.iter().enumerate() {
         let site_u64 = site as u64;
-        let mut weight_idx = None;
-        let mut scales_idx = None;
-        for (idx, t) in tensors.iter().enumerate() {
-            if t.offset < site_u64 {
-                continue;
-            }
-            match (t.dtype, weight_idx, scales_idx) {
-                (TensorDType::I8, None, _) => weight_idx = Some(idx),
-                (TensorDType::F32, _, None) => scales_idx = Some(idx),
-                _ => {}
-            }
-            if weight_idx.is_some() && scales_idx.is_some() {
-                break;
-            }
-        }
+        let next_site_u64 = sites
+            .get(site_index + 1)
+            .map(|next| *next as u64)
+            .unwrap_or(u64::MAX);
+        let mut local = tensors
+            .iter()
+            .enumerate()
+            .filter(|(_, tensor)| tensor.offset >= site_u64 && tensor.offset < next_site_u64)
+            .collect::<Vec<_>>();
+        local.sort_by_key(|(_, tensor)| tensor.offset);
+
+        let weight_idx = local
+            .iter()
+            .find(|(_, tensor)| tensor.dtype == TensorDType::I8)
+            .map(|(idx, _)| *idx);
+        let scales_idx = weight_idx.and_then(|weight_idx| {
+            let weight_offset = tensors[weight_idx].offset;
+            local
+                .iter()
+                .find(|(_, tensor)| {
+                    tensor.dtype == TensorDType::F32 && tensor.offset > weight_offset
+                })
+                .map(|(idx, _)| *idx)
+        });
         if let Some(i) = weight_idx {
             tensors[i].role = TensorRole::QuantWeight;
         }
         if let Some(i) = scales_idx {
             tensors[i].role = TensorRole::QuantScales;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RawTensor, assign_qw8_roles};
+    use crate::schema::{TensorDType, TensorRole, TensorShape};
+
+    #[test]
+    fn qw8_role_assignment_stays_within_site_region() {
+        let mut tensors = vec![
+            raw(TensorDType::I8, 110),
+            raw(TensorDType::I8, 210),
+            raw(TensorDType::F32, 220),
+        ];
+
+        assign_qw8_roles(&mut tensors, &[100, 200]);
+
+        assert_eq!(tensors[0].role, TensorRole::QuantWeight);
+        assert_eq!(tensors[1].role, TensorRole::QuantWeight);
+        assert_eq!(tensors[2].role, TensorRole::QuantScales);
+    }
+
+    #[test]
+    fn qw8_role_assignment_requires_scales_after_weight() {
+        let mut tensors = vec![raw(TensorDType::F32, 110), raw(TensorDType::I8, 120)];
+
+        assign_qw8_roles(&mut tensors, &[100]);
+
+        assert_eq!(tensors[0].role, TensorRole::Tensor);
+        assert_eq!(tensors[1].role, TensorRole::QuantWeight);
+    }
+
+    fn raw(dtype: TensorDType, offset: u64) -> RawTensor {
+        RawTensor {
+            role: TensorRole::Tensor,
+            dtype,
+            shape: TensorShape::new(vec![1]),
+            offset,
+            nbytes: dtype.itemsize() as u64,
         }
     }
 }

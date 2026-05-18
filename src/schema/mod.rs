@@ -131,6 +131,9 @@ pub enum TensorKind {
     /// Attention projection stored directly as f32 (not quantized). Exact
     /// role (q / k / v / out) is not determined at cartography time.
     AttnProjF32,
+    /// Quantized rank-2 attention projection. The exact role (q / k / v / out)
+    /// is not determined at cartography time.
+    QuantizedAttentionProjection { width: QuantizedAttentionWidth },
     /// Weight tensor that does not fit any of the above signatures.
     Unknown { reason: String },
 }
@@ -147,7 +150,26 @@ impl TensorKind {
             }
             TensorKind::MoeScales => "moe_scales".into(),
             TensorKind::AttnProjF32 => "attn_proj_f32".into(),
+            TensorKind::QuantizedAttentionProjection { width } => {
+                format!("attn_proj_i8.{}", width.label())
+            }
             TensorKind::Unknown { .. } => "unknown".into(),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantizedAttentionWidth {
+    ModelWidth,
+    Narrow,
+}
+
+impl QuantizedAttentionWidth {
+    pub fn label(self) -> &'static str {
+        match self {
+            QuantizedAttentionWidth::ModelWidth => "model_width",
+            QuantizedAttentionWidth::Narrow => "narrow",
         }
     }
 }
