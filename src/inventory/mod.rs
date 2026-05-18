@@ -54,8 +54,8 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         bail!("{} is not a directory", path.display());
     }
 
-    let shards = collect_shards(path, &cfg.prefix, cfg.limit)?;
-    if shards.is_empty() {
+    let shard_selection = collect_shards(path, &cfg.prefix, cfg.limit)?;
+    if shard_selection.shards.is_empty() {
         bail!(
             "no shards found under {} with prefix '{}'",
             path.display(),
@@ -64,8 +64,8 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     }
 
     // Pass 1: parse every shard into RawTensor records.
-    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shards.len());
-    for shard in &shards {
+    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shard_selection.shards.len());
+    for shard in &shard_selection.shards {
         let ts = parser::dissect_shard(shard)
             .with_context(|| format!("parse shard {}", shard.display()))?;
         raws_per_shard.push(ts);
@@ -76,7 +76,11 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 3: classify each raw tensor into a TensorKind.
     let mut tensors: Vec<TensorInfo> = Vec::new();
-    for (shard_ordinal, (shard_path, raws)) in shards.iter().zip(raws_per_shard.iter()).enumerate()
+    for (shard_ordinal, (shard_path, raws)) in shard_selection
+        .shards
+        .iter()
+        .zip(raws_per_shard.iter())
+        .enumerate()
     {
         for (in_shard_index, raw) in raws.iter().enumerate() {
             let kind = classify_tensor(raw, &hp);
@@ -98,7 +102,11 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 4: assign block_index / block_slot from shard ordinals, using a
     // Grok-1-shaped layout model when the shard count fits.
-    let n_blocks = assign_block_indices_for_scan(&mut tensors, shards.len(), cfg.limit);
+    let n_blocks = assign_block_indices_for_scan(
+        &mut tensors,
+        shard_selection.shards.len(),
+        shard_selection.truncated,
+    );
 
     // Pass 5: build block summaries and totals.
     let blocks = summarize_blocks(&tensors);
@@ -107,7 +115,7 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     Ok(ModelInventory {
         model_family: cfg.model_family.clone(),
         checkpoint_path: path.to_path_buf(),
-        shard_count: shards.len() as u32,
+        shard_count: shard_selection.shards.len() as u32,
         inferred: InferredHyperparams { n_blocks, ..hp },
         tensors,
         blocks,
@@ -118,7 +126,13 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
 // --- Shard enumeration -----------------------------------------------------
 
-fn collect_shards(path: &Path, prefix: &str, limit: Option<usize>) -> Result<Vec<PathBuf>> {
+#[derive(Debug)]
+struct ShardSelection {
+    shards: Vec<PathBuf>,
+    truncated: bool,
+}
+
+fn collect_shards(path: &Path, prefix: &str, limit: Option<usize>) -> Result<ShardSelection> {
     let mut shards = Vec::new();
     for entry in std::fs::read_dir(path).with_context(|| format!("read {}", path.display()))? {
         let entry = entry.with_context(|| format!("read entry in {}", path.display()))?;
@@ -133,10 +147,11 @@ fn collect_shards(path: &Path, prefix: &str, limit: Option<usize>) -> Result<Vec
         }
     }
     shards.sort();
+    let truncated = limit.map(|n| shards.len() > n).unwrap_or(false);
     if let Some(n) = limit {
         shards.truncate(n);
     }
-    Ok(shards)
+    Ok(ShardSelection { shards, truncated })
 }
 
 // --- Hyperparameter inference ---------------------------------------------
@@ -375,9 +390,9 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
 fn assign_block_indices_for_scan(
     tensors: &mut [TensorInfo],
     shard_count: usize,
-    limit: Option<usize>,
+    limit_truncated: bool,
 ) -> Option<u32> {
-    if limit.is_some() {
+    if limit_truncated {
         return None;
     }
     assign_block_indices(tensors, shard_count)
@@ -697,7 +712,7 @@ mod tests {
     fn limited_scan_skips_block_assignment() {
         let mut tensors = shifted_grok_ckpt0_tensors();
 
-        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, Some(14));
+        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, true);
 
         assert_eq!(n_blocks, None);
         assert!(tensors.iter().all(|tensor| tensor.block_index.is_none()));
@@ -705,6 +720,28 @@ mod tests {
             tensors
                 .iter()
                 .all(|tensor| !matches!(tensor.kind, TensorKind::FinalNorm))
+        );
+    }
+
+    #[test]
+    fn non_truncating_limited_scan_keeps_block_assignment() {
+        let mut tensors = shifted_grok_ckpt0_tensors();
+
+        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, false);
+
+        assert_eq!(n_blocks, Some(64));
+        assert_eq!(
+            tensors
+                .iter()
+                .filter(|tensor| matches!(tensor.kind, TensorKind::Router))
+                .filter(|tensor| tensor.block_index.is_some())
+                .count(),
+            64
+        );
+        assert!(
+            tensors
+                .iter()
+                .any(|tensor| matches!(tensor.kind, TensorKind::FinalNorm))
         );
     }
 
