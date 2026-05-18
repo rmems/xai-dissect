@@ -421,17 +421,19 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
         bail!("{} is not a directory", path.display());
     }
 
-    let mut shards: Vec<PathBuf> = std::fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_file()
-                && p.file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|n| n.starts_with(prefix))
-                    .unwrap_or(false)
-        })
-        .collect();
+    let mut shards = Vec::new();
+    for entry in std::fs::read_dir(path).with_context(|| format!("read {}", path.display()))? {
+        let entry = entry.with_context(|| format!("read entry in {}", path.display()))?;
+        let p = entry.path();
+        if p.is_file()
+            && p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with(prefix))
+                .unwrap_or(false)
+        {
+            shards.push(p);
+        }
+    }
     shards.sort();
     if shards.is_empty() {
         bail!(

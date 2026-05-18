@@ -5,7 +5,7 @@ the rules the inventory layer uses to classify Grok-1 tensors by shape. The
 JSON export is produced by `report::write_json` and matches the
 `ModelInventory` struct in `src/schema/mod.rs` byte-for-byte via serde.
 
-Schema version: **1** (`ModelInventory.schema_version`).
+Schema version: **2** (`ModelInventory.schema_version`).
 
 ## Core types
 
@@ -49,6 +49,7 @@ Variants:
 - `moe_expert_projection` with `detail = { "projection": "up" | "gate" | "down" | "unresolved" }`
 - `moe_scales`
 - `attn_proj_f32`
+- `quantized_attention_projection` with `detail = { "width": "model_width" | "narrow" }`
 - `unknown` with `detail = { "reason": "..." }`
 
 ### `TensorInfo`
@@ -113,16 +114,20 @@ Applied in order; the first matching rule wins.
      - Else -> `MoeExpertProjection { projection: unresolved }`.
    - Else -> `Unknown`.
 2. `(role = quant.scales, dtype = f32)` -> `MoeScales`.
-3. `(role = tensor, dtype = f32, rank = 2)`:
+3. `(role = quant.weight, dtype = i8, rank = 2)`:
+   - If `dims == (d_model, d_model)` -> `QuantizedAttentionProjection { width: model_width }`.
+   - Else if `dims[0] == d_model && dims[1] < d_model` -> `QuantizedAttentionProjection { width: narrow }`.
+   - Else -> `Unknown`.
+4. `(role = tensor, dtype = f32, rank = 2)`:
    - If `dims == (vocab_size, d_model)` -> `TokenEmbedding`.
    - Else if `dims == (d_model, n_experts)` -> `Router`.
    - Else -> `AttnProjF32`.
-4. `(role = tensor, dtype = f32, rank = 1)`:
+5. `(role = tensor, dtype = f32, rank = 1)`:
    - If `dims[0] == d_model` -> `BlockNorm` (may be promoted to
      `FinalNorm` by the block-assignment pass).
    - Else -> `Unknown`.
-5. `(role = tensor, dtype = f32, rank >= 3)` -> `AttnProjF32`.
-6. Anything else -> `Unknown`.
+6. `(role = tensor, dtype = f32, rank >= 3)` -> `AttnProjF32`.
+7. Anything else -> `Unknown`.
 
 ## Block assignment
 
@@ -168,8 +173,9 @@ candidates remain unassigned and the routing report records a layout note.
   the block's shard order and is explicitly out of scope for the
   cartography layer.
 - Attention head count, head dimension, KV-head grouping. The f32
-  attention projections are reported as `AttnProjF32` without further
-  split.
+  attention projections are reported as `AttnProjF32`, and the rank-2 int8
+  attention projections as `QuantizedAttentionProjection`, without further
+  Q/K/V/O split.
 - Any numerical property of the weights inside the inventory layer. The
   parser/inventory path does not read tensor bodies; the separate stats layer
   may sample payload values for offline profiling.

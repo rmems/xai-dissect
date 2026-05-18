@@ -487,18 +487,20 @@ fn grok_layout_notes(
         ));
     }
 
-    if let (Some(dm), Some(experts)) = (d_model, inferred_experts) {
-        let shape = TensorShape::new(vec![dm, experts]).render();
-        if primaries.iter().all(|(block, locator)| {
-            block.candidates.iter().any(|candidate| {
-                candidate.shard_ordinal == locator.shard_ordinal
-                    && candidate.in_shard_index == locator.in_shard_index
-                    && candidate.shape.dims() == [dm, experts]
-            })
-        }) {
-            notes.push(format!(
-                "Observed primary routing tensors match the Grok-style router shape `{shape}`."
-            ));
+    if !primaries.is_empty() {
+        if let (Some(dm), Some(experts)) = (d_model, inferred_experts) {
+            let shape = TensorShape::new(vec![dm, experts]).render();
+            if primaries.iter().all(|(block, locator)| {
+                block.candidates.iter().any(|candidate| {
+                    candidate.shard_ordinal == locator.shard_ordinal
+                        && candidate.in_shard_index == locator.in_shard_index
+                        && candidate.shape.dims() == [dm, experts]
+                })
+            }) {
+                notes.push(format!(
+                    "Observed primary routing tensors match the Grok-style router shape `{shape}`."
+                ));
+            }
         }
     }
 
@@ -615,6 +617,27 @@ mod tests {
                 .iter()
                 .any(|issue| issue.message.contains("no routing candidate"))
         );
+    }
+
+    #[test]
+    fn report_does_not_claim_router_shape_without_primary_candidates() {
+        let inv = inventory(vec![tensor(
+            3,
+            Some(0),
+            Some(1),
+            TensorRole::QuantWeight,
+            TensorDType::I8,
+            vec![8, 6144, 32768],
+            TensorKind::MoeExpertProjection {
+                projection: crate::schema::MoeProjection::Unresolved,
+            },
+        )]);
+
+        let report = build_routing_report(&inv);
+
+        assert!(!report.grok_layout_notes.iter().any(|note| {
+            note.contains("Observed primary routing tensors match the Grok-style router shape")
+        }));
     }
 
     #[test]

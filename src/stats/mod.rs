@@ -104,7 +104,7 @@ pub fn build_saaq_readiness_report(
         .cloned()
         .collect::<Vec<_>>();
     if candidate_targets.is_empty() {
-        if let Some(fallback) = scored.iter().find(|candidate| {
+        if let Some(fallback_index) = scored.iter().position(|candidate| {
             !matches!(
                 candidate.region_class,
                 SaaqRegionClass::RoutingCritical
@@ -112,26 +112,29 @@ pub fn build_saaq_readiness_report(
                     | SaaqRegionClass::AlreadyCompressed
             )
         }) {
-            let mut fallback = fallback.clone();
-            fallback.disposition = SaaqDisposition::Candidate;
-            fallback.reasons.push(
+            scored[fallback_index].disposition = SaaqDisposition::Candidate;
+            scored[fallback_index].reasons.push(
                 "promoted as the best available non-routing target in a constrained sample"
                     .to_string(),
             );
-            candidate_targets.push(fallback);
+            candidate_targets.push(scored[fallback_index].clone());
         }
+    }
+    for (index, candidate) in candidate_targets.iter_mut().enumerate() {
+        candidate.rank = (index + 1) as u32;
     }
     let routing_critical_tensors = scored
         .iter()
         .filter(|candidate| candidate.region_class == SaaqRegionClass::RoutingCritical)
         .cloned()
         .collect::<Vec<_>>();
-    let risky_tensors = scored
+    let mut risky_tensors = scored
         .iter()
-        .filter(|candidate| candidate.risk_score >= 0.7)
-        .take(25)
+        .filter(|candidate| candidate.risk_score.is_finite() && candidate.risk_score >= 0.7)
         .cloned()
         .collect::<Vec<_>>();
+    risky_tensors.sort_by(|a, b| b.risk_score.total_cmp(&a.risk_score));
+    risky_tensors.truncate(25);
     let layer_readiness = summarize_layer_readiness(&scored, &routing_blocks);
     let notes = build_saaq_notes(&candidate_targets, &routing_critical_tensors, &routing);
     let manifest = CandidateTensorManifest {
@@ -192,10 +195,7 @@ impl ShardCache {
 fn profile_tensor(tensor: &TensorInfo, bytes: &[u8], cfg: &StatsConfig) -> Result<TensorStats> {
     let values = sample_tensor_values(tensor, bytes, cfg.max_sample_values)?;
     if values.is_empty() {
-        bail!(
-            "tensor {} has no values after sampling",
-            tensor_structural_name(tensor)
-        );
+        return Ok(empty_tensor_stats(tensor));
     }
 
     let sample_values = values.len() as u64;
@@ -274,6 +274,40 @@ fn profile_tensor(tensor: &TensorInfo, bytes: &[u8], cfg: &StatsConfig) -> Resul
         peak_to_rms,
         distribution_label,
     })
+}
+
+fn empty_tensor_stats(tensor: &TensorInfo) -> TensorStats {
+    TensorStats {
+        shard_ordinal: tensor.shard_ordinal,
+        in_shard_index: tensor.in_shard_index,
+        block_index: tensor.block_index,
+        block_slot: tensor.block_slot,
+        structural_name: tensor_structural_name(tensor),
+        role: tensor.role,
+        dtype: tensor.dtype,
+        shape: tensor.shape.clone(),
+        kind_label: tensor.kind.short_label(),
+        sampled: false,
+        total_values: tensor.shape.numel(),
+        sample_values: 0,
+        total_nbytes: tensor.nbytes,
+        mean: 0.0,
+        variance: 0.0,
+        stddev: 0.0,
+        min: 0.0,
+        max: 0.0,
+        max_abs: 0.0,
+        l1_norm: 0.0,
+        l2_norm: 0.0,
+        rms: 0.0,
+        zero_fraction: 0.0,
+        near_zero_fraction: 0.0,
+        positive_fraction: 0.0,
+        negative_fraction: 0.0,
+        outlier_fraction: 0.0,
+        peak_to_rms: 0.0,
+        distribution_label: "empty".to_string(),
+    }
 }
 
 fn sample_tensor_values(
@@ -774,9 +808,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::schema::{
-        BlockSummary, InferredHyperparams, InventoryTotals, KindCount, ModelInventory,
-        SaaqDisposition, SaaqRegionClass, TensorDType, TensorInfo, TensorKind, TensorRole,
-        TensorShape,
+        BlockSummary, InferredHyperparams, InventoryTotals, KindCount, ModelInventory, NormSummary,
+        OutlierSummary, SaaqDisposition, SaaqRegionClass, StatsProfileReport, StatsSamplingConfig,
+        TensorDType, TensorInfo, TensorKind, TensorRole, TensorShape, TensorStats, VarianceSummary,
     };
 
     use super::{StatsConfig, build_saaq_readiness_report, build_stats_report};
@@ -806,6 +840,29 @@ mod tests {
         assert!((stats.tensors[0].mean - 2.5).abs() < 1e-6);
         assert!(stats.tensors[0].max_abs >= 10.0);
         assert!(stats.tensors[0].outlier_fraction >= 0.0);
+    }
+
+    #[test]
+    fn stats_report_keeps_zero_sized_tensors() {
+        let dir = temp_dir("zero_sized_stats");
+        let shard = dir.join("tensor00000_000");
+        fs::write(&shard, []).unwrap();
+
+        let inv = inventory(vec![tensor(
+            shard,
+            TensorDType::F32,
+            TensorRole::Tensor,
+            TensorKind::AttnProjF32,
+            vec![0],
+            None,
+            None,
+        )]);
+        let stats = build_stats_report(&inv, &StatsConfig::default()).unwrap();
+
+        assert_eq!(stats.tensors.len(), 1);
+        assert_eq!(stats.tensors[0].total_values, 0);
+        assert_eq!(stats.tensors[0].sample_values, 0);
+        assert_eq!(stats.tensors[0].distribution_label, "empty");
     }
 
     #[test]
@@ -855,6 +912,7 @@ mod tests {
                 .iter()
                 .any(|candidate| candidate.kind_label == "attn_proj_f32")
         );
+        assert_eq!(readiness.candidate_targets[0].rank, 1);
         assert!(
             readiness
                 .routing_critical_tensors
@@ -866,6 +924,64 @@ mod tests {
                 .routing_critical_tensors
                 .iter()
                 .all(|candidate| candidate.disposition == SaaqDisposition::AvoidForNow)
+        );
+    }
+
+    #[test]
+    fn saaq_fallback_promotion_updates_layer_readiness() {
+        let inv = inventory(Vec::new());
+        let stats = stats_report(vec![stat(
+            "block_007.slot_03.custom",
+            "custom",
+            Some(7),
+            0.0,
+            0.0,
+        )]);
+
+        let readiness = build_saaq_readiness_report(&inv, &stats);
+
+        assert_eq!(readiness.candidate_targets.len(), 1);
+        assert_eq!(
+            readiness.candidate_targets[0].disposition,
+            SaaqDisposition::Candidate
+        );
+        assert_eq!(
+            readiness
+                .layer_readiness
+                .iter()
+                .find(|layer| layer.block_index == Some(7))
+                .map(|layer| layer.candidate_target_count),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn saaq_risky_tensors_are_ordered_by_risk() {
+        let inv = inventory(Vec::new());
+        let stats = stats_report(vec![
+            stat(
+                "block_000.slot_00.block_norm",
+                "block_norm",
+                Some(0),
+                0.0,
+                25.0,
+            ),
+            stat(
+                "block_001.slot_00.block_norm",
+                "block_norm",
+                Some(1),
+                0.0,
+                50.0,
+            ),
+        ]);
+
+        let readiness = build_saaq_readiness_report(&inv, &stats);
+
+        assert_eq!(readiness.risky_tensors.len(), 2);
+        assert!(readiness.risky_tensors[0].risk_score >= readiness.risky_tensors[1].risk_score);
+        assert_eq!(
+            readiness.risky_tensors[0].structural_name,
+            "block_001.slot_00.block_norm"
         );
     }
 
@@ -916,6 +1032,7 @@ mod tests {
         block_index: Option<u32>,
         block_slot: Option<u32>,
     ) -> TensorInfo {
+        let nbytes = dtype.itemsize() as u64 * shape.iter().product::<u64>();
         TensorInfo {
             shard_path,
             shard_ordinal: block_slot.unwrap_or(0),
@@ -924,10 +1041,86 @@ mod tests {
             dtype,
             shape: TensorShape::new(shape),
             offset: 0,
-            nbytes: 16,
+            nbytes,
             kind,
             block_index,
             block_slot,
+        }
+    }
+
+    fn stats_report(tensors: Vec<TensorStats>) -> StatsProfileReport {
+        StatsProfileReport {
+            model_family: "grok-1".to_string(),
+            checkpoint_path: PathBuf::from("/tmp/grok-1"),
+            shard_count: tensors.len() as u32,
+            inferred: InferredHyperparams::default(),
+            sampling: StatsSamplingConfig {
+                max_sample_values: 1,
+                f32_near_zero_abs: 1e-3,
+                i8_near_zero_abs: 1,
+            },
+            tensors,
+            layers: Vec::new(),
+            norm_summary: NormSummary {
+                mean_rms: 0.0,
+                max_rms: None,
+                max_l2: None,
+                top_rms: Vec::new(),
+                top_l2: Vec::new(),
+            },
+            variance_summary: VarianceSummary {
+                mean_variance: 0.0,
+                max_variance: None,
+                min_variance: None,
+                top_variance: Vec::new(),
+                lowest_variance: Vec::new(),
+            },
+            outlier_summary: OutlierSummary {
+                mean_outlier_fraction: 0.0,
+                most_outlier_heavy: Vec::new(),
+                highest_peak_to_rms: Vec::new(),
+            },
+            schema_version: super::STATS_PROFILE_SCHEMA_VERSION,
+        }
+    }
+
+    fn stat(
+        structural_name: &str,
+        kind_label: &str,
+        block_index: Option<u32>,
+        outlier_fraction: f64,
+        peak_to_rms: f64,
+    ) -> TensorStats {
+        TensorStats {
+            shard_ordinal: block_index.unwrap_or(0),
+            in_shard_index: 0,
+            block_index,
+            block_slot: Some(0),
+            structural_name: structural_name.to_string(),
+            role: TensorRole::Tensor,
+            dtype: TensorDType::F32,
+            shape: TensorShape::new(vec![1]),
+            kind_label: kind_label.to_string(),
+            sampled: false,
+            total_values: 1,
+            sample_values: 1,
+            total_nbytes: 4,
+            mean: 0.0,
+            variance: 0.0,
+            stddev: 0.0,
+            min: 0.0,
+            max: 0.0,
+            max_abs: 0.0,
+            l1_norm: 0.0,
+            l2_norm: 0.0,
+            rms: 0.0,
+            zero_fraction: 0.0,
+            near_zero_fraction: 0.0,
+            positive_fraction: 0.0,
+            negative_fraction: 0.0,
+            outlier_fraction,
+            peak_to_rms,
+            distribution_label: "synthetic".to_string(),
         }
     }
 

@@ -70,18 +70,16 @@ pub fn resolve_checkpoint_slug(
         return Ok(slug);
     }
 
-    let parts = checkpoint_path
-        .components()
-        .filter_map(|component| component.as_os_str().to_str())
-        .map(sanitize_slug_component)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
+    let mut parts = slug_parts(checkpoint_path);
 
     if parts.is_empty() {
-        bail!(
-            "unable to derive checkpoint slug from {}",
-            checkpoint_path.display()
-        );
+        if let Ok(canonical) = checkpoint_path.canonicalize() {
+            parts = slug_parts(&canonical);
+        }
+    }
+
+    if parts.is_empty() {
+        parts.push("checkpoint".to_string());
     }
 
     let tail = if parts.len() >= 2 {
@@ -91,6 +89,15 @@ pub fn resolve_checkpoint_slug(
     };
 
     Ok(tail.join("__"))
+}
+
+fn slug_parts(checkpoint_path: &Path) -> Vec<String> {
+    checkpoint_path
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .map(sanitize_slug_component)
+        .filter(|part| !part.is_empty())
+        .collect()
 }
 
 pub fn write_inventory_bundle(
@@ -673,6 +680,14 @@ mod tests {
         let slug = resolve_checkpoint_slug(path, Some("Milestone Release / CKPT-0"))
             .expect("override slug");
         assert_eq!(slug, "milestone-release-ckpt-0");
+    }
+
+    #[test]
+    fn resolves_checkpoint_slug_from_current_dir() {
+        let slug = resolve_checkpoint_slug(Path::new("."), None).expect("slug");
+
+        assert!(!slug.is_empty());
+        assert_ne!(slug, ".");
     }
 
     #[test]

@@ -1,10 +1,12 @@
 use std::sync::Once;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Error;
 use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
+static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn init_tracing() {
     INIT.call_once(|| {
@@ -24,11 +26,13 @@ pub fn run_id() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| {
-            let millis = SystemTime::now()
+            let nanos = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_millis())
+                .map(|duration| duration.as_nanos())
                 .unwrap_or(0);
-            format!("xai-dissect-{millis}")
+            let pid = std::process::id();
+            let counter = RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+            format!("xai-dissect-{nanos}-{pid}-{counter}")
         })
 }
 
@@ -89,7 +93,10 @@ mod tests {
 
     #[test]
     fn categorizes_checkpoint_io_errors_from_representative_messages() {
-        assert_eq!(classify("failed to parse checkpoint header"), "checkpoint_io_error");
+        assert_eq!(
+            classify("failed to parse checkpoint header"),
+            "checkpoint_io_error"
+        );
         assert_eq!(classify("tensor mmap failed"), "checkpoint_io_error");
         assert_eq!(classify("shard stat failed"), "checkpoint_io_error");
     }
@@ -116,9 +123,6 @@ mod tests {
     fn does_not_match_unrelated_words_containing_stat() {
         // Guards the narrowed `"stat "` predicate against false positives
         // such as "statistics" or the `stats` subcommand name.
-        assert_eq!(
-            classify("stats subcommand misconfigured"),
-            "unknown_error"
-        );
+        assert_eq!(classify("stats subcommand misconfigured"), "unknown_error");
     }
 }

@@ -19,10 +19,10 @@ use anyhow::{Context, Result, bail};
 use crate::parser::{self, RawTensor};
 use crate::schema::{
     BlockSummary, InferredHyperparams, InventoryTotals, KindCount, ModelInventory, MoeProjection,
-    ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
+    QuantizedAttentionWidth, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
 };
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Configuration for enumerating and classifying a checkpoint.
 #[derive(Clone, Debug)]
@@ -54,8 +54,8 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         bail!("{} is not a directory", path.display());
     }
 
-    let shards = collect_shards(path, &cfg.prefix, cfg.limit)?;
-    if shards.is_empty() {
+    let shard_selection = collect_shards(path, &cfg.prefix, cfg.limit)?;
+    if shard_selection.shards.is_empty() {
         bail!(
             "no shards found under {} with prefix '{}'",
             path.display(),
@@ -64,15 +64,11 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     }
 
     // Pass 1: parse every shard into RawTensor records.
-    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shards.len());
-    for shard in &shards {
-        match parser::dissect_shard(shard) {
-            Ok(ts) => raws_per_shard.push(ts),
-            Err(e) => {
-                eprintln!("warn: {}: {:#}", shard.display(), e);
-                raws_per_shard.push(Vec::new());
-            }
-        }
+    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shard_selection.shards.len());
+    for shard in &shard_selection.shards {
+        let ts = parser::dissect_shard(shard)
+            .with_context(|| format!("parse shard {}", shard.display()))?;
+        raws_per_shard.push(ts);
     }
 
     // Pass 2: infer model hyperparameters from the raw set.
@@ -80,7 +76,11 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 3: classify each raw tensor into a TensorKind.
     let mut tensors: Vec<TensorInfo> = Vec::new();
-    for (shard_ordinal, (shard_path, raws)) in shards.iter().zip(raws_per_shard.iter()).enumerate()
+    for (shard_ordinal, (shard_path, raws)) in shard_selection
+        .shards
+        .iter()
+        .zip(raws_per_shard.iter())
+        .enumerate()
     {
         for (in_shard_index, raw) in raws.iter().enumerate() {
             let kind = classify_tensor(raw, &hp);
@@ -102,7 +102,11 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 4: assign block_index / block_slot from shard ordinals, using a
     // Grok-1-shaped layout model when the shard count fits.
-    let n_blocks = assign_block_indices(&mut tensors, shards.len());
+    let n_blocks = assign_block_indices_for_scan(
+        &mut tensors,
+        shard_selection.shards.len(),
+        shard_selection.truncated,
+    );
 
     // Pass 5: build block summaries and totals.
     let blocks = summarize_blocks(&tensors);
@@ -111,7 +115,7 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     Ok(ModelInventory {
         model_family: cfg.model_family.clone(),
         checkpoint_path: path.to_path_buf(),
-        shard_count: shards.len() as u32,
+        shard_count: shard_selection.shards.len() as u32,
         inferred: InferredHyperparams { n_blocks, ..hp },
         tensors,
         blocks,
@@ -122,23 +126,32 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
 // --- Shard enumeration -----------------------------------------------------
 
-fn collect_shards(path: &Path, prefix: &str, limit: Option<usize>) -> Result<Vec<PathBuf>> {
-    let mut shards: Vec<PathBuf> = std::fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_file()
-                && p.file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|n| n.starts_with(prefix))
-                    .unwrap_or(false)
-        })
-        .collect();
+#[derive(Debug)]
+struct ShardSelection {
+    shards: Vec<PathBuf>,
+    truncated: bool,
+}
+
+fn collect_shards(path: &Path, prefix: &str, limit: Option<usize>) -> Result<ShardSelection> {
+    let mut shards = Vec::new();
+    for entry in std::fs::read_dir(path).with_context(|| format!("read {}", path.display()))? {
+        let entry = entry.with_context(|| format!("read entry in {}", path.display()))?;
+        let p = entry.path();
+        if p.is_file()
+            && p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with(prefix))
+                .unwrap_or(false)
+        {
+            shards.push(p);
+        }
+    }
     shards.sort();
+    let truncated = limit.map(|n| shards.len() > n).unwrap_or(false);
     if let Some(n) = limit {
         shards.truncate(n);
     }
-    Ok(shards)
+    Ok(ShardSelection { shards, truncated })
 }
 
 // --- Hyperparameter inference ---------------------------------------------
@@ -245,6 +258,22 @@ fn classify_tensor(t: &RawTensor, hp: &InferredHyperparams) -> TensorKind {
             return TensorKind::MoeScales;
         }
         _ => {}
+    }
+
+    if t.role == TensorRole::QuantWeight && t.dtype == TensorDType::I8 && rank == 2 {
+        let (a, b) = (dims[0], dims[1]);
+        if let Some(dm) = hp.d_model {
+            if a == dm && b == dm {
+                return TensorKind::QuantizedAttentionProjection {
+                    width: QuantizedAttentionWidth::ModelWidth,
+                };
+            }
+            if a == dm && b < dm {
+                return TensorKind::QuantizedAttentionProjection {
+                    width: QuantizedAttentionWidth::Narrow,
+                };
+            }
+        }
     }
 
     // Plain tensors.
@@ -356,6 +385,17 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
     }
 
     Some(n_blocks as u32)
+}
+
+fn assign_block_indices_for_scan(
+    tensors: &mut [TensorInfo],
+    shard_count: usize,
+    limit_truncated: bool,
+) -> Option<u32> {
+    if limit_truncated {
+        return None;
+    }
+    assign_block_indices(tensors, shard_count)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -582,8 +622,11 @@ fn compute_totals(tensors: &[TensorInfo]) -> InventoryTotals {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
+    use crate::parser::RawTensor;
     use crate::routing::build_routing_report;
     use crate::schema::{TensorRole, TensorShape};
 
@@ -663,6 +706,86 @@ mod tests {
                 .filter(|tensor| matches!(tensor.kind, TensorKind::Router))
                 .all(|tensor| tensor.block_index.is_none() && tensor.block_slot.is_none())
         );
+    }
+
+    #[test]
+    fn limited_scan_skips_block_assignment() {
+        let mut tensors = shifted_grok_ckpt0_tensors();
+
+        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, true);
+
+        assert_eq!(n_blocks, None);
+        assert!(tensors.iter().all(|tensor| tensor.block_index.is_none()));
+        assert!(
+            tensors
+                .iter()
+                .all(|tensor| !matches!(tensor.kind, TensorKind::FinalNorm))
+        );
+    }
+
+    #[test]
+    fn non_truncating_limited_scan_keeps_block_assignment() {
+        let mut tensors = shifted_grok_ckpt0_tensors();
+
+        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, false);
+
+        assert_eq!(n_blocks, Some(64));
+        assert_eq!(
+            tensors
+                .iter()
+                .filter(|tensor| matches!(tensor.kind, TensorKind::Router))
+                .filter(|tensor| tensor.block_index.is_some())
+                .count(),
+            64
+        );
+        assert!(
+            tensors
+                .iter()
+                .any(|tensor| matches!(tensor.kind, TensorKind::FinalNorm))
+        );
+    }
+
+    #[test]
+    fn inventory_fails_on_shard_parse_error() {
+        let dir = temp_dir("bad_shard");
+        fs::write(dir.join("tensor00000_000"), b"not a pickle").unwrap();
+
+        let err = build_inventory(&dir, &InventoryConfig::default()).unwrap_err();
+
+        assert!(format!("{err:#}").contains("parse shard"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn classifies_rank2_quantized_attention_widths() {
+        let hp = InferredHyperparams {
+            d_model: Some(6_144),
+            ..InferredHyperparams::default()
+        };
+
+        let model_width = classify_tensor(
+            &raw(TensorRole::QuantWeight, TensorDType::I8, vec![6_144, 6_144]),
+            &hp,
+        );
+        let narrow = classify_tensor(
+            &raw(TensorRole::QuantWeight, TensorDType::I8, vec![6_144, 1_024]),
+            &hp,
+        );
+
+        assert_eq!(
+            model_width,
+            TensorKind::QuantizedAttentionProjection {
+                width: QuantizedAttentionWidth::ModelWidth
+            }
+        );
+        assert_eq!(model_width.short_label(), "attn_proj_i8.model_width");
+        assert_eq!(
+            narrow,
+            TensorKind::QuantizedAttentionProjection {
+                width: QuantizedAttentionWidth::Narrow
+            }
+        );
+        assert_eq!(narrow.short_label(), "attn_proj_i8.narrow");
     }
 
     fn shifted_grok_ckpt0_tensors() -> Vec<TensorInfo> {
@@ -799,5 +922,25 @@ mod tests {
             block_index: None,
             block_slot: None,
         }
+    }
+
+    fn raw(role: TensorRole, dtype: TensorDType, shape: Vec<u64>) -> RawTensor {
+        RawTensor {
+            role,
+            dtype,
+            shape: TensorShape::new(shape.clone()),
+            offset: 0,
+            nbytes: dtype.itemsize() as u64 * shape.iter().product::<u64>(),
+        }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("xai_dissect_inventory_{label}_{nanos}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 }

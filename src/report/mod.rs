@@ -332,6 +332,12 @@ pub fn render_expert_markdown(atlas: &ExpertAtlas) -> String {
         atlas,
         ExpertIssueCategory::LayoutAnomaly,
     );
+    render_issue_section(
+        &mut md,
+        "Naming consistency issues",
+        atlas,
+        ExpertIssueCategory::NamingConsistency,
+    );
 
     if let Some(block) = atlas.blocks.first() {
         let _ = writeln!(md);
