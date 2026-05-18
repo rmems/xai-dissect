@@ -2,6 +2,13 @@
 
 All notable changes to `xai-dissect` are documented here.
 
+## Unreleased
+
+### Changed
+
+- Bump inventory schema to version 2 after adding serialized
+  `quantized_attention_projection` tensor kinds.
+
 ## 0.1.0 - 2026-04-23
 
 Initial coherent milestone release.

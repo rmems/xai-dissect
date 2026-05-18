@@ -412,12 +412,11 @@ fn assign_qw8_roles(tensors: &mut [RawTensor], sites: &[usize]) {
             .get(site_index + 1)
             .map(|next| *next as u64)
             .unwrap_or(u64::MAX);
-        let mut local = tensors
+        let local = tensors
             .iter()
             .enumerate()
             .filter(|(_, tensor)| tensor.offset >= site_u64 && tensor.offset < next_site_u64)
             .collect::<Vec<_>>();
-        local.sort_by_key(|(_, tensor)| tensor.offset);
 
         let weight_idx = local
             .iter()

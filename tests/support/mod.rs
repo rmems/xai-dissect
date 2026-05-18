@@ -2,9 +2,11 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use xai_dissect::exports::OutputBundle;
+use xai_dissect::inventory;
 use xai_dissect::schema::{
     BlockSummary, CandidateTensorManifest, ExpertAtlas, ExpertBlock, ExpertNamingCheck,
     ExpertNamingPattern, ExpertSlice, ExpertSliceTensor, ExpertTensorRef, InferredHyperparams,
@@ -17,6 +19,7 @@ use xai_dissect::schema::{
 };
 
 pub const SNAPSHOT_ENV: &str = "XAI_DISSECT_WRITE_SNAPSHOTS";
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn sample_checkpoint_path() -> PathBuf {
     PathBuf::from("/fixtures/grok-1-official/ckpt-0")
@@ -31,7 +34,8 @@ pub fn unique_temp_root(prefix: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("time")
         .as_nanos();
-    std::env::temp_dir().join(format!("xai-dissect-{prefix}-{stamp}"))
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("xai-dissect-{prefix}-{stamp}-{counter}"))
 }
 
 pub fn render_snapshot_sections(sections: &[(String, String)]) -> String {
@@ -207,7 +211,7 @@ pub fn sample_inventory() -> ModelInventory {
             total_nbytes: 368,
             total_elements: 92,
         },
-        schema_version: 1,
+        schema_version: inventory::SCHEMA_VERSION,
     }
 }
 

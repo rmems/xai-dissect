@@ -24,6 +24,8 @@ This document defines the schema contracts behind those files.
 
 ## Inventory
 
+Current schema version: **2**.
+
 - `exports/<slug>/inventory.json`
   Contract: `schema::ModelInventory`
 - `reports/<slug>/inventory.md`

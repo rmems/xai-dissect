@@ -63,10 +63,12 @@ pub fn build_expert_atlas(inv: &ModelInventory) -> ExpertAtlas {
             });
         }
 
-        let slots: Vec<u32> = candidates
+        let mut slots: Vec<u32> = candidates
             .iter()
             .filter_map(|c| c.tensor.block_slot)
             .collect();
+        slots.sort_unstable();
+        slots.dedup();
         if !slots.is_empty() && !is_contiguous(&slots) {
             anomalies.push(ExpertIssue {
                 severity: ExpertIssueSeverity::Warning,
@@ -656,6 +658,53 @@ mod tests {
                 .iter()
                 .any(|check| check.check == "expert_family_count_consistent" && !check.passed)
         );
+    }
+
+    #[test]
+    fn atlas_deduplicates_slots_for_contiguity_check() {
+        let mut block = block(
+            0,
+            vec![
+                tensor(
+                    1,
+                    0,
+                    TensorRole::QuantWeight,
+                    TensorDType::I8,
+                    vec![8, 6144, 32768],
+                    TensorKind::MoeExpertProjection {
+                        projection: crate::schema::MoeProjection::Unresolved,
+                    },
+                ),
+                tensor(
+                    1,
+                    1,
+                    TensorRole::QuantScales,
+                    TensorDType::F32,
+                    vec![8, 32768],
+                    TensorKind::MoeScales,
+                ),
+                tensor(
+                    2,
+                    0,
+                    TensorRole::QuantWeight,
+                    TensorDType::I8,
+                    vec![8, 32768, 6144],
+                    TensorKind::MoeExpertProjection {
+                        projection: crate::schema::MoeProjection::Down,
+                    },
+                ),
+            ],
+        );
+        block[1].block_slot = block[0].block_slot;
+        block[2].block_slot = Some(1);
+        let inv = inventory_with_blocks(vec![block]);
+
+        let atlas = build_expert_atlas(&inv);
+
+        assert!(!atlas.anomalies.iter().any(|issue| {
+            issue.category == crate::schema::ExpertIssueCategory::LayoutAnomaly
+                && issue.message.contains("not contiguous")
+        }));
     }
 
     fn inventory_with_blocks(blocks: Vec<Vec<TensorInfo>>) -> ModelInventory {

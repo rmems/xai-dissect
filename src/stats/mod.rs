@@ -120,6 +120,9 @@ pub fn build_saaq_readiness_report(
             candidate_targets.push(scored[fallback_index].clone());
         }
     }
+    for (index, candidate) in candidate_targets.iter_mut().enumerate() {
+        candidate.rank = (index + 1) as u32;
+    }
     let routing_critical_tensors = scored
         .iter()
         .filter(|candidate| candidate.region_class == SaaqRegionClass::RoutingCritical)
@@ -127,14 +130,10 @@ pub fn build_saaq_readiness_report(
         .collect::<Vec<_>>();
     let mut risky_tensors = scored
         .iter()
-        .filter(|candidate| candidate.risk_score >= 0.7)
+        .filter(|candidate| candidate.risk_score.is_finite() && candidate.risk_score >= 0.7)
         .cloned()
         .collect::<Vec<_>>();
-    risky_tensors.sort_by(|a, b| {
-        b.risk_score
-            .partial_cmp(&a.risk_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    risky_tensors.sort_by(|a, b| b.risk_score.total_cmp(&a.risk_score));
     risky_tensors.truncate(25);
     let layer_readiness = summarize_layer_readiness(&scored, &routing_blocks);
     let notes = build_saaq_notes(&candidate_targets, &routing_critical_tensors, &routing);
@@ -913,6 +912,7 @@ mod tests {
                 .iter()
                 .any(|candidate| candidate.kind_label == "attn_proj_f32")
         );
+        assert_eq!(readiness.candidate_targets[0].rank, 1);
         assert!(
             readiness
                 .routing_critical_tensors

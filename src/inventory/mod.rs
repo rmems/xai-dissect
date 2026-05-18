@@ -22,7 +22,7 @@ use crate::schema::{
     QuantizedAttentionWidth, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
 };
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Configuration for enumerating and classifying a checkpoint.
 #[derive(Clone, Debug)]
@@ -66,13 +66,9 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     // Pass 1: parse every shard into RawTensor records.
     let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shards.len());
     for shard in &shards {
-        match parser::dissect_shard(shard) {
-            Ok(ts) => raws_per_shard.push(ts),
-            Err(e) => {
-                eprintln!("warn: {}: {:#}", shard.display(), e);
-                raws_per_shard.push(Vec::new());
-            }
-        }
+        let ts = parser::dissect_shard(shard)
+            .with_context(|| format!("parse shard {}", shard.display()))?;
+        raws_per_shard.push(ts);
     }
 
     // Pass 2: infer model hyperparameters from the raw set.
@@ -102,7 +98,7 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 4: assign block_index / block_slot from shard ordinals, using a
     // Grok-1-shaped layout model when the shard count fits.
-    let n_blocks = assign_block_indices(&mut tensors, shards.len());
+    let n_blocks = assign_block_indices_for_scan(&mut tensors, shards.len(), cfg.limit);
 
     // Pass 5: build block summaries and totals.
     let blocks = summarize_blocks(&tensors);
@@ -376,6 +372,17 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
     Some(n_blocks as u32)
 }
 
+fn assign_block_indices_for_scan(
+    tensors: &mut [TensorInfo],
+    shard_count: usize,
+    limit: Option<usize>,
+) -> Option<u32> {
+    if limit.is_some() {
+        return None;
+    }
+    assign_block_indices(tensors, shard_count)
+}
+
 #[derive(Clone, Copy, Debug)]
 struct GrokBlockLayout {
     first_block_shard: usize,
@@ -600,7 +607,9 @@ fn compute_totals(tensors: &[TensorInfo]) -> InventoryTotals {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::parser::RawTensor;
     use crate::routing::build_routing_report;
@@ -682,6 +691,32 @@ mod tests {
                 .filter(|tensor| matches!(tensor.kind, TensorKind::Router))
                 .all(|tensor| tensor.block_index.is_none() && tensor.block_slot.is_none())
         );
+    }
+
+    #[test]
+    fn limited_scan_skips_block_assignment() {
+        let mut tensors = shifted_grok_ckpt0_tensors();
+
+        let n_blocks = assign_block_indices_for_scan(&mut tensors, 770, Some(14));
+
+        assert_eq!(n_blocks, None);
+        assert!(tensors.iter().all(|tensor| tensor.block_index.is_none()));
+        assert!(
+            tensors
+                .iter()
+                .all(|tensor| !matches!(tensor.kind, TensorKind::FinalNorm))
+        );
+    }
+
+    #[test]
+    fn inventory_fails_on_shard_parse_error() {
+        let dir = temp_dir("bad_shard");
+        fs::write(dir.join("tensor00000_000"), b"not a pickle").unwrap();
+
+        let err = build_inventory(&dir, &InventoryConfig::default()).unwrap_err();
+
+        assert!(format!("{err:#}").contains("parse shard"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -860,5 +895,15 @@ mod tests {
             offset: 0,
             nbytes: dtype.itemsize() as u64 * shape.iter().product::<u64>(),
         }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("xai_dissect_inventory_{label}_{nanos}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 }

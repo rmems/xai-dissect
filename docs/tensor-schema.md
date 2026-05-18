@@ -5,7 +5,7 @@ the rules the inventory layer uses to classify Grok-1 tensors by shape. The
 JSON export is produced by `report::write_json` and matches the
 `ModelInventory` struct in `src/schema/mod.rs` byte-for-byte via serde.
 
-Schema version: **1** (`ModelInventory.schema_version`).
+Schema version: **2** (`ModelInventory.schema_version`).
 
 ## Core types
 

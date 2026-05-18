@@ -487,20 +487,20 @@ fn grok_layout_notes(
         ));
     }
 
-    if !primaries.is_empty()
-        && let (Some(dm), Some(experts)) = (d_model, inferred_experts)
-    {
-        let shape = TensorShape::new(vec![dm, experts]).render();
-        if primaries.iter().all(|(block, locator)| {
-            block.candidates.iter().any(|candidate| {
-                candidate.shard_ordinal == locator.shard_ordinal
-                    && candidate.in_shard_index == locator.in_shard_index
-                    && candidate.shape.dims() == [dm, experts]
-            })
-        }) {
-            notes.push(format!(
-                "Observed primary routing tensors match the Grok-style router shape `{shape}`."
-            ));
+    if !primaries.is_empty() {
+        if let (Some(dm), Some(experts)) = (d_model, inferred_experts) {
+            let shape = TensorShape::new(vec![dm, experts]).render();
+            if primaries.iter().all(|(block, locator)| {
+                block.candidates.iter().any(|candidate| {
+                    candidate.shard_ordinal == locator.shard_ordinal
+                        && candidate.in_shard_index == locator.in_shard_index
+                        && candidate.shape.dims() == [dm, experts]
+                })
+            }) {
+                notes.push(format!(
+                    "Observed primary routing tensors match the Grok-style router shape `{shape}`."
+                ));
+            }
         }
     }
 

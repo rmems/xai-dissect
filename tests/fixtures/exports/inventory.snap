@@ -17,7 +17,7 @@
       "detail": "2 block summaries, inferred d_model 4, inferred experts 2"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 }
 
 === exports/grok-1-official__ckpt-0/inventory.json ===
@@ -165,7 +165,7 @@
     "total_nbytes": 368,
     "total_elements": 92
   },
-  "schema_version": 1
+  "schema_version": 2
 }
 
 === manifests/grok-1-official__ckpt-0/checkpoint-inventory-snapshot.json ===
@@ -212,7 +212,7 @@
       ]
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 }
 
 === reports/grok-1-official__ckpt-0/inventory.md ===
@@ -221,7 +221,7 @@
 - **model_family**: `grok-1`
 - **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
 - **shards**: 2
-- **schema_version**: 1
+- **schema_version**: 2
 
 ## Inferred hyperparameters
 
