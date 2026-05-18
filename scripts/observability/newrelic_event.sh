@@ -9,6 +9,9 @@ error_category="${4:-none}"
 environment="${NEW_RELIC_ENVIRONMENT:-${AGENTOS_ENVIRONMENT:-${SENTRY_ENVIRONMENT:-local}}}"
 git_sha="${AGENTOS_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || printf 'unknown')}"
 run_stamp="$(date +%s%N 2>/dev/null || date +%s)"
+case "${run_stamp}" in
+  *[!0-9]*) run_stamp="$(date +%s)" ;;
+esac
 run_id="${AGENTOS_RUN_ID:-${repo}-${git_sha}-${run_stamp}-$$}"
 release="${repo}@${git_sha}"
 entity_search="${NEW_RELIC_ENTITY_SEARCH_XAI_DISSECT:-}"
