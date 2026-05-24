@@ -53,24 +53,14 @@ pub fn validate_grok1_complete_manifest(inv: &ModelInventory) -> Result<Grok1Cov
         expert_families: GROK1_EXPECTED_EXPERT_FAMILIES,
         unknown_tensors: 0,
     };
-    let index = CoverageIndex::build(inv);
-    let discovered = grok1_discovered_counts(inv, &index);
-    let unknown_slots = grok1_unknown_slots(inv);
-    let checksum = grok1_checksum(inv, &discovered, &unknown_slots);
-
-    let manifest = Grok1CoverageManifest {
-        model_family: inv.model_family.clone(),
-        schema_version: inv.schema_version,
-        coverage_schema_version: GROK1_COVERAGE_SCHEMA_VERSION,
-        validation: "pass".to_string(),
-        checksum,
-        expected: expected.clone(),
-        discovered: discovered.clone(),
-        unknown_slots,
-    };
-
     let mut errors = Vec::new();
     validate_grok1_metadata(inv, &mut errors);
+    if !errors.is_empty() {
+        return fail_grok1_coverage(errors);
+    }
+
+    let index = CoverageIndex::build(inv);
+    let discovered = grok1_discovered_counts(inv, &index);
     compare_count("blocks", discovered.blocks, expected.blocks, &mut errors);
     compare_count("tensors", discovered.tensors, expected.tensors, &mut errors);
     compare_count("routers", discovered.routers, expected.routers, &mut errors);
@@ -93,13 +83,28 @@ pub fn validate_grok1_complete_manifest(inv: &ModelInventory) -> Result<Grok1Cov
     validate_grok1_expected_slots(&index, &mut errors);
 
     if !errors.is_empty() {
-        bail!(
-            "Grok-1 complete manifest validation failed: {}",
-            errors.join("; ")
-        );
+        return fail_grok1_coverage(errors);
     }
 
-    Ok(manifest)
+    let unknown_slots = grok1_unknown_slots(inv);
+    let checksum = grok1_checksum(inv, &discovered, &unknown_slots);
+    Ok(Grok1CoverageManifest {
+        model_family: inv.model_family.clone(),
+        schema_version: inv.schema_version,
+        coverage_schema_version: GROK1_COVERAGE_SCHEMA_VERSION,
+        validation: "pass".to_string(),
+        checksum,
+        expected,
+        discovered,
+        unknown_slots,
+    })
+}
+
+fn fail_grok1_coverage<T>(errors: Vec<String>) -> Result<T> {
+    bail!(
+        "Grok-1 complete manifest validation failed: {}",
+        errors.join("; ")
+    )
 }
 
 struct CoverageIndex<'a> {
@@ -303,85 +308,125 @@ fn validate_grok1_slot_tensor(tensor: &TensorInfo, errors: &mut Vec<String>) {
     };
     let name = grok1_structural_name(tensor);
     match slot {
-        0 | 2 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::QuantWeight,
-            TensorDType::I8,
-            &[GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
-            |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
-            errors,
-        ),
-        1 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::QuantWeight,
-            TensorDType::I8,
-            &[GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
-            |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
-            errors,
-        ),
-        3 | 6 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::QuantWeight,
-            TensorDType::I8,
-            &[GROK1_D_MODEL, 1_024],
-            |kind| {
-                matches!(
-                    kind,
-                    TensorKind::QuantizedAttentionProjection {
-                        width: QuantizedAttentionWidth::Narrow
-                    }
-                )
-            },
-            errors,
-        ),
-        4 | 5 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::QuantWeight,
-            TensorDType::I8,
-            &[GROK1_D_MODEL, GROK1_D_MODEL],
-            |kind| {
-                matches!(
-                    kind,
-                    TensorKind::QuantizedAttentionProjection {
-                        width: QuantizedAttentionWidth::ModelWidth
-                    }
-                )
-            },
-            errors,
-        ),
-        7 | 8 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::QuantScales,
-            TensorDType::F32,
-            &[GROK1_N_EXPERTS, GROK1_D_FF],
-            |kind| matches!(kind, TensorKind::MoeScales),
-            errors,
-        ),
-        9 | 10 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            &[GROK1_D_MODEL],
-            |kind| matches!(kind, TensorKind::BlockNorm),
-            errors,
-        ),
-        11 => validate_tensor_signature(
-            tensor,
-            &name,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            &[GROK1_D_MODEL, GROK1_N_EXPERTS],
-            |kind| matches!(kind, TensorKind::Router),
-            errors,
-        ),
+        0 | 2 => validate_grok1_expert_up_or_gate_slot(tensor, &name, errors),
+        1 => validate_grok1_expert_down_slot(tensor, &name, errors),
+        3 | 6 => validate_grok1_attention_narrow_slot(tensor, &name, errors),
+        4 | 5 => validate_grok1_attention_model_width_slot(tensor, &name, errors),
+        7 | 8 => validate_grok1_scale_slot(tensor, &name, errors),
+        9 | 10 => validate_grok1_block_norm_slot(tensor, &name, errors),
+        11 => validate_grok1_router_slot(tensor, &name, errors),
         _ => errors.push(format!("unexpected block slot {slot} at {name}")),
     }
+}
+
+fn validate_grok1_expert_up_or_gate_slot(
+    tensor: &TensorInfo,
+    name: &str,
+    errors: &mut Vec<String>,
+) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::QuantWeight,
+        TensorDType::I8,
+        &[GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
+        |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
+        errors,
+    );
+}
+
+fn validate_grok1_expert_down_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::QuantWeight,
+        TensorDType::I8,
+        &[GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
+        |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
+        errors,
+    );
+}
+
+fn validate_grok1_attention_narrow_slot(
+    tensor: &TensorInfo,
+    name: &str,
+    errors: &mut Vec<String>,
+) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::QuantWeight,
+        TensorDType::I8,
+        &[GROK1_D_MODEL, 1_024],
+        |kind| {
+            matches!(
+                kind,
+                TensorKind::QuantizedAttentionProjection {
+                    width: QuantizedAttentionWidth::Narrow
+                }
+            )
+        },
+        errors,
+    );
+}
+
+fn validate_grok1_attention_model_width_slot(
+    tensor: &TensorInfo,
+    name: &str,
+    errors: &mut Vec<String>,
+) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::QuantWeight,
+        TensorDType::I8,
+        &[GROK1_D_MODEL, GROK1_D_MODEL],
+        |kind| {
+            matches!(
+                kind,
+                TensorKind::QuantizedAttentionProjection {
+                    width: QuantizedAttentionWidth::ModelWidth
+                }
+            )
+        },
+        errors,
+    );
+}
+
+fn validate_grok1_scale_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::QuantScales,
+        TensorDType::F32,
+        &[GROK1_N_EXPERTS, GROK1_D_FF],
+        |kind| matches!(kind, TensorKind::MoeScales),
+        errors,
+    );
+}
+
+fn validate_grok1_block_norm_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::Tensor,
+        TensorDType::F32,
+        &[GROK1_D_MODEL],
+        |kind| matches!(kind, TensorKind::BlockNorm),
+        errors,
+    );
+}
+
+fn validate_grok1_router_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
+    validate_tensor_signature(
+        tensor,
+        name,
+        TensorRole::Tensor,
+        TensorDType::F32,
+        &[GROK1_D_MODEL, GROK1_N_EXPERTS],
+        |kind| matches!(kind, TensorKind::Router),
+        errors,
+    );
 }
 
 fn validate_tensor_signature(
