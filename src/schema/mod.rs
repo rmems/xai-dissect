@@ -675,6 +675,39 @@ pub struct CheckpointInventoryBlockSnapshot {
     pub kind_labels: Vec<String>,
 }
 
+/// Fail-closed Grok-1 coverage manifest for complete checkpoint inventories.
+/// The checksum is computed over a canonical, path-independent view of the
+/// structural tensor table so downstream tools can compare reruns.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grok1CoverageManifest {
+    pub model_family: String,
+    pub schema_version: u32,
+    pub coverage_schema_version: u32,
+    pub validation: String,
+    pub checksum: String,
+    pub expected: Grok1CoverageCounts,
+    pub discovered: Grok1CoverageCounts,
+    pub unknown_slots: Vec<Grok1UnknownSlot>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Grok1CoverageCounts {
+    pub blocks: u32,
+    pub tensors: u64,
+    pub routers: u64,
+    pub expert_families: u64,
+    pub unknown_tensors: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grok1UnknownSlot {
+    pub structural_name: String,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub shape: TensorShape,
+    pub reason: String,
+}
+
 /// Machine-readable routing-critical tensor list for downstream
 /// compression / orchestration tooling.
 #[derive(Clone, Debug, Serialize, Deserialize)]

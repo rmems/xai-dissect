@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use crate::inventory;
 use crate::report;
 use crate::schema::{
     CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ExpertAtlas, FindingsSeverity,
@@ -130,6 +131,13 @@ pub fn write_inventory_bundle(
         .join("checkpoint-inventory-snapshot.json");
     report::write_inventory_snapshot_manifest_json(&snapshot, &manifest_path)?;
     bundle.written_paths.push(manifest_path);
+
+    if inv.model_family == "grok-1" && inv.shard_count == 770 {
+        let coverage = inventory::validate_grok1_complete_manifest(inv)?;
+        let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
+        report::write_grok1_coverage_manifest_json(&coverage, &coverage_path)?;
+        bundle.written_paths.push(coverage_path);
+    }
 
     Ok(bundle)
 }
