@@ -303,13 +303,13 @@ fn validate_grok1_expected_slots(index: &CoverageIndex<'_>, errors: &mut Vec<Str
                 ));
             }
             if let Some(tensor) = tensors.first() {
-                validate_grok1_slot_tensor(tensor, errors);
+                validate_grok1_slot_signature(tensor, errors);
             }
         }
     }
 }
 
-fn validate_grok1_slot_tensor(tensor: &TensorInfo, errors: &mut Vec<String>) {
+fn validate_grok1_slot_signature(tensor: &TensorInfo, errors: &mut Vec<String>) {
     let Some(slot) = tensor.block_slot else {
         return;
     };
