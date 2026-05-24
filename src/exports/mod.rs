@@ -755,10 +755,13 @@ mod tests {
 
         let bundle = write_inventory_bundle(&inv, &root, None).expect("write inventory bundle");
 
-        assert!(bundle.written_paths.iter().any(|path| path
-            .file_name()
-            .and_then(|name| name.to_str())
-            == Some("grok1-coverage.json")));
+        assert!(
+            bundle
+                .written_paths
+                .iter()
+                .any(|path| path.file_name().and_then(|name| name.to_str())
+                    == Some("grok1-coverage.json"))
+        );
         assert!(
             root.join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
                 .exists()

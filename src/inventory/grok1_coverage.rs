@@ -212,7 +212,11 @@ where
     }
 }
 
-fn validate_grok1_blocks(inv: &ModelInventory, index: &CoverageIndex<'_>, errors: &mut Vec<String>) {
+fn validate_grok1_blocks(
+    inv: &ModelInventory,
+    index: &CoverageIndex<'_>,
+    errors: &mut Vec<String>,
+) {
     for block_index in 0..GROK1_EXPECTED_BLOCKS {
         match index.by_block.get(&block_index) {
             Some(tensors) if tensors.len() == GROK1_BLOCK_SLOTS as usize => {}
