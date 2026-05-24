@@ -26,6 +26,16 @@ const GROK1_D_MODEL: u64 = 6_144;
 const GROK1_D_FF: u64 = 32_768;
 const GROK1_N_EXPERTS: u64 = 8;
 const GROK1_BLOCK_SLOTS: u32 = 12;
+const GROK1_EXPERT_UP_OR_GATE_SHAPE: [u64; 3] =
+    [GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF];
+const GROK1_EXPERT_DOWN_SHAPE: [u64; 3] =
+    [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
+const GROK1_ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, 1_024];
+const GROK1_ATTENTION_MODEL_WIDTH_SHAPE: [u64; 2] =
+    [GROK1_D_MODEL, GROK1_D_MODEL];
+const GROK1_SCALE_SHAPE: [u64; 2] = [GROK1_N_EXPERTS, GROK1_D_FF];
+const GROK1_BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
+const GROK1_ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
 
 /// Decide whether an inventory is complete enough to require strict Grok-1
 /// coverage validation before export. This intentionally does not depend on
@@ -322,7 +332,9 @@ fn validate_grok1_slot_tensor(tensor: &TensorInfo, errors: &mut Vec<String>) {
     );
 }
 
+#[derive(Clone, Copy)]
 struct Grok1SlotSpec {
+    slot: u32,
     role: TensorRole,
     dtype: TensorDType,
     shape: &'static [u64],
@@ -362,52 +374,95 @@ impl Grok1ExpectedKind {
     }
 }
 
-fn grok1_slot_spec(slot: u32) -> Option<Grok1SlotSpec> {
-    match slot {
-        0 | 2 => Some(Grok1SlotSpec {
-            role: TensorRole::QuantWeight,
-            dtype: TensorDType::I8,
-            shape: &[GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
-            kind: Grok1ExpectedKind::MoeExpertProjection,
-        }),
-        1 => Some(Grok1SlotSpec {
-            role: TensorRole::QuantWeight,
-            dtype: TensorDType::I8,
-            shape: &[GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
-            kind: Grok1ExpectedKind::MoeExpertProjection,
-        }),
-        3 | 6 => Some(Grok1SlotSpec {
-            role: TensorRole::QuantWeight,
-            dtype: TensorDType::I8,
-            shape: &[GROK1_D_MODEL, 1_024],
-            kind: Grok1ExpectedKind::AttentionNarrow,
-        }),
-        4 | 5 => Some(Grok1SlotSpec {
-            role: TensorRole::QuantWeight,
-            dtype: TensorDType::I8,
-            shape: &[GROK1_D_MODEL, GROK1_D_MODEL],
-            kind: Grok1ExpectedKind::AttentionModelWidth,
-        }),
-        7 | 8 => Some(Grok1SlotSpec {
-            role: TensorRole::QuantScales,
-            dtype: TensorDType::F32,
-            shape: &[GROK1_N_EXPERTS, GROK1_D_FF],
-            kind: Grok1ExpectedKind::MoeScales,
-        }),
-        9 | 10 => Some(Grok1SlotSpec {
-            role: TensorRole::Tensor,
-            dtype: TensorDType::F32,
-            shape: &[GROK1_D_MODEL],
-            kind: Grok1ExpectedKind::BlockNorm,
-        }),
-        11 => Some(Grok1SlotSpec {
-            role: TensorRole::Tensor,
-            dtype: TensorDType::F32,
-            shape: &[GROK1_D_MODEL, GROK1_N_EXPERTS],
-            kind: Grok1ExpectedKind::Router,
-        }),
-        _ => None,
-    }
+static GROK1_SLOT_SPECS: [Grok1SlotSpec; GROK1_BLOCK_SLOTS as usize] = [
+    Grok1SlotSpec {
+        slot: 0,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_EXPERT_UP_OR_GATE_SHAPE,
+        kind: Grok1ExpectedKind::MoeExpertProjection,
+    },
+    Grok1SlotSpec {
+        slot: 1,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_EXPERT_DOWN_SHAPE,
+        kind: Grok1ExpectedKind::MoeExpertProjection,
+    },
+    Grok1SlotSpec {
+        slot: 2,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_EXPERT_UP_OR_GATE_SHAPE,
+        kind: Grok1ExpectedKind::MoeExpertProjection,
+    },
+    Grok1SlotSpec {
+        slot: 3,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_ATTENTION_NARROW_SHAPE,
+        kind: Grok1ExpectedKind::AttentionNarrow,
+    },
+    Grok1SlotSpec {
+        slot: 4,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_ATTENTION_MODEL_WIDTH_SHAPE,
+        kind: Grok1ExpectedKind::AttentionModelWidth,
+    },
+    Grok1SlotSpec {
+        slot: 5,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_ATTENTION_MODEL_WIDTH_SHAPE,
+        kind: Grok1ExpectedKind::AttentionModelWidth,
+    },
+    Grok1SlotSpec {
+        slot: 6,
+        role: TensorRole::QuantWeight,
+        dtype: TensorDType::I8,
+        shape: &GROK1_ATTENTION_NARROW_SHAPE,
+        kind: Grok1ExpectedKind::AttentionNarrow,
+    },
+    Grok1SlotSpec {
+        slot: 7,
+        role: TensorRole::QuantScales,
+        dtype: TensorDType::F32,
+        shape: &GROK1_SCALE_SHAPE,
+        kind: Grok1ExpectedKind::MoeScales,
+    },
+    Grok1SlotSpec {
+        slot: 8,
+        role: TensorRole::QuantScales,
+        dtype: TensorDType::F32,
+        shape: &GROK1_SCALE_SHAPE,
+        kind: Grok1ExpectedKind::MoeScales,
+    },
+    Grok1SlotSpec {
+        slot: 9,
+        role: TensorRole::Tensor,
+        dtype: TensorDType::F32,
+        shape: &GROK1_BLOCK_NORM_SHAPE,
+        kind: Grok1ExpectedKind::BlockNorm,
+    },
+    Grok1SlotSpec {
+        slot: 10,
+        role: TensorRole::Tensor,
+        dtype: TensorDType::F32,
+        shape: &GROK1_BLOCK_NORM_SHAPE,
+        kind: Grok1ExpectedKind::BlockNorm,
+    },
+    Grok1SlotSpec {
+        slot: 11,
+        role: TensorRole::Tensor,
+        dtype: TensorDType::F32,
+        shape: &GROK1_ROUTER_SHAPE,
+        kind: Grok1ExpectedKind::Router,
+    },
+];
+
+fn grok1_slot_spec(slot: u32) -> Option<&'static Grok1SlotSpec> {
+    GROK1_SLOT_SPECS.iter().find(|spec| spec.slot == slot)
 }
 
 fn validate_tensor_signature(
