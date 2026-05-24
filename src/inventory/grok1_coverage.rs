@@ -307,126 +307,107 @@ fn validate_grok1_slot_tensor(tensor: &TensorInfo, errors: &mut Vec<String>) {
         return;
     };
     let name = grok1_structural_name(tensor);
-    match slot {
-        0 | 2 => validate_grok1_expert_up_or_gate_slot(tensor, &name, errors),
-        1 => validate_grok1_expert_down_slot(tensor, &name, errors),
-        3 | 6 => validate_grok1_attention_narrow_slot(tensor, &name, errors),
-        4 | 5 => validate_grok1_attention_model_width_slot(tensor, &name, errors),
-        7 | 8 => validate_grok1_scale_slot(tensor, &name, errors),
-        9 | 10 => validate_grok1_block_norm_slot(tensor, &name, errors),
-        11 => validate_grok1_router_slot(tensor, &name, errors),
-        _ => errors.push(format!("unexpected block slot {slot} at {name}")),
-    }
-}
-
-fn validate_grok1_expert_up_or_gate_slot(
-    tensor: &TensorInfo,
-    name: &str,
-    errors: &mut Vec<String>,
-) {
+    let Some(spec) = grok1_slot_spec(slot) else {
+        errors.push(format!("unexpected block slot {slot} at {name}"));
+        return;
+    };
     validate_tensor_signature(
         tensor,
-        name,
-        TensorRole::QuantWeight,
-        TensorDType::I8,
-        &[GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
-        |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
+        &name,
+        spec.role,
+        spec.dtype,
+        spec.shape,
+        |kind| spec.kind.matches(kind),
         errors,
     );
 }
 
-fn validate_grok1_expert_down_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::QuantWeight,
-        TensorDType::I8,
-        &[GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
-        |kind| matches!(kind, TensorKind::MoeExpertProjection { .. }),
-        errors,
-    );
+struct Grok1SlotSpec {
+    role: TensorRole,
+    dtype: TensorDType,
+    shape: &'static [u64],
+    kind: Grok1ExpectedKind,
 }
 
-fn validate_grok1_attention_narrow_slot(
-    tensor: &TensorInfo,
-    name: &str,
-    errors: &mut Vec<String>,
-) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::QuantWeight,
-        TensorDType::I8,
-        &[GROK1_D_MODEL, 1_024],
-        |kind| {
-            matches!(
+#[derive(Clone, Copy)]
+enum Grok1ExpectedKind {
+    MoeExpertProjection,
+    AttentionNarrow,
+    AttentionModelWidth,
+    MoeScales,
+    BlockNorm,
+    Router,
+}
+
+impl Grok1ExpectedKind {
+    fn matches(self, kind: &TensorKind) -> bool {
+        match self {
+            Self::MoeExpertProjection => matches!(kind, TensorKind::MoeExpertProjection { .. }),
+            Self::AttentionNarrow => matches!(
                 kind,
                 TensorKind::QuantizedAttentionProjection {
                     width: QuantizedAttentionWidth::Narrow
                 }
-            )
-        },
-        errors,
-    );
-}
-
-fn validate_grok1_attention_model_width_slot(
-    tensor: &TensorInfo,
-    name: &str,
-    errors: &mut Vec<String>,
-) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::QuantWeight,
-        TensorDType::I8,
-        &[GROK1_D_MODEL, GROK1_D_MODEL],
-        |kind| {
-            matches!(
+            ),
+            Self::AttentionModelWidth => matches!(
                 kind,
                 TensorKind::QuantizedAttentionProjection {
                     width: QuantizedAttentionWidth::ModelWidth
                 }
-            )
-        },
-        errors,
-    );
+            ),
+            Self::MoeScales => matches!(kind, TensorKind::MoeScales),
+            Self::BlockNorm => matches!(kind, TensorKind::BlockNorm),
+            Self::Router => matches!(kind, TensorKind::Router),
+        }
+    }
 }
 
-fn validate_grok1_scale_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::QuantScales,
-        TensorDType::F32,
-        &[GROK1_N_EXPERTS, GROK1_D_FF],
-        |kind| matches!(kind, TensorKind::MoeScales),
-        errors,
-    );
-}
-
-fn validate_grok1_block_norm_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::Tensor,
-        TensorDType::F32,
-        &[GROK1_D_MODEL],
-        |kind| matches!(kind, TensorKind::BlockNorm),
-        errors,
-    );
-}
-
-fn validate_grok1_router_slot(tensor: &TensorInfo, name: &str, errors: &mut Vec<String>) {
-    validate_tensor_signature(
-        tensor,
-        name,
-        TensorRole::Tensor,
-        TensorDType::F32,
-        &[GROK1_D_MODEL, GROK1_N_EXPERTS],
-        |kind| matches!(kind, TensorKind::Router),
-        errors,
-    );
+fn grok1_slot_spec(slot: u32) -> Option<Grok1SlotSpec> {
+    match slot {
+        0 | 2 => Some(Grok1SlotSpec {
+            role: TensorRole::QuantWeight,
+            dtype: TensorDType::I8,
+            shape: &[GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
+            kind: Grok1ExpectedKind::MoeExpertProjection,
+        }),
+        1 => Some(Grok1SlotSpec {
+            role: TensorRole::QuantWeight,
+            dtype: TensorDType::I8,
+            shape: &[GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
+            kind: Grok1ExpectedKind::MoeExpertProjection,
+        }),
+        3 | 6 => Some(Grok1SlotSpec {
+            role: TensorRole::QuantWeight,
+            dtype: TensorDType::I8,
+            shape: &[GROK1_D_MODEL, 1_024],
+            kind: Grok1ExpectedKind::AttentionNarrow,
+        }),
+        4 | 5 => Some(Grok1SlotSpec {
+            role: TensorRole::QuantWeight,
+            dtype: TensorDType::I8,
+            shape: &[GROK1_D_MODEL, GROK1_D_MODEL],
+            kind: Grok1ExpectedKind::AttentionModelWidth,
+        }),
+        7 | 8 => Some(Grok1SlotSpec {
+            role: TensorRole::QuantScales,
+            dtype: TensorDType::F32,
+            shape: &[GROK1_N_EXPERTS, GROK1_D_FF],
+            kind: Grok1ExpectedKind::MoeScales,
+        }),
+        9 | 10 => Some(Grok1SlotSpec {
+            role: TensorRole::Tensor,
+            dtype: TensorDType::F32,
+            shape: &[GROK1_D_MODEL],
+            kind: Grok1ExpectedKind::BlockNorm,
+        }),
+        11 => Some(Grok1SlotSpec {
+            role: TensorRole::Tensor,
+            dtype: TensorDType::F32,
+            shape: &[GROK1_D_MODEL, GROK1_N_EXPERTS],
+            kind: Grok1ExpectedKind::Router,
+        }),
+        _ => None,
+    }
 }
 
 fn validate_tensor_signature(
