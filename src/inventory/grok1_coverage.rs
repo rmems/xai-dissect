@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, bail};
 
 use crate::schema::{
-    Grok1CoverageCounts, Grok1CoverageManifest, Grok1UnknownSlot, ModelInventory,
+    Grok1CoverageCounts, Grok1CoverageManifest, Grok1UnknownSlot, ModelInventory, MoeProjection,
     QuantizedAttentionWidth, TensorDType, TensorInfo, TensorKind, TensorRole,
 };
 
@@ -38,9 +38,7 @@ const GROK1_ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
 /// shard count, because completeness is a tensor/layout property and repacked
 /// checkpoints can preserve all 770 tensors with a different file count.
 pub fn should_validate_grok1_coverage(inv: &ModelInventory) -> bool {
-    inv.model_family == "grok-1"
-        && (inv.tensors.len() as u64 >= GROK1_EXPECTED_TENSORS - 1
-            || inv.inferred.n_blocks == Some(GROK1_EXPECTED_BLOCKS))
+    inv.model_family == "grok-1" && inv.tensors.len() as u64 >= GROK1_EXPECTED_TENSORS
 }
 
 /// Validate a complete Grok-1 inventory and emit a deterministic coverage
@@ -339,7 +337,7 @@ struct Grok1SlotSpec {
 
 #[derive(Clone, Copy)]
 enum Grok1ExpectedKind {
-    MoeExpertProjection,
+    MoeExpertProjection(MoeProjection),
     AttentionNarrow,
     AttentionModelWidth,
     BlockNorm,
@@ -349,7 +347,10 @@ enum Grok1ExpectedKind {
 impl Grok1ExpectedKind {
     fn matches(self, kind: &TensorKind) -> bool {
         match self {
-            Self::MoeExpertProjection => matches!(kind, TensorKind::MoeExpertProjection { .. }),
+            Self::MoeExpertProjection(expected) => matches!(
+                kind,
+                TensorKind::MoeExpertProjection { projection } if *projection == expected
+            ),
             Self::AttentionNarrow => matches!(
                 kind,
                 TensorKind::QuantizedAttentionProjection {
@@ -374,21 +375,21 @@ static GROK1_SLOT_SPECS: [Grok1SlotSpec; GROK1_BLOCK_SLOTS as usize] = [
         role: TensorRole::QuantWeight,
         dtype: TensorDType::I8,
         shape: &GROK1_EXPERT_UP_OR_GATE_SHAPE,
-        kind: Grok1ExpectedKind::MoeExpertProjection,
+        kind: Grok1ExpectedKind::MoeExpertProjection(MoeProjection::Gate),
     },
     Grok1SlotSpec {
         slot: 1,
         role: TensorRole::QuantWeight,
         dtype: TensorDType::I8,
         shape: &GROK1_EXPERT_DOWN_SHAPE,
-        kind: Grok1ExpectedKind::MoeExpertProjection,
+        kind: Grok1ExpectedKind::MoeExpertProjection(MoeProjection::Down),
     },
     Grok1SlotSpec {
         slot: 2,
         role: TensorRole::QuantWeight,
         dtype: TensorDType::I8,
         shape: &GROK1_EXPERT_UP_OR_GATE_SHAPE,
-        kind: Grok1ExpectedKind::MoeExpertProjection,
+        kind: Grok1ExpectedKind::MoeExpertProjection(MoeProjection::Up),
     },
     Grok1SlotSpec {
         slot: 3,
@@ -603,6 +604,15 @@ mod tests {
     }
 
     #[test]
+    fn skips_strict_coverage_for_intentionally_truncated_grok1_inventory() {
+        let mut inv = complete_grok1_inventory();
+        inv.tensors.pop();
+        refresh_inventory_derived_fields(&mut inv);
+
+        assert!(!should_validate_grok1_coverage(&inv));
+    }
+
+    #[test]
     fn grok1_coverage_fails_on_missing_block() {
         let mut inv = complete_grok1_inventory();
         inv.tensors.retain(|tensor| tensor.block_index != Some(10));
@@ -692,6 +702,42 @@ mod tests {
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
         assert!(format!("{err:#}").contains("unexpected tensor shape at block_005.slot_09"));
+    }
+
+    #[test]
+    fn grok1_coverage_fails_on_unresolved_moe_projection_slot() {
+        let mut inv = complete_grok1_inventory();
+        let tensor = inv
+            .tensors
+            .iter_mut()
+            .find(|tensor| tensor.block_index == Some(5) && tensor.block_slot == Some(0))
+            .expect("slot tensor");
+        tensor.kind = TensorKind::MoeExpertProjection {
+            projection: MoeProjection::Unresolved,
+        };
+        refresh_inventory_derived_fields(&mut inv);
+
+        let err = validate_grok1_complete_manifest(&inv).unwrap_err();
+
+        assert!(format!("{err:#}").contains("unexpected tensor kind at block_005.slot_00"));
+    }
+
+    #[test]
+    fn grok1_coverage_fails_on_swapped_moe_projection_slot() {
+        let mut inv = complete_grok1_inventory();
+        let tensor = inv
+            .tensors
+            .iter_mut()
+            .find(|tensor| tensor.block_index == Some(5) && tensor.block_slot == Some(2))
+            .expect("slot tensor");
+        tensor.kind = TensorKind::MoeExpertProjection {
+            projection: MoeProjection::Gate,
+        };
+        refresh_inventory_derived_fields(&mut inv);
+
+        let err = validate_grok1_complete_manifest(&inv).unwrap_err();
+
+        assert!(format!("{err:#}").contains("unexpected tensor kind at block_005.slot_02"));
     }
 
     #[test]
