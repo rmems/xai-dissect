@@ -14,8 +14,9 @@ use serde::Serialize;
 
 use crate::schema::{
     BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ExpertAtlas,
-    ExpertIssueCategory, FindingsSummary, ModelInventory, RoutingCriticalTensorManifest,
-    RoutingIssueCategory, RoutingReport, SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
+    ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
+    RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
+    SaaqReadinessReport, StatsProfileReport,
 };
 
 /// Write the full inventory as pretty-printed JSON. The JSON layout is the
@@ -60,6 +61,14 @@ pub fn write_inventory_snapshot_manifest_json(
         "serialize inventory snapshot manifest to json",
         out,
     )
+}
+
+/// Write the strict Grok-1 coverage manifest as pretty-printed JSON.
+pub fn write_grok1_coverage_manifest_json(
+    manifest: &Grok1CoverageManifest,
+    out: &Path,
+) -> Result<()> {
+    write_pretty_json(manifest, "serialize grok-1 coverage manifest", out)
 }
 
 /// Write the routing-critical tensor manifest as pretty-printed JSON.

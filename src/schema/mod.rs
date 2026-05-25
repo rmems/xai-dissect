@@ -121,9 +121,9 @@ pub enum TensorKind {
     /// MoE router / gate table, shape `(d_model, n_experts)`.
     Router,
     /// One of the MoE expert feed-forward projections, quantized. The
-    /// specific projection (`up` / `gate` / `down`) cannot always be
-    /// distinguished by shape alone; when it cannot, the projection is
-    /// reported as `Unresolved`.
+    /// specific projection (`up` / `gate` / `down`) may require checkpoint
+    /// layout evidence beyond shape alone; when unavailable, the projection
+    /// is reported as `Unresolved`.
     MoeExpertProjection { projection: MoeProjection },
     /// Companion f32 scales tensor for an MoE expert projection (where it
     /// lives outside the `QuantizedWeight8bit` envelope).
@@ -180,10 +180,9 @@ pub enum MoeProjection {
     Up,
     Gate,
     Down,
-    /// Gate/up cannot be told apart by shape alone on Grok-1; both have the
-    /// same `(n_experts, d_model, d_ff)` signature. The inventory layer
-    /// emits `Unresolved` for those and leaves disambiguation to a later
-    /// analysis pass that inspects ordering within a block.
+    /// Gate/up cannot be told apart by shape alone; both have the same
+    /// `(n_experts, d_model, d_ff)` signature. Supported checkpoint layouts
+    /// can promote this to `Gate` or `Up` after block-slot assignment.
     Unresolved,
 }
 
@@ -673,6 +672,39 @@ pub struct CheckpointInventoryBlockSnapshot {
     pub tensor_count: u32,
     pub total_nbytes: u64,
     pub kind_labels: Vec<String>,
+}
+
+/// Fail-closed Grok-1 coverage manifest for complete checkpoint inventories.
+/// The checksum is computed over a canonical, path-independent view of the
+/// structural tensor table so downstream tools can compare reruns.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grok1CoverageManifest {
+    pub model_family: String,
+    pub schema_version: u32,
+    pub coverage_schema_version: u32,
+    pub validation: String,
+    pub checksum: String,
+    pub expected: Grok1CoverageCounts,
+    pub discovered: Grok1CoverageCounts,
+    pub unknown_slots: Vec<Grok1UnknownSlot>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Grok1CoverageCounts {
+    pub blocks: u32,
+    pub tensors: u64,
+    pub routers: u64,
+    pub expert_families: u64,
+    pub unknown_tensors: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grok1UnknownSlot {
+    pub structural_name: String,
+    pub block_index: Option<u32>,
+    pub block_slot: Option<u32>,
+    pub shape: TensorShape,
+    pub reason: String,
 }
 
 /// Machine-readable routing-critical tensor list for downstream

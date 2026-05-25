@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use crate::inventory;
 use crate::report;
 use crate::schema::{
     CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ExpertAtlas, FindingsSeverity,
@@ -105,6 +106,11 @@ pub fn write_inventory_bundle(
     root: &Path,
     slug_override: Option<&str>,
 ) -> Result<OutputBundle> {
+    let coverage = if inventory::should_validate_grok1_coverage(inv) {
+        Some(inventory::validate_grok1_complete_manifest(inv)?)
+    } else {
+        None
+    };
     let layout = prepare_output_layout(root, &inv.checkpoint_path, slug_override)?;
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
@@ -130,6 +136,12 @@ pub fn write_inventory_bundle(
         .join("checkpoint-inventory-snapshot.json");
     report::write_inventory_snapshot_manifest_json(&snapshot, &manifest_path)?;
     bundle.written_paths.push(manifest_path);
+
+    if let Some(coverage) = coverage {
+        let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
+        report::write_grok1_coverage_manifest_json(&coverage, &coverage_path)?;
+        bundle.written_paths.push(coverage_path);
+    }
 
     Ok(bundle)
 }
@@ -661,10 +673,12 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use crate::inventory::SCHEMA_VERSION;
     use crate::schema::{
-        BlockSummary, InferredHyperparams, InventoryTotals, KindCount, RoutingBlockReport,
-        RoutingCriticalBlock, RoutingGateMetrics, RoutingOrientation, RoutingOrientationSummary,
-        RoutingTensorLocator, RoutingTensorRef, ShardRange, TensorDType, TensorRole, TensorShape,
+        BlockSummary, InferredHyperparams, InventoryTotals, KindCount, MoeProjection,
+        QuantizedAttentionWidth, RoutingBlockReport, RoutingCriticalBlock, RoutingGateMetrics,
+        RoutingOrientation, RoutingOrientationSummary, RoutingTensorLocator, RoutingTensorRef,
+        ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole, TensorShape,
     };
 
     #[test]
@@ -715,6 +729,43 @@ mod tests {
                 .exists()
         );
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_validates_complete_grok1_before_writing_outputs() {
+        let root = unique_test_root("inventory_bundle_validation_error");
+        let mut inv = complete_grok1_inventory();
+        inv.inferred.vocab_size = Some(123);
+
+        let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
+
+        assert!(format!("{err:#}").contains("inferred vocab_size"));
+        assert!(!root.join("exports").exists());
+        assert!(!root.join("reports").exists());
+        assert!(!root.join("manifests").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_writes_repacked_grok1_coverage_manifest() {
+        let root = unique_test_root("inventory_bundle_repacked_grok1");
+        let mut inv = complete_grok1_inventory();
+        inv.shard_count = 42;
+
+        let bundle = write_inventory_bundle(&inv, &root, None).expect("write inventory bundle");
+
+        assert!(
+            bundle
+                .written_paths
+                .iter()
+                .any(|path| path.file_name().and_then(|name| name.to_str())
+                    == Some("grok1-coverage.json"))
+        );
+        assert!(
+            root.join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
+                .exists()
+        );
         let _ = fs::remove_dir_all(root);
     }
 
@@ -776,6 +827,165 @@ mod tests {
             },
             schema_version: 1,
         }
+    }
+
+    fn complete_grok1_inventory() -> ModelInventory {
+        let mut tensors = vec![
+            tensor(
+                0,
+                0,
+                None,
+                None,
+                TensorKind::TokenEmbedding,
+                TensorRole::Tensor,
+                TensorDType::F32,
+                vec![131_072, 6_144],
+            ),
+            tensor(
+                1,
+                0,
+                None,
+                None,
+                TensorKind::FinalNorm,
+                TensorRole::Tensor,
+                TensorDType::F32,
+                vec![6_144],
+            ),
+        ];
+
+        for block in 0..64u32 {
+            for slot in 0..12u32 {
+                let shard = 2 + block * 12 + slot;
+                let (kind, role, dtype, shape) = match slot {
+                    0 | 2 => (
+                        TensorKind::MoeExpertProjection {
+                            projection: if slot == 0 {
+                                MoeProjection::Gate
+                            } else {
+                                MoeProjection::Up
+                            },
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![8, 6_144, 32_768],
+                    ),
+                    1 => (
+                        TensorKind::MoeExpertProjection {
+                            projection: MoeProjection::Down,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![8, 32_768, 6_144],
+                    ),
+                    3 | 6 => (
+                        TensorKind::QuantizedAttentionProjection {
+                            width: QuantizedAttentionWidth::Narrow,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![6_144, 1_024],
+                    ),
+                    4 | 5 => (
+                        TensorKind::QuantizedAttentionProjection {
+                            width: QuantizedAttentionWidth::ModelWidth,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![6_144, 6_144],
+                    ),
+                    7..=10 => (
+                        TensorKind::BlockNorm,
+                        TensorRole::Tensor,
+                        TensorDType::F32,
+                        vec![6_144],
+                    ),
+                    11 => (
+                        TensorKind::Router,
+                        TensorRole::Tensor,
+                        TensorDType::F32,
+                        vec![6_144, 8],
+                    ),
+                    _ => unreachable!(),
+                };
+                tensors.push(tensor(
+                    shard,
+                    0,
+                    Some(block),
+                    Some(slot),
+                    kind,
+                    role,
+                    dtype,
+                    shape,
+                ));
+            }
+        }
+
+        let blocks = crate::inventory::summarize_blocks(&tensors);
+        let totals = inventory_totals(&tensors);
+        ModelInventory {
+            model_family: "grok-1".to_string(),
+            checkpoint_path: PathBuf::from("/tmp/grok-1-official/ckpt-0"),
+            shard_count: 770,
+            inferred: InferredHyperparams {
+                vocab_size: Some(131_072),
+                d_model: Some(6_144),
+                n_experts: Some(8),
+                d_ff: Some(32_768),
+                n_blocks: Some(64),
+            },
+            tensors,
+            blocks,
+            totals,
+            schema_version: SCHEMA_VERSION,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn tensor(
+        shard_ordinal: u32,
+        in_shard_index: u32,
+        block_index: Option<u32>,
+        block_slot: Option<u32>,
+        kind: TensorKind,
+        role: TensorRole,
+        dtype: TensorDType,
+        shape: Vec<u64>,
+    ) -> TensorInfo {
+        TensorInfo {
+            shard_path: PathBuf::from(format!(
+                "/tmp/grok-1-official/ckpt-0/tensor{shard_ordinal:05}_000"
+            )),
+            shard_ordinal,
+            in_shard_index,
+            role,
+            dtype,
+            shape: TensorShape::new(shape.clone()),
+            offset: 0,
+            nbytes: dtype.itemsize() as u64 * shape.iter().product::<u64>(),
+            kind,
+            block_index,
+            block_slot,
+        }
+    }
+
+    fn inventory_totals(tensors: &[TensorInfo]) -> InventoryTotals {
+        let mut out = InventoryTotals {
+            tensors: tensors.len() as u64,
+            ..Default::default()
+        };
+        for tensor in tensors {
+            out.total_nbytes += tensor.nbytes;
+            out.total_elements += tensor.shape.numel();
+            match tensor.dtype {
+                TensorDType::F32 => out.f32_tensors += 1,
+                TensorDType::I8 => out.i8_tensors += 1,
+            }
+            match tensor.role {
+                TensorRole::QuantWeight | TensorRole::QuantScales => out.quant_tensors += 1,
+                TensorRole::Tensor => {}
+            }
+        }
+        out
     }
 
     fn sample_routing_report() -> RoutingReport {
