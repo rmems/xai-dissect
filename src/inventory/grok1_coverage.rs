@@ -30,7 +30,6 @@ const GROK1_EXPERT_UP_OR_GATE_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_MODEL,
 const GROK1_EXPERT_DOWN_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
 const GROK1_ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, 1_024];
 const GROK1_ATTENTION_MODEL_WIDTH_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_D_MODEL];
-const GROK1_SCALE_SHAPE: [u64; 2] = [GROK1_N_EXPERTS, GROK1_D_FF];
 const GROK1_BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
 const GROK1_ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
 
@@ -343,7 +342,6 @@ enum Grok1ExpectedKind {
     MoeExpertProjection,
     AttentionNarrow,
     AttentionModelWidth,
-    MoeScales,
     BlockNorm,
     Router,
 }
@@ -364,7 +362,6 @@ impl Grok1ExpectedKind {
                     width: QuantizedAttentionWidth::ModelWidth
                 }
             ),
-            Self::MoeScales => matches!(kind, TensorKind::MoeScales),
             Self::BlockNorm => matches!(kind, TensorKind::BlockNorm),
             Self::Router => matches!(kind, TensorKind::Router),
         }
@@ -423,17 +420,17 @@ static GROK1_SLOT_SPECS: [Grok1SlotSpec; GROK1_BLOCK_SLOTS as usize] = [
     },
     Grok1SlotSpec {
         slot: 7,
-        role: TensorRole::QuantScales,
+        role: TensorRole::Tensor,
         dtype: TensorDType::F32,
-        shape: &GROK1_SCALE_SHAPE,
-        kind: Grok1ExpectedKind::MoeScales,
+        shape: &GROK1_BLOCK_NORM_SHAPE,
+        kind: Grok1ExpectedKind::BlockNorm,
     },
     Grok1SlotSpec {
         slot: 8,
-        role: TensorRole::QuantScales,
+        role: TensorRole::Tensor,
         dtype: TensorDType::F32,
-        shape: &GROK1_SCALE_SHAPE,
-        kind: Grok1ExpectedKind::MoeScales,
+        shape: &GROK1_BLOCK_NORM_SHAPE,
+        kind: Grok1ExpectedKind::BlockNorm,
     },
     Grok1SlotSpec {
         slot: 9,
@@ -593,7 +590,7 @@ mod tests {
         assert_eq!(manifest.expected.expert_families, 192);
         assert_eq!(manifest.discovered.expert_families, 192);
         assert!(manifest.unknown_slots.is_empty());
-        assert_eq!(manifest.checksum, "fnv1a64:ce4d8e7cde002f74");
+        assert_eq!(manifest.checksum, "fnv1a64:de5a1c978121c62c");
     }
 
     #[test]
@@ -666,14 +663,14 @@ mod tests {
     }
 
     #[test]
-    fn grok1_coverage_fails_on_wrong_scale_slot_kind() {
+    fn grok1_coverage_fails_on_wrong_norm_slot_kind() {
         let mut inv = complete_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
             .find(|tensor| tensor.block_index == Some(5) && tensor.block_slot == Some(7))
             .expect("slot tensor");
-        tensor.kind = TensorKind::BlockNorm;
+        tensor.kind = TensorKind::MoeScales;
         refresh_inventory_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
@@ -751,7 +748,11 @@ mod tests {
                 let (kind, role, dtype, shape) = match slot {
                     0 | 2 => (
                         TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Unresolved,
+                            projection: if slot == 0 {
+                                MoeProjection::Gate
+                            } else {
+                                MoeProjection::Up
+                            },
                         },
                         TensorRole::QuantWeight,
                         TensorDType::I8,
@@ -781,13 +782,7 @@ mod tests {
                         TensorDType::I8,
                         vec![GROK1_D_MODEL, GROK1_D_MODEL],
                     ),
-                    7 | 8 => (
-                        TensorKind::MoeScales,
-                        TensorRole::QuantScales,
-                        TensorDType::F32,
-                        vec![GROK1_N_EXPERTS, GROK1_D_FF],
-                    ),
-                    9 | 10 => (
+                    7..=10 => (
                         TensorKind::BlockNorm,
                         TensorRole::Tensor,
                         TensorDType::F32,

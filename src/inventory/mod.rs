@@ -6,8 +6,8 @@
 // This layer is intentionally conservative. It identifies what can be
 // identified from `(rank, dtype, dims)` alone plus an inferred `(d_model,
 // vocab_size, n_experts)` triple. Anything ambiguous is reported as
-// `Unknown { reason }` or `MoeProjection::Unresolved` and deferred to a
-// later analysis pass.
+// `Unknown { reason }` or `MoeProjection::Unresolved` unless a supported
+// checkpoint layout provides source-backed disambiguation.
 //
 // Deeper semantic analysis (routing math, expert-level statistics,
 // dequantized parameter accounting) is explicitly *not* done here.
@@ -111,6 +111,9 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         shard_selection.shards.len(),
         shard_selection.truncated,
     );
+    if cfg.model_family == "grok-1" {
+        disambiguate_grok1_moe_projection_slots(&mut tensors, &hp);
+    }
 
     // Pass 5: build block summaries and totals.
     let blocks = summarize_blocks(&tensors);
@@ -400,6 +403,63 @@ fn assign_block_indices_for_scan(
         return None;
     }
     assign_block_indices(tensors, shard_count)
+}
+
+fn disambiguate_grok1_moe_projection_slots(tensors: &mut [TensorInfo], hp: &InferredHyperparams) {
+    for tensor in tensors {
+        let Some(slot) = tensor.block_slot else {
+            continue;
+        };
+        let Some(projection) = grok1_moe_projection_for_slot(slot) else {
+            continue;
+        };
+        if !grok1_moe_projection_shape_matches(tensor, hp, projection) {
+            continue;
+        }
+
+        tensor.kind = TensorKind::MoeExpertProjection { projection };
+    }
+}
+
+fn grok1_moe_projection_for_slot(slot: u32) -> Option<MoeProjection> {
+    // Official xai-org/grok-1 initializes/restores the MoE DenseBlock in
+    // flattened parameter order: `linear` (GELU gate), `linear_1` (down),
+    // then `linear_v` (ungated up/value branch).
+    match slot {
+        0 => Some(MoeProjection::Gate),
+        1 => Some(MoeProjection::Down),
+        2 => Some(MoeProjection::Up),
+        _ => None,
+    }
+}
+
+fn grok1_moe_projection_shape_matches(
+    tensor: &TensorInfo,
+    hp: &InferredHyperparams,
+    projection: MoeProjection,
+) -> bool {
+    if !matches!(tensor.kind, TensorKind::MoeExpertProjection { .. }) {
+        return false;
+    }
+    if tensor.role != TensorRole::QuantWeight || tensor.dtype != TensorDType::I8 {
+        return false;
+    }
+    if tensor.shape.rank() != 3 {
+        return false;
+    }
+
+    let (Some(expected_experts), Some(d_model), Some(d_ff)) = (hp.n_experts, hp.d_model, hp.d_ff)
+    else {
+        return false;
+    };
+    let dims = tensor.shape.dims();
+    match projection {
+        MoeProjection::Gate | MoeProjection::Up => {
+            dims[0] == expected_experts && dims[1] == d_model && dims[2] == d_ff
+        }
+        MoeProjection::Down => dims[0] == expected_experts && dims[1] == d_ff && dims[2] == d_model,
+        MoeProjection::Unresolved => false,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -792,6 +852,55 @@ mod tests {
         assert_eq!(narrow.short_label(), "attn_proj_i8.narrow");
     }
 
+    #[test]
+    fn disambiguates_grok1_moe_projection_slots_from_official_order() {
+        let hp = InferredHyperparams {
+            d_model: Some(6_144),
+            n_experts: Some(8),
+            d_ff: Some(32_768),
+            ..InferredHyperparams::default()
+        };
+        let mut tensors = vec![
+            tensor(
+                2,
+                TensorKind::MoeExpertProjection {
+                    projection: MoeProjection::Unresolved,
+                },
+                TensorRole::QuantWeight,
+                TensorDType::I8,
+                vec![8, 6_144, 32_768],
+            ),
+            tensor(
+                3,
+                TensorKind::MoeExpertProjection {
+                    projection: MoeProjection::Down,
+                },
+                TensorRole::QuantWeight,
+                TensorDType::I8,
+                vec![8, 32_768, 6_144],
+            ),
+            tensor(
+                4,
+                TensorKind::MoeExpertProjection {
+                    projection: MoeProjection::Unresolved,
+                },
+                TensorRole::QuantWeight,
+                TensorDType::I8,
+                vec![8, 6_144, 32_768],
+            ),
+        ];
+        for (slot, tensor) in tensors.iter_mut().enumerate() {
+            tensor.block_index = Some(0);
+            tensor.block_slot = Some(slot as u32);
+        }
+
+        disambiguate_grok1_moe_projection_slots(&mut tensors, &hp);
+
+        assert_eq!(moe_projection(&tensors[0]), Some(MoeProjection::Gate));
+        assert_eq!(moe_projection(&tensors[1]), Some(MoeProjection::Down));
+        assert_eq!(moe_projection(&tensors[2]), Some(MoeProjection::Up));
+    }
+
     fn shifted_grok_ckpt0_tensors() -> Vec<TensorInfo> {
         let mut tensors = Vec::new();
         tensors.push(tensor(
@@ -833,37 +942,16 @@ mod tests {
             for slot in 0..12u32 {
                 let shard = start + slot;
                 match slot {
-                    0..=3 => tensors.push(tensor(
-                        shard,
-                        TensorKind::BlockNorm,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![6_144],
-                    )),
-                    4..=5 => tensors.push(tensor(
-                        shard,
-                        TensorKind::AttnProjF32,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![6_144, 6_144],
-                    )),
-                    6..=7 => tensors.push(tensor(
-                        shard,
-                        TensorKind::MoeScales,
-                        TensorRole::QuantScales,
-                        TensorDType::F32,
-                        vec![8, 32_768],
-                    )),
-                    8 | 9 => tensors.push(tensor(
+                    0 => tensors.push(tensor(
                         shard,
                         TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Unresolved,
+                            projection: MoeProjection::Gate,
                         },
                         TensorRole::QuantWeight,
                         TensorDType::I8,
                         vec![8, 6_144, 32_768],
                     )),
-                    10 => tensors.push(tensor(
+                    1 => tensors.push(tensor(
                         shard,
                         TensorKind::MoeExpertProjection {
                             projection: MoeProjection::Down,
@@ -871,6 +959,40 @@ mod tests {
                         TensorRole::QuantWeight,
                         TensorDType::I8,
                         vec![8, 32_768, 6_144],
+                    )),
+                    2 => tensors.push(tensor(
+                        shard,
+                        TensorKind::MoeExpertProjection {
+                            projection: MoeProjection::Up,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![8, 6_144, 32_768],
+                    )),
+                    3 | 6 => tensors.push(tensor(
+                        shard,
+                        TensorKind::QuantizedAttentionProjection {
+                            width: QuantizedAttentionWidth::Narrow,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![6_144, 1_024],
+                    )),
+                    4 | 5 => tensors.push(tensor(
+                        shard,
+                        TensorKind::QuantizedAttentionProjection {
+                            width: QuantizedAttentionWidth::ModelWidth,
+                        },
+                        TensorRole::QuantWeight,
+                        TensorDType::I8,
+                        vec![6_144, 6_144],
+                    )),
+                    7..=10 => tensors.push(tensor(
+                        shard,
+                        TensorKind::BlockNorm,
+                        TensorRole::Tensor,
+                        TensorDType::F32,
+                        vec![6_144],
                     )),
                     11 => tensors.push(tensor(
                         shard,
@@ -882,6 +1004,13 @@ mod tests {
                     _ => unreachable!(),
                 }
             }
+        }
+    }
+
+    fn moe_projection(tensor: &TensorInfo) -> Option<MoeProjection> {
+        match tensor.kind {
+            TensorKind::MoeExpertProjection { projection } => Some(projection),
+            _ => None,
         }
     }
 

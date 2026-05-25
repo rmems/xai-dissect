@@ -107,8 +107,7 @@ Applied in order; the first matching rule wins.
 1. `(role = quant.weight, dtype = i8, rank = 3)`:
    - If `dims[0] == n_experts`:
      - If `dims[1] == d_model` -> `MoeExpertProjection { projection: unresolved }`
-       (the `(E, d_model, d_ff)` signature covers both up and gate; they
-       cannot be told apart by shape alone on Grok-1).
+       until block-slot assignment can apply source-backed Grok-1 ordering.
      - Else if `dims[2] == d_model` -> `MoeExpertProjection { projection: down }`
        (the `(E, d_ff, d_model)` signature).
      - Else -> `MoeExpertProjection { projection: unresolved }`.
@@ -166,12 +165,27 @@ that singleton so all 64 `(d_model, n_experts)` routers receive canonical
 `block_NNN.routing_slot_SS` names. If the evidence is insufficient, router
 candidates remain unassigned and the routing report records a layout note.
 
+For official Grok-1 checkpoints with block slots assigned, the MoE expert
+projections are disambiguated from the source-backed Haiku parameter order:
+
+```text
+slot 0 -> moe/linear/w   -> gate
+slot 1 -> moe/linear_1/w -> down
+slot 2 -> moe/linear_v/w -> up
+```
+
+The source evidence is the official `xai-org/grok-1` model code: `linear` is
+the GELU gate branch, `linear_1` consumes the gated product as the down
+projection, and `linear_v` is the ungated up/value branch. See
+`https://github.com/xai-org/grok-1/blob/main/model.py` and the flattened
+pytree checkpoint restore path in
+`https://github.com/xai-org/grok-1/blob/main/checkpoint.py`.
+
 ## What is *not* inferred here
 
-- The ordering of `up` vs. `gate` within a block. Both share the
-  `(E, d_model, d_ff)` shape; disambiguation requires a later pass over
-  the block's shard order and is explicitly out of scope for the
-  cartography layer.
+- Up/gate names for unsupported or layout-incomplete checkpoints. Both share
+  the `(E, d_model, d_ff)` shape, so they remain `unresolved` unless a
+  source-backed block-slot mapping is available.
 - Attention head count, head dimension, KV-head grouping. The f32
   attention projections are reported as `AttnProjF32`, and the rank-2 int8
   attention projections as `QuantizedAttentionProjection`, without further

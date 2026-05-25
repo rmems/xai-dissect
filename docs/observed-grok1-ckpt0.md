@@ -35,9 +35,9 @@ Totals reconcile exactly:
 
 The two buckets at the 1.5 GiB tier (`1,611,137,347` vs `1,611,399,491`,
 delta = 262,144 = 64 KiB in f32) are consistent with the same base
-ndarray shape carrying a different-sized `scales` block inside the
-`QuantizedWeight8bit` dataclass - exactly what the parser already
-targets.
+ndarray shape carrying different quantization side data inside the
+`QuantizedWeight8bit` dataclass. The inventory reports the exposed
+top-level shard tensor for coverage accounting.
 
 ## Per-bucket architectural mapping
 
@@ -60,9 +60,10 @@ architecture:
   (attention-Q, attention-K, pre-MLP, post-MLP) plus one final pre-head
   norm.
 
-Every 1.5 GiB shard is a `QuantizedWeight8bit` dataclass (int8 weight +
-f32 scales), so `xai-dissect` emits two rows per shard (`quant.weight`
-and `quant.scales`). The plain f32 shards emit a single `tensor` row.
+Every 1.5 GiB shard is a `QuantizedWeight8bit` dataclass (int8 weight plus
+quantization side data), and `xai-dissect` emits one top-level
+`quant.weight` inventory row for each such shard. The plain f32 shards emit
+a single `tensor` row.
 
 ## Grok-1 shape sanity
 
@@ -93,12 +94,14 @@ The 12 shards per layer decompose as:
 = 12
 ```
 
+The official Grok-1 source disambiguates the three MoE expert projection
+slots as gate, down, then up: `moe/linear/w`, `moe/linear_1/w`, and
+`moe/linear_v/w` in flattened checkpoint order.
+
 Close enough without a full `run.py` trace; the remaining ambiguity is
-which quantized MoE projection is `up` vs `gate` (they share the
-`(8, 6144, 32768)` signature on disk), and which exact Q/K/V/O role each
-rank-2 int8 attention projection plays. Those are downstream
-disambiguation problems for a later analysis pass, not cartography
-problems.
+which exact Q/K/V/O role each rank-2 int8 attention projection plays. Those
+are downstream disambiguation problems for a later analysis pass, not
+cartography problems.
 
 ## Dissecting a single shard
 

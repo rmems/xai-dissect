@@ -859,7 +859,11 @@ mod tests {
                 let (kind, role, dtype, shape) = match slot {
                     0 | 2 => (
                         TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Unresolved,
+                            projection: if slot == 0 {
+                                MoeProjection::Gate
+                            } else {
+                                MoeProjection::Up
+                            },
                         },
                         TensorRole::QuantWeight,
                         TensorDType::I8,
@@ -889,13 +893,7 @@ mod tests {
                         TensorDType::I8,
                         vec![6_144, 6_144],
                     ),
-                    7 | 8 => (
-                        TensorKind::MoeScales,
-                        TensorRole::QuantScales,
-                        TensorDType::F32,
-                        vec![8, 32_768],
-                    ),
-                    9 | 10 => (
+                    7..=10 => (
                         TensorKind::BlockNorm,
                         TensorRole::Tensor,
                         TensorDType::F32,

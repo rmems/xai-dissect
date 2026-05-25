@@ -121,9 +121,9 @@ pub enum TensorKind {
     /// MoE router / gate table, shape `(d_model, n_experts)`.
     Router,
     /// One of the MoE expert feed-forward projections, quantized. The
-    /// specific projection (`up` / `gate` / `down`) cannot always be
-    /// distinguished by shape alone; when it cannot, the projection is
-    /// reported as `Unresolved`.
+    /// specific projection (`up` / `gate` / `down`) may require checkpoint
+    /// layout evidence beyond shape alone; when unavailable, the projection
+    /// is reported as `Unresolved`.
     MoeExpertProjection { projection: MoeProjection },
     /// Companion f32 scales tensor for an MoE expert projection (where it
     /// lives outside the `QuantizedWeight8bit` envelope).
@@ -180,10 +180,9 @@ pub enum MoeProjection {
     Up,
     Gate,
     Down,
-    /// Gate/up cannot be told apart by shape alone on Grok-1; both have the
-    /// same `(n_experts, d_model, d_ff)` signature. The inventory layer
-    /// emits `Unresolved` for those and leaves disambiguation to a later
-    /// analysis pass that inspects ordering within a block.
+    /// Gate/up cannot be told apart by shape alone; both have the same
+    /// `(n_experts, d_model, d_ff)` signature. Supported checkpoint layouts
+    /// can promote this to `Gate` or `Up` after block-slot assignment.
     Unresolved,
 }
 
