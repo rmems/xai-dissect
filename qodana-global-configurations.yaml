@@ -1,4 +1,6 @@
-qodana:
-  version: '2024.1'
-  profile:
-    name: qodana.starter
+global-configurations:
+  - name: "xai-dissect-default"
+    description: "Default Qodana global configuration for xai-dissect Rust project"
+    enabled: true
+    qodana:
+      version: "2024.1"
