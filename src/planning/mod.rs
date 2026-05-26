@@ -709,9 +709,14 @@ mod tests {
             TensorDType::I8,
             vec![8, 6_144, 32_768],
         );
-        let (_policy, _protected, warnings) = super::quant_policy_for_tensor(
+        let (policy, _protected, warnings) = super::quant_policy_for_tensor(
             &unresolved,
             super::ReadinessGroup::QuantizationCandidate,
+        );
+        assert_eq!(
+            policy,
+            crate::schema::QuantPolicy::WrapExistingInt8Expert,
+            "unresolved projection should still map to WrapExistingInt8Expert"
         );
         assert!(
             warnings.iter().any(|w| w.contains("unresolved")),
@@ -733,8 +738,13 @@ mod tests {
             TensorDType::F32,
             vec![1],
         );
-        let (_policy, _protected, warnings) =
+        let (policy, _protected, warnings) =
             super::quant_policy_for_tensor(&unknown, super::ReadinessGroup::Deferred);
+        assert_eq!(
+            policy,
+            crate::schema::QuantPolicy::UnknownPassthroughOrWarn,
+            "unknown tensor should map to UnknownPassthroughOrWarn"
+        );
         assert!(
             warnings.iter().any(|w| w.contains("unknown")),
             "expected warning about unknown tensor classification"
