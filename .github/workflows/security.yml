@@ -20,7 +20,6 @@ jobs:
   cargo-audit:
     name: Cargo Audit
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -34,13 +33,19 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
 
       - name: Run cargo audit
-        run: cargo audit 2>&1 | tee cargo-audit.log
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo audit 2>&1 | tee cargo-audit.log
 
       - name: Upload audit log artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: cargo-audit-log-${{ github.run_id }}
           path: cargo-audit.log
