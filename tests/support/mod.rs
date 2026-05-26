@@ -705,7 +705,7 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
             candidates: vec![candidate],
             schema_version: 1,
         },
-        schema_version: 1,
+        schema_version: 2,
     }
 }
 

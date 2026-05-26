@@ -780,6 +780,7 @@ fn run_quant_plan(
     conversion_manifest_out: Option<&std::path::Path>,
     output_tree: &OutputTreeArgs,
 ) -> Result<()> {
+    validate_quant_plan_inventory_scope(prefix, limit)?;
     let cfg = InventoryConfig {
         prefix: prefix.to_string(),
         limit,
@@ -827,6 +828,21 @@ fn run_quant_plan(
     Ok(())
 }
 
+fn validate_quant_plan_inventory_scope(prefix: &str, limit: Option<usize>) -> Result<()> {
+    if prefix != "tensor" {
+        bail!(
+            "quant-plan requires a complete Grok-1 inventory; `--prefix {}` is not supported",
+            prefix
+        );
+    }
+    if let Some(limit) = limit {
+        bail!(
+            "quant-plan requires a complete Grok-1 inventory; `--limit {limit}` is not supported"
+        );
+    }
+    Ok(())
+}
+
 fn print_quant_plan_console_summary(
     quant_plan: &xai_dissect::schema::QuantPlan,
     conversion_manifest: &xai_dissect::schema::ConversionManifest,
@@ -857,6 +873,23 @@ fn print_output_bundle(label: &str, root: &std::path::Path, bundle: &exports::Ou
         root.display(),
         bundle.checkpoint_slug
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_quant_plan_inventory_scope;
+
+    #[test]
+    fn quant_plan_rejects_non_default_prefix() {
+        let err = validate_quant_plan_inventory_scope("tensor-shard", None).unwrap_err();
+        assert!(format!("{err:#}").contains("--prefix tensor-shard"));
+    }
+
+    #[test]
+    fn quant_plan_rejects_limited_inventory() {
+        let err = validate_quant_plan_inventory_scope("tensor", Some(4)).unwrap_err();
+        assert!(format!("{err:#}").contains("--limit 4"));
+    }
 }
 
 fn print_console_summary(inv: &ModelInventory) {

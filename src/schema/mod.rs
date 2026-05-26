@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
+
 /// Numpy-style dtype of a tensor as it lives on disk. The set is intentionally
 /// narrow: Grok-1 shards only contain `float32` and `int8`. New dtypes are
 /// added only when a supported checkpoint actually requires them.
@@ -634,13 +636,21 @@ pub struct SaaqReadinessReport {
     pub shard_count: u32,
     pub inferred: InferredHyperparams,
     /// Backward-compatible alias for the actionable quantization-candidate set.
+    #[serde(default)]
     pub candidate_targets: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub quantization_candidates: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub routing_critical_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub precision_sensitive_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub deferred_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub risky_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub layer_readiness: Vec<SaaqLayerReadiness>,
+    #[serde(default)]
     pub notes: Vec<String>,
     pub manifest: CandidateTensorManifest,
     pub schema_version: u32,
@@ -684,6 +694,7 @@ pub struct CheckpointInventoryBlockSnapshot {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Grok1CoverageManifest {
     pub model_family: String,
+    #[serde(default = "default_grok1_baseline_profile")]
     pub baseline_profile: String,
     pub schema_version: u32,
     pub coverage_schema_version: u32,
@@ -710,6 +721,10 @@ pub struct Grok1UnknownSlot {
     pub block_slot: Option<u32>,
     pub shape: TensorShape,
     pub reason: String,
+}
+
+fn default_grok1_baseline_profile() -> String {
+    GROK1_BASELINE_PROFILE.to_string()
 }
 
 /// Machine-readable routing-critical tensor list for downstream

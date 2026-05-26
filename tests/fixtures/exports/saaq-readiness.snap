@@ -27,7 +27,7 @@
       "detail": "highest-risk tensor block_000.slot_02.norm at 0.740"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 }
 
 === exports/grok-1-official__ckpt-0/saaq-readiness.json ===
@@ -230,7 +230,7 @@
     ],
     "schema_version": 1
   },
-  "schema_version": 1
+  "schema_version": 2
 }
 
 === manifests/grok-1-official__ckpt-0/candidate-saaq-targets.json ===
@@ -275,7 +275,7 @@
 - **precision_sensitive_tensors**: 1
 - **deferred_tensors**: 1
 - **routing_critical_tensors**: 1
-- **schema_version**: 1
+- **schema_version**: 2
 
 ## Quantization candidates
 

@@ -20,7 +20,8 @@ use crate::schema::{
 };
 
 pub const STATS_PROFILE_SCHEMA_VERSION: u32 = 1;
-pub const SAAQ_READINESS_SCHEMA_VERSION: u32 = 1;
+pub const CANDIDATE_TENSOR_MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub const SAAQ_READINESS_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug)]
 pub struct StatsConfig {
@@ -137,8 +138,9 @@ pub fn build_saaq_readiness_report(
     let deferred_tensors = scored
         .iter()
         .filter(|candidate| {
-            candidate.region_class == SaaqRegionClass::EmbeddingHeavy
-                || candidate.disposition == SaaqDisposition::ObserveOnly
+            candidate.disposition != SaaqDisposition::Candidate
+                && candidate.region_class != SaaqRegionClass::RoutingCritical
+                && candidate.region_class != SaaqRegionClass::NormalizationSensitive
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -159,7 +161,7 @@ pub fn build_saaq_readiness_report(
         model_family: inv.model_family.clone(),
         checkpoint_path: inv.checkpoint_path.clone(),
         candidates: quantization_candidates.clone(),
-        schema_version: SAAQ_READINESS_SCHEMA_VERSION,
+        schema_version: CANDIDATE_TENSOR_MANIFEST_SCHEMA_VERSION,
     };
 
     SaaqReadinessReport {
@@ -1005,6 +1007,29 @@ mod tests {
         assert_eq!(
             readiness.risky_tensors[0].structural_name,
             "block_001.slot_00.block_norm"
+        );
+    }
+
+    #[test]
+    fn saaq_readiness_keeps_already_compressed_tensors_in_deferred_bucket() {
+        let inv = inventory(Vec::new());
+        let stats = stats_report(vec![stat(
+            "block_000.slot_00.moe_scales",
+            "moe_scales",
+            Some(0),
+            0.0,
+            0.0,
+        )]);
+
+        let readiness = build_saaq_readiness_report(&inv, &stats);
+
+        assert!(
+            readiness
+                .deferred_tensors
+                .iter()
+                .any(|candidate| candidate.kind_label == "moe_scales"
+                    && candidate.region_class == SaaqRegionClass::AlreadyCompressed
+                    && candidate.disposition == SaaqDisposition::AvoidForNow)
         );
     }
 

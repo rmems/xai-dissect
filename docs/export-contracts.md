@@ -39,7 +39,7 @@ off the directory slug plus tensor locators, not off the host-local
 | `exports/<slug>/inventory.json` | Canonical tensor catalog for deciding what exists, where it lives, and how big it is before any packing or quantization step. | `schema::ModelInventory` | `schema_version = 2` | No embedded checksum in v1. Require the sibling `grok1-coverage.json` gate for complete Grok-1 handoff bundles. |
 | `exports/<slug>/experts.json` | Canonical MoE mapping for expanding expert families into resolved `gate` / `down` / `up` slices without re-inferring layout from shape alone. | `schema::ExpertAtlas` | `schema_version = 1` | No embedded checksum in v1. Must agree with the same-slug `inventory.json` locators and dimensions. |
 | `manifests/<slug>/routing-critical-tensors.json` | Compact routing guardrail list for tensors that downstream compression or packing logic must treat as routing-sensitive. | `schema::RoutingCriticalTensorManifest` | `schema_version = 1` | No embedded checksum in v1. Must agree with the same-slug inventory and coverage facts. |
-| `manifests/<slug>/grok1-coverage.json` | Fail-closed completeness and integrity proof that the bundle came from a recognized complete Grok-1 parse. | `schema::Grok1CoverageManifest` | `schema_version = 2`, `coverage_schema_version = 1`, and `baseline_profile = grok1-map-v1-clean` | Embedded `checksum` field is required. Downstream should reject bundles whose coverage validation is not `pass`. |
+| `manifests/<slug>/grok1-coverage.json` | Fail-closed completeness and integrity proof that the bundle came from a recognized complete Grok-1 parse. | `schema::Grok1CoverageManifest` | `schema_version = 2`, `coverage_schema_version = 2`, and `baseline_profile = grok1-map-v1-clean` | Embedded `checksum` field is required. Downstream should reject bundles whose coverage validation is not `pass`. |
 
 ### Bundle Rules
 
@@ -83,11 +83,11 @@ off the directory slug plus tensor locators, not off the host-local
 This handoff contract was checked against the real output tree under
 `out/grok1_run2_after_fixes_20260525T002904Z` with
 `<checkpoint_slug> = grok-1-official__ckpt-0`. The coverage manifest for that
-run recorded `schema_version = 2`, `coverage_schema_version = 1`,
-`validation = "pass"`, `expected.tensors = discovered.tensors = 770`, and
-checksum `fnv1a64:de5a1c978121c62c`. This change also standardizes the clean
-baseline label `baseline_profile = grok1-map-v1-clean` for newly emitted
-coverage manifests and downstream planning artifacts.
+run recorded `validation = "pass"`, `expected.tensors = discovered.tensors =
+770`, and checksum `fnv1a64:de5a1c978121c62c`. Newly emitted coverage manifests
+from this contract carry `coverage_schema_version = 2` and the clean baseline
+label `baseline_profile = grok1-map-v1-clean` so downstream parsers can branch
+cleanly on the versioned payload shape.
 
 ## Inventory
 

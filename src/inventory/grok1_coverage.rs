@@ -9,14 +9,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, bail};
 
 use crate::schema::{
-    Grok1CoverageCounts, Grok1CoverageManifest, Grok1UnknownSlot, ModelInventory, MoeProjection,
-    QuantizedAttentionWidth, TensorDType, TensorInfo, TensorKind, TensorRole,
+    GROK1_BASELINE_PROFILE, Grok1CoverageCounts, Grok1CoverageManifest, Grok1UnknownSlot,
+    ModelInventory, MoeProjection, QuantizedAttentionWidth, TensorDType, TensorInfo, TensorKind,
+    TensorRole,
 };
 
 use super::SCHEMA_VERSION;
 
-pub const GROK1_COVERAGE_SCHEMA_VERSION: u32 = 1;
-pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
+pub const GROK1_COVERAGE_SCHEMA_VERSION: u32 = 2;
 
 const GROK1_EXPECTED_BLOCKS: u32 = 64;
 const GROK1_EXPECTED_TENSORS: u64 = 770;

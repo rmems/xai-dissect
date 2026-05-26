@@ -8,16 +8,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
 
-use crate::inventory::validate_grok1_complete_manifest;
+use crate::inventory::{GROK1_BASELINE_PROFILE, validate_grok1_complete_manifest};
 use crate::schema::{
     ConversionManifest, ConversionManifestTensor, ExpertAtlas, Grok1CoverageManifest,
     ModelInventory, MoeProjection, QuantPlan, QuantPolicy, RoutingOrientation, RoutingReport,
-    SaaqReadinessReport, SaaqRegionClass, TensorInfo, TensorKind,
+    SaaqCandidate, SaaqReadinessReport, SaaqRegionClass, TensorInfo, TensorKind,
 };
 
 pub const CONVERSION_MANIFEST_SCHEMA_VERSION: u32 = 1;
 pub const QUANT_PLAN_SCHEMA_VERSION: u32 = 1;
-pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
 
 const GROK1_EXPECTED_EXPERTS_PER_BLOCK: u64 = 8;
 const GROK1_EXPECTED_EXPERT_FAMILIES_PER_BLOCK: u32 = 3;
@@ -49,8 +48,14 @@ pub fn build_grok1_planning_artifacts(
 }
 
 pub fn validate_grok1_clean_baseline(inv: &ModelInventory) -> Result<Grok1CoverageManifest> {
-    let mut coverage = validate_grok1_complete_manifest(inv)?;
-    coverage.baseline_profile = GROK1_BASELINE_PROFILE.to_string();
+    let coverage = validate_grok1_complete_manifest(inv)?;
+    if coverage.baseline_profile != GROK1_BASELINE_PROFILE {
+        bail!(
+            "coverage baseline_profile {} != expected {}",
+            coverage.baseline_profile,
+            GROK1_BASELINE_PROFILE
+        );
+    }
     Ok(coverage)
 }
 
@@ -143,6 +148,16 @@ fn validate_routing_report(
 }
 
 fn validate_readiness_groups(inv: &ModelInventory, readiness: &SaaqReadinessReport) -> Result<()> {
+    let inventory_keys = inv
+        .tensors
+        .iter()
+        .map(|tensor| {
+            (
+                (tensor.shard_ordinal, tensor.in_shard_index),
+                tensor_identity_name(tensor),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut seen: BTreeMap<(u32, u32), &'static str> = BTreeMap::new();
     for (label, tensors) in [
         (
@@ -173,18 +188,31 @@ fn validate_readiness_groups(inv: &ModelInventory, readiness: &SaaqReadinessRepo
         }
     }
 
-    if seen.len() != inv.tensors.len() {
-        let missing = inv
-            .tensors
-            .iter()
-            .filter(|tensor| !seen.contains_key(&(tensor.shard_ordinal, tensor.in_shard_index)))
-            .map(tensor_identity_name)
-            .collect::<Vec<_>>();
+    let missing = inventory_keys
+        .iter()
+        .filter(|(key, _)| !seen.contains_key(key))
+        .map(|(_, name)| name.clone())
+        .collect::<Vec<_>>();
+    let extra = seen
+        .iter()
+        .filter(|(key, _)| !inventory_keys.contains_key(key))
+        .map(|((shard, index), label)| format!("shard={shard} idx={index} in {label}"))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() || !extra.is_empty() {
         bail!(
-            "readiness groups cover {} tensors but inventory has {}; missing: {}",
+            "readiness groups cover {} tensors but inventory has {}; missing: {}; extra: {}",
             seen.len(),
             inv.tensors.len(),
-            missing.join(", ")
+            if missing.is_empty() {
+                "none".to_string()
+            } else {
+                missing.join(", ")
+            },
+            if extra.is_empty() {
+                "none".to_string()
+            } else {
+                extra.join(", ")
+            }
         );
     }
 
@@ -213,13 +241,13 @@ fn build_conversion_manifest(
         .tensors
         .iter()
         .map(|tensor| {
-            let group = groups
+            let membership = groups
                 .get(&(tensor.shard_ordinal, tensor.in_shard_index))
                 .copied()
-                .unwrap_or(ReadinessGroup::Deferred);
-            let region = group.region();
+                .expect("validated readiness membership missing");
+            let region = membership.region;
             let (quant_policy, protected_reason, entry_warnings) =
-                quant_policy_for_tensor(tensor, group);
+                quant_policy_for_tensor(tensor, membership.group);
             for warning in &entry_warnings {
                 warnings.insert(warning.clone());
             }
@@ -337,44 +365,47 @@ enum ReadinessGroup {
     Deferred,
 }
 
-impl ReadinessGroup {
-    fn region(self) -> SaaqRegionClass {
-        match self {
-            ReadinessGroup::QuantizationCandidate => SaaqRegionClass::PotentialCompressionTarget,
-            ReadinessGroup::RoutingCritical => SaaqRegionClass::RoutingCritical,
-            ReadinessGroup::PrecisionSensitive => SaaqRegionClass::NormalizationSensitive,
-            ReadinessGroup::Deferred => SaaqRegionClass::EmbeddingHeavy,
-        }
-    }
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct ReadinessMembership {
+    group: ReadinessGroup,
+    region: SaaqRegionClass,
 }
 
-fn readiness_group_map(readiness: &SaaqReadinessReport) -> BTreeMap<(u32, u32), ReadinessGroup> {
+fn readiness_group_map(
+    readiness: &SaaqReadinessReport,
+) -> BTreeMap<(u32, u32), ReadinessMembership> {
     let mut groups = BTreeMap::new();
     for candidate in &readiness.quantization_candidates {
-        groups.insert(
-            (candidate.shard_ordinal, candidate.in_shard_index),
+        insert_readiness_membership(
+            &mut groups,
+            candidate,
             ReadinessGroup::QuantizationCandidate,
         );
     }
     for candidate in &readiness.routing_critical_tensors {
-        groups.insert(
-            (candidate.shard_ordinal, candidate.in_shard_index),
-            ReadinessGroup::RoutingCritical,
-        );
+        insert_readiness_membership(&mut groups, candidate, ReadinessGroup::RoutingCritical);
     }
     for candidate in &readiness.precision_sensitive_tensors {
-        groups.insert(
-            (candidate.shard_ordinal, candidate.in_shard_index),
-            ReadinessGroup::PrecisionSensitive,
-        );
+        insert_readiness_membership(&mut groups, candidate, ReadinessGroup::PrecisionSensitive);
     }
     for candidate in &readiness.deferred_tensors {
-        groups.insert(
-            (candidate.shard_ordinal, candidate.in_shard_index),
-            ReadinessGroup::Deferred,
-        );
+        insert_readiness_membership(&mut groups, candidate, ReadinessGroup::Deferred);
     }
     groups
+}
+
+fn insert_readiness_membership(
+    groups: &mut BTreeMap<(u32, u32), ReadinessMembership>,
+    candidate: &SaaqCandidate,
+    group: ReadinessGroup,
+) {
+    groups.insert(
+        (candidate.shard_ordinal, candidate.in_shard_index),
+        ReadinessMembership {
+            group,
+            region: candidate.region_class,
+        },
+    );
 }
 
 fn quant_policy_for_tensor(
@@ -502,9 +533,10 @@ mod tests {
         SaaqRegionClass, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole, TensorShape,
     };
 
+    use crate::inventory::GROK1_BASELINE_PROFILE;
+
     use super::{
-        GROK1_BASELINE_PROFILE, QUANT_PLAN_SCHEMA_VERSION, ReadinessGroup,
-        build_grok1_planning_artifacts, tensor_descriptor_hash,
+        QUANT_PLAN_SCHEMA_VERSION, build_grok1_planning_artifacts, tensor_descriptor_hash,
     };
 
     #[test]
@@ -595,14 +627,52 @@ mod tests {
         let first = tensor_descriptor_hash(
             &tensor,
             crate::schema::QuantPolicy::PassthroughF32Router,
-            ReadinessGroup::RoutingCritical.region(),
+            SaaqRegionClass::RoutingCritical,
         );
         let second = tensor_descriptor_hash(
             &tensor,
             crate::schema::QuantPolicy::PassthroughF32Router,
-            ReadinessGroup::RoutingCritical.region(),
+            SaaqRegionClass::RoutingCritical,
         );
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn validate_readiness_groups_reports_extra_tensor_keys() {
+        let (inv, atlas, routing, mut readiness) = complete_inputs();
+        readiness.deferred_tensors.push(candidate(
+            9_999,
+            7,
+            None,
+            None,
+            "unassigned.shard_9999.idx_007.unknown",
+            "unknown",
+            TensorDType::F32,
+            vec![1],
+            SaaqRegionClass::Unknown,
+            SaaqDisposition::ObserveOnly,
+            0.01,
+        ));
+
+        let err = build_grok1_planning_artifacts(&inv, &atlas, &routing, &readiness).unwrap_err();
+
+        assert!(format!("{err:#}").contains("extra: shard=9999 idx=7 in deferred_tensors"));
+    }
+
+    #[test]
+    fn conversion_manifest_preserves_deferred_region_class() {
+        let (inv, atlas, routing, mut readiness) = complete_inputs();
+        readiness.deferred_tensors[0].region_class = SaaqRegionClass::Unknown;
+
+        let (conversion, _) = build_grok1_planning_artifacts(&inv, &atlas, &routing, &readiness)
+            .expect("planning artifacts");
+
+        let embedding = conversion
+            .tensors
+            .iter()
+            .find(|tensor| tensor.kind == "token_embedding")
+            .expect("token embedding entry");
+        assert_eq!(embedding.region, SaaqRegionClass::Unknown);
     }
 
     fn complete_inputs() -> (
@@ -1103,7 +1173,7 @@ mod tests {
                 candidates: quantization_candidates,
                 schema_version: 1,
             },
-            schema_version: 1,
+            schema_version: 2,
         }
     }
 
