@@ -230,6 +230,10 @@ enum Command {
         /// If set, write the conversion-ready manifest JSON to this path.
         #[arg(long)]
         conversion_manifest: Option<PathBuf>,
+        /// If set, write the conversion-ready manifest Markdown summary to
+        /// this path.
+        #[arg(long)]
+        conversion_manifest_md: Option<PathBuf>,
         #[command(flatten)]
         output_tree: OutputTreeArgs,
     },
@@ -446,6 +450,7 @@ fn main() -> Result<()> {
             json,
             md,
             conversion_manifest,
+            conversion_manifest_md,
             output_tree,
         } => run_quant_plan(
             &path,
@@ -456,6 +461,7 @@ fn main() -> Result<()> {
             json.as_deref(),
             md.as_deref(),
             conversion_manifest.as_deref(),
+            conversion_manifest_md.as_deref(),
             &output_tree,
         ),
     };
@@ -778,6 +784,7 @@ fn run_quant_plan(
     json_out: Option<&std::path::Path>,
     md_out: Option<&std::path::Path>,
     conversion_manifest_out: Option<&std::path::Path>,
+    conversion_manifest_md_out: Option<&std::path::Path>,
     output_tree: &OutputTreeArgs,
 ) -> Result<()> {
     validate_quant_plan_inventory_scope(prefix, limit)?;
@@ -803,6 +810,10 @@ fn run_quant_plan(
     if let Some(p) = conversion_manifest_out {
         report::write_conversion_manifest_json(&conversion_manifest, p)?;
         eprintln!("wrote conversion manifest -> {}", p.display());
+    }
+    if let Some(p) = conversion_manifest_md_out {
+        report::write_conversion_manifest_markdown(&conversion_manifest, p)?;
+        eprintln!("wrote conversion manifest Markdown -> {}", p.display());
     }
     if let Some(p) = json_out {
         report::write_quant_plan_json(&quant_plan, p)?;

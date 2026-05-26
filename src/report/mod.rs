@@ -15,8 +15,8 @@ use serde::Serialize;
 use crate::schema::{
     BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ConversionManifest,
     ExpertAtlas, ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
-    QuantPlan, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
-    SaaqReadinessReport, StatsProfileReport,
+    QuantPlan, QuantPolicy, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport,
+    SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
 };
 
 /// Write the full inventory as pretty-printed JSON. The JSON layout is the
@@ -1014,6 +1014,105 @@ pub fn render_quant_plan_markdown(plan: &QuantPlan) -> String {
 /// Write the quant-plan Markdown summary to `out`.
 pub fn write_quant_plan_markdown(plan: &QuantPlan, out: &Path) -> Result<()> {
     let s = render_quant_plan_markdown(plan);
+    write_text(&s, out)
+}
+
+/// Render a human-readable Markdown summary of a conversion manifest.
+pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> String {
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# xai-dissect conversion manifest");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", manifest.model_family);
+    let _ = writeln!(
+        md,
+        "- **checkpoint**: `{}`",
+        manifest.checkpoint_path.display()
+    );
+    let _ = writeln!(
+        md,
+        "- **baseline_profile**: `{}`",
+        manifest.baseline_profile
+    );
+    let _ = writeln!(md, "- **schema_version**: {}", manifest.schema_version);
+    if let Some(ref shape) = manifest.router_shape {
+        let _ = writeln!(md, "- **router_shape**: `{}`", shape.render());
+    }
+    if let Some(ref orientation) = manifest.router_orientation {
+        let _ = writeln!(md, "- **router_orientation**: `{}`", orientation.label());
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Validation");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Metric | Required | Discovered |");
+    let _ = writeln!(md, "| ------ | -------: | ---------: |");
+    let _ = writeln!(
+        md,
+        "| blocks | {} | {} |",
+        manifest.required_validation.blocks, manifest.discovered_validation.blocks
+    );
+    let _ = writeln!(
+        md,
+        "| tensors | {} | {} |",
+        manifest.required_validation.tensors, manifest.discovered_validation.tensors
+    );
+    let _ = writeln!(
+        md,
+        "| routers | {} | {} |",
+        manifest.required_validation.routers, manifest.discovered_validation.routers
+    );
+    let _ = writeln!(
+        md,
+        "| expert_families | {} | {} |",
+        manifest.required_validation.expert_families,
+        manifest.discovered_validation.expert_families
+    );
+    let _ = writeln!(
+        md,
+        "| unknown_tensors | {} | {} |",
+        manifest.required_validation.unknown_tensors,
+        manifest.discovered_validation.unknown_tensors
+    );
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Tensor summary");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Policy | Count |");
+    let _ = writeln!(md, "| ------ | ----: |");
+
+    let mut policy_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    for tensor in &manifest.tensors {
+        let policy_name = match tensor.quant_policy {
+            QuantPolicy::PassthroughF32Router => "PassthroughF32Router",
+            QuantPolicy::PassthroughF32Norm => "PassthroughF32Norm",
+            QuantPolicy::CandidateSaaqEmbedding => "CandidateSaaqEmbedding",
+            QuantPolicy::WrapExistingInt8Expert => "WrapExistingInt8Expert",
+            QuantPolicy::WrapExistingInt8Unknown => "WrapExistingInt8Unknown",
+            QuantPolicy::UnknownPassthroughOrWarn => "UnknownPassthroughOrWarn",
+        };
+        *policy_counts.entry(policy_name).or_insert(0) += 1;
+    }
+    for (policy, count) in &policy_counts {
+        let _ = writeln!(md, "| `{}` | {} |", policy, count);
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Warnings");
+    let _ = writeln!(md);
+    if manifest.warnings.is_empty() {
+        let _ = writeln!(md, "None.");
+    } else {
+        for warning in &manifest.warnings {
+            let _ = writeln!(md, "- {}", warning);
+        }
+    }
+
+    md
+}
+
+/// Write the conversion manifest Markdown summary to `out`.
+pub fn write_conversion_manifest_markdown(manifest: &ConversionManifest, out: &Path) -> Result<()> {
+    let s = render_conversion_manifest_markdown(manifest);
     write_text(&s, out)
 }
 
