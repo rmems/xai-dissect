@@ -15,8 +15,9 @@ use serde::Serialize;
 use crate::schema::{
     BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ConversionManifest,
     ExpertAtlas, ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
-    QuantPlan, QuantPolicy, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport,
-    SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
+    PilotSelectionPlan, QuantPlan, QuantPolicy, RouteMetricStatus, RoutePreservationReport,
+    RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
+    SaaqReadinessReport, StatsProfileReport,
 };
 
 /// Write the full inventory as pretty-printed JSON. The JSON layout is the
@@ -1338,5 +1339,134 @@ fn saaq_disposition_label(disposition: SaaqDisposition) -> &'static str {
         SaaqDisposition::Candidate => "candidate",
         SaaqDisposition::ObserveOnly => "observe_only",
         SaaqDisposition::AvoidForNow => "avoid_for_now",
+    }
+}
+
+pub fn write_pilot_selection_plan_json(plan: &PilotSelectionPlan, out: &Path) -> Result<()> {
+    write_pretty_json(plan, "serialize pilot selection plan to json", out)
+}
+
+pub fn write_route_preservation_report_json(
+    report_doc: &RoutePreservationReport,
+    out: &Path,
+) -> Result<()> {
+    write_pretty_json(
+        report_doc,
+        "serialize route preservation report to json",
+        out,
+    )
+}
+
+pub fn render_pilot_selection_plan_markdown(plan: &PilotSelectionPlan) -> String {
+    let mut md = String::new();
+    let _ = writeln!(md, "# xai-dissect Grok-1 pilot selection plan");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", plan.model_family);
+    let _ = writeln!(md, "- **checkpoint**: `{}`", plan.checkpoint_path.display());
+    let _ = writeln!(md, "- **baseline**: `{}`", plan.baseline);
+    let _ = writeln!(md, "- **schema_version**: {}", plan.schema_version);
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Selected blocks");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Block | Label | Rationale |");
+    let _ = writeln!(md, "| ----: | ----- | --------- |");
+    for block in &plan.selected_blocks {
+        let _ = writeln!(
+            md,
+            "| {} | `{}` | {} |",
+            block.block_index, block.label, block.rationale
+        );
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Modes");
+    let _ = writeln!(md);
+    for mode in &plan.modes {
+        let _ = writeln!(md, "- `{}`", mode.label());
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Protection rules");
+    let _ = writeln!(md);
+    for rule in &plan.protection_rules {
+        let _ = writeln!(md, "- {}", rule);
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Expected comparison artifacts");
+    let _ = writeln!(md);
+    for artifact in &plan.comparison_artifacts {
+        let _ = writeln!(md, "- `{}`", artifact);
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Notes");
+    let _ = writeln!(md);
+    for note in &plan.notes {
+        let _ = writeln!(md, "- {}", note);
+    }
+    md
+}
+
+pub fn write_pilot_selection_plan_markdown(plan: &PilotSelectionPlan, out: &Path) -> Result<()> {
+    write_text(&render_pilot_selection_plan_markdown(plan), out)
+}
+
+pub fn render_route_preservation_markdown(report_doc: &RoutePreservationReport) -> String {
+    let mut md = String::new();
+    let _ = writeln!(md, "# xai-dissect Grok-1 route-preservation report");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
+    let _ = writeln!(md, "- **baseline**: `{}`", report_doc.baseline);
+    let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+    let _ = writeln!(md);
+
+    render_route_metric_section(&mut md, "Router metrics", &report_doc.router_metrics);
+    render_route_metric_section(&mut md, "Block metrics", &report_doc.block_metrics);
+    render_route_metric_section(&mut md, "Weight metrics", &report_doc.weight_metrics);
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Notes");
+    let _ = writeln!(md);
+    for note in &report_doc.notes {
+        let _ = writeln!(md, "- {}", note);
+    }
+    md
+}
+
+pub fn write_route_preservation_markdown(
+    report_doc: &RoutePreservationReport,
+    out: &Path,
+) -> Result<()> {
+    write_text(&render_route_preservation_markdown(report_doc), out)
+}
+
+fn render_route_metric_section(md: &mut String, title: &str, items: &[RouteMetricStatus]) {
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## {title}");
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Metric | Scope | Status | Threshold | Observed | Detail |"
+    );
+    let _ = writeln!(
+        md,
+        "| ------ | ----- | ------ | --------- | -------- | ------ |"
+    );
+    for item in items {
+        let _ = writeln!(
+            md,
+            "| `{}` | {} | {} | {} | {} | {} |",
+            item.name,
+            item.scope,
+            metric_status_label(item.status),
+            item.threshold.as_deref().unwrap_or("-"),
+            item.observed.as_deref().unwrap_or("-"),
+            item.detail
+        );
+    }
+}
+
+fn metric_status_label(status: crate::schema::MetricStatus) -> &'static str {
+    match status {
+        crate::schema::MetricStatus::Pass => "pass",
+        crate::schema::MetricStatus::Fail => "fail",
+        crate::schema::MetricStatus::Unknown => "unknown",
     }
 }

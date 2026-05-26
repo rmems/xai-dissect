@@ -11,12 +11,14 @@ use xai_dissect::schema::{
     BlockSummary, CandidateTensorManifest, ConversionManifest, ConversionManifestTensor,
     ExpertAtlas, ExpertBlock, ExpertNamingCheck, ExpertNamingPattern, ExpertSlice,
     ExpertSliceTensor, ExpertTensorRef, Grok1CoverageCounts, InferredHyperparams, InventoryTotals,
-    KindCount, LayerStats, ModelInventory, MoeProjection, NormSummary, OutlierSummary, QuantPlan,
-    QuantPolicy, RankedTensorStat, RoutingBlockReport, RoutingCriticalBlock, RoutingGateMetrics,
-    RoutingOrientation, RoutingOrientationSummary, RoutingReport, RoutingTensorLocator,
-    RoutingTensorRef, SaaqCandidate, SaaqDisposition, SaaqLayerReadiness, SaaqReadinessReport,
-    SaaqRegionClass, ShardRange, StatsProfileReport, StatsSamplingConfig, TensorDType, TensorInfo,
-    TensorKind, TensorRole, TensorShape, TensorStats, VarianceSummary,
+    KindCount, LayerStats, MetricStatus, ModelInventory, MoeProjection, NormSummary,
+    OutlierSummary, PilotBlockSelection, PilotQuantizationMode, PilotSelectionPlan, QuantPlan,
+    QuantPolicy, RankedTensorStat, RouteMetricStatus, RoutePreservationReport, RoutingBlockReport,
+    RoutingCriticalBlock, RoutingGateMetrics, RoutingOrientation, RoutingOrientationSummary,
+    RoutingReport, RoutingTensorLocator, RoutingTensorRef, SaaqCandidate, SaaqDisposition,
+    SaaqLayerReadiness, SaaqReadinessReport, SaaqRegionClass, ShardRange, StatsProfileReport,
+    StatsSamplingConfig, TensorDType, TensorInfo, TensorKind, TensorRole, TensorShape, TensorStats,
+    VarianceSummary,
 };
 
 pub const SNAPSHOT_ENV: &str = "XAI_DISSECT_WRITE_SNAPSHOTS";
@@ -847,6 +849,106 @@ pub fn sample_conversion_manifest() -> ConversionManifest {
             },
         ],
         warnings: Vec::new(),
+        schema_version: 1,
+    }
+}
+
+pub fn sample_pilot_selection_plan() -> PilotSelectionPlan {
+    PilotSelectionPlan {
+        model_family: "grok-1".into(),
+        checkpoint_path: sample_checkpoint_path(),
+        baseline: "grok1-map-v1-clean".into(),
+        required_validation: sample_quant_plan().required_validation,
+        selected_blocks: vec![
+            PilotBlockSelection {
+                block_index: 0,
+                label: "block_000".into(),
+                rationale: "early baseline".into(),
+            },
+            PilotBlockSelection {
+                block_index: 60,
+                label: "block_060".into(),
+                rationale: "high readiness/routing-critical sample".into(),
+            },
+            PilotBlockSelection {
+                block_index: 63,
+                label: "block_063".into(),
+                rationale: "late-layer / high peak-to-rms router region".into(),
+            },
+        ],
+        modes: vec![
+            PilotQuantizationMode::AttentionOnly,
+            PilotQuantizationMode::ExpertOnly,
+            PilotQuantizationMode::AttentionPlusExpert,
+        ],
+        protection_rules: vec![
+            "router tensors must remain untouched in every first-pass pilot".into(),
+            "block_norm and final_norm tensors must remain untouched in every first-pass pilot".into(),
+        ],
+        comparison_artifacts: vec![
+            "pilot-selection-plan.json".into(),
+            "pilot-selection-plan.md".into(),
+            "route-preservation-report.json".into(),
+            "route-preservation-report.md".into(),
+        ],
+        notes: vec![
+            "This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime.".into(),
+        ],
+        schema_version: 1,
+    }
+}
+
+pub fn sample_route_preservation_report() -> RoutePreservationReport {
+    RoutePreservationReport {
+        model_family: "grok-1".into(),
+        checkpoint_path: sample_checkpoint_path(),
+        baseline: "grok1-map-v1-clean".into(),
+        required_validation: sample_quant_plan().required_validation,
+        summary: vec![
+            RouteMetricStatus {
+                name: "router_top1_agreement".into(),
+                scope: "router_behavior".into(),
+                status: MetricStatus::Unknown,
+                threshold: Some(">= 99.0%".into()),
+                observed: None,
+                detail: "pending downstream pilot evidence".into(),
+            },
+            RouteMetricStatus {
+                name: "block_output_cosine".into(),
+                scope: "block_behavior".into(),
+                status: MetricStatus::Unknown,
+                threshold: Some(">= 0.995".into()),
+                observed: None,
+                detail: "tracked once bounded pilot outputs exist".into(),
+            },
+        ],
+        router_metrics: vec![RouteMetricStatus {
+            name: "router_top1_agreement".into(),
+            scope: "router_behavior".into(),
+            status: MetricStatus::Unknown,
+            threshold: Some(">= 99.0%".into()),
+            observed: None,
+            detail: "pending downstream pilot evidence".into(),
+        }],
+        block_metrics: vec![RouteMetricStatus {
+            name: "block_output_cosine".into(),
+            scope: "block_behavior".into(),
+            status: MetricStatus::Unknown,
+            threshold: Some(">= 0.995".into()),
+            observed: None,
+            detail: "tracked once bounded pilot outputs exist".into(),
+        }],
+        weight_metrics: vec![RouteMetricStatus {
+            name: "weight_reconstruction_mse".into(),
+            scope: "weight_reconstruction".into(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "secondary to router-behavior preservation".into(),
+        }],
+        notes: vec![
+            "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.".into(),
+        ],
         schema_version: 1,
     }
 }

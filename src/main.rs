@@ -24,11 +24,15 @@ use xai_dissect::experts::build_expert_atlas;
 use xai_dissect::exports;
 use xai_dissect::inventory::{InventoryConfig, build_inventory};
 use xai_dissect::parser;
-use xai_dissect::planning::build_grok1_planning_artifacts;
+use xai_dissect::planning::{
+    build_grok1_pilot_selection_plan, build_grok1_planning_artifacts,
+    build_grok1_route_preservation_report,
+};
 use xai_dissect::report;
 use xai_dissect::routing::build_routing_report;
 use xai_dissect::schema::{
-    ExpertAtlas, ModelInventory, RoutingReport, SaaqReadinessReport, StatsProfileReport, TensorInfo,
+    ExpertAtlas, ModelInventory, PilotSelectionPlan, RoutePreservationReport, RoutingReport,
+    SaaqReadinessReport, StatsProfileReport, TensorInfo,
 };
 use xai_dissect::stats::{StatsConfig, build_saaq_readiness_report, build_stats_report};
 
@@ -203,6 +207,50 @@ enum Command {
         #[command(flatten)]
         output_tree: OutputTreeArgs,
     },
+    /// Emit a planning-side Grok-1 pilot selection plan.
+    PilotPlan {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// If set, write the pilot-selection plan JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the pilot-selection Markdown report to this path.
+        #[arg(long)]
+        md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
+    },
+    /// Emit a planning-side Grok-1 route-preservation gate report.
+    RoutePreservation {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// If set, write the route-preservation report JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the route-preservation Markdown report to this path.
+        #[arg(long)]
+        md: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
+    },
     /// Emit deterministic Grok-1 conversion and quant-planning artifacts.
     QuantPlan {
         /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
@@ -255,6 +303,8 @@ impl Command {
             Command::RoutingReport { .. } => "routing-report",
             Command::Stats { .. } => "stats",
             Command::SaaqReadiness { .. } => "saaq-readiness",
+            Command::PilotPlan { .. } => "pilot-plan",
+            Command::RoutePreservation { .. } => "route-preservation",
             Command::QuantPlan { .. } => "quant-plan",
         }
     }
@@ -315,6 +365,23 @@ impl Command {
                 prefix: Some(prefix.clone()),
                 family: Some(family.clone()),
                 sample_values: Some(*sample_values),
+            },
+            Command::PilotPlan {
+                limit,
+                prefix,
+                family,
+                ..
+            }
+            | Command::RoutePreservation {
+                limit,
+                prefix,
+                family,
+                ..
+            } => CommandFields {
+                limit: *limit,
+                prefix: Some(prefix.clone()),
+                family: Some(family.clone()),
+                sample_values: None,
             },
         }
     }
@@ -439,6 +506,40 @@ fn main() -> Result<()> {
             json.as_deref(),
             md.as_deref(),
             manifest.as_deref(),
+            &output_tree,
+        ),
+        Command::PilotPlan {
+            path,
+            prefix,
+            limit,
+            family,
+            json,
+            md,
+            output_tree,
+        } => run_pilot_plan(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            json.as_deref(),
+            md.as_deref(),
+            &output_tree,
+        ),
+        Command::RoutePreservation {
+            path,
+            prefix,
+            limit,
+            family,
+            json,
+            md,
+            output_tree,
+        } => run_route_preservation(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            json.as_deref(),
+            md.as_deref(),
             &output_tree,
         ),
         Command::QuantPlan {
@@ -772,6 +873,101 @@ fn run_saaq_readiness(
     Ok(())
 }
 
+// --- `pilot-plan` ---------------------------------------------------------
+
+fn run_pilot_plan(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
+) -> Result<()> {
+    validate_quant_plan_inventory_scope(prefix, limit)?;
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let plan = build_grok1_pilot_selection_plan(&inv)?;
+    print_pilot_plan_console_summary(&plan);
+    if let Some(p) = json_out {
+        report::write_pilot_selection_plan_json(&plan, p)?;
+        eprintln!("wrote JSON pilot selection plan -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_pilot_selection_plan_markdown(&plan, p)?;
+        eprintln!("wrote Markdown pilot selection plan -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_pilot_selection_plan_markdown(&plan));
+    }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle =
+            exports::write_pilot_plan_bundle(&plan, root, output_tree.checkpoint_slug.as_deref())?;
+        eprintln!(
+            "wrote pilot-plan bundle -> {}/{{reports,manifests}}/{}/...",
+            root.display(),
+            bundle.checkpoint_slug
+        );
+    }
+    Ok(())
+}
+
+// --- `route-preservation` --------------------------------------------------
+
+fn run_route_preservation(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
+) -> Result<()> {
+    validate_quant_plan_inventory_scope(prefix, limit)?;
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let report_doc = build_grok1_route_preservation_report(&inv)?;
+    print_route_preservation_console_summary(&report_doc);
+    if let Some(p) = json_out {
+        report::write_route_preservation_report_json(&report_doc, p)?;
+        eprintln!("wrote JSON route-preservation report -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_route_preservation_markdown(&report_doc, p)?;
+        eprintln!(
+            "wrote Markdown route-preservation report -> {}",
+            p.display()
+        );
+    } else {
+        println!();
+        println!(
+            "{}",
+            report::render_route_preservation_markdown(&report_doc)
+        );
+    }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle = exports::write_route_preservation_bundle(
+            &report_doc,
+            root,
+            output_tree.checkpoint_slug.as_deref(),
+        )?;
+        eprintln!(
+            "wrote route-preservation bundle -> {}/{{reports,manifests}}/{}/...",
+            root.display(),
+            bundle.checkpoint_slug
+        );
+    }
+    Ok(())
+}
+
 // --- `quant-plan` ---------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
@@ -876,6 +1072,26 @@ fn print_quant_plan_console_summary(
             conversion_manifest.warnings.len()
         );
     }
+}
+
+fn print_pilot_plan_console_summary(plan: &PilotSelectionPlan) {
+    eprintln!(
+        "checkpoint: {}  baseline: {}  selected_blocks: {}  modes: {}",
+        plan.checkpoint_path.display(),
+        plan.baseline,
+        plan.selected_blocks.len(),
+        plan.modes.len(),
+    );
+}
+
+fn print_route_preservation_console_summary(report_doc: &RoutePreservationReport) {
+    eprintln!(
+        "model_family: {}  baseline: {}  router_metrics: {}  block_metrics: {}",
+        report_doc.model_family,
+        report_doc.baseline,
+        report_doc.router_metrics.len(),
+        report_doc.block_metrics.len(),
+    );
 }
 
 fn print_output_bundle(label: &str, root: &std::path::Path, bundle: &exports::OutputBundle) {

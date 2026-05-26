@@ -8,6 +8,8 @@ All notable changes to `xai-dissect` are documented here.
 
 - Bump inventory schema to version 2 after adding serialized
   `quantized_attention_projection` tensor kinds.
+- Add Grok-1 pilot-selection planning artifacts and route-preservation gate report schemas/documentation.
+- Add explicit `docs/GO_NO_GO.md` checklist for broader/full Grok-1 quantization decisions.
 
 ## 0.1.0 - 2026-04-23
 

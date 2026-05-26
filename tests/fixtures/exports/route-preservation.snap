@@ -1,0 +1,95 @@
+=== manifests/grok-1-official__ckpt-0/route-preservation-report.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "baseline": "grok1-map-v1-clean",
+  "required_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "summary": [
+    {
+      "name": "router_top1_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.0%",
+      "observed": null,
+      "detail": "pending downstream pilot evidence"
+    },
+    {
+      "name": "block_output_cosine",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": ">= 0.995",
+      "observed": null,
+      "detail": "tracked once bounded pilot outputs exist"
+    }
+  ],
+  "router_metrics": [
+    {
+      "name": "router_top1_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.0%",
+      "observed": null,
+      "detail": "pending downstream pilot evidence"
+    }
+  ],
+  "block_metrics": [
+    {
+      "name": "block_output_cosine",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": ">= 0.995",
+      "observed": null,
+      "detail": "tracked once bounded pilot outputs exist"
+    }
+  ],
+  "weight_metrics": [
+    {
+      "name": "weight_reconstruction_mse",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "secondary to router-behavior preservation"
+    }
+  ],
+  "notes": [
+    "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence."
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/route-preservation-report.md ===
+# xai-dissect Grok-1 route-preservation report
+
+- **model_family**: `grok-1`
+- **baseline**: `grok1-map-v1-clean`
+- **schema_version**: 1
+
+
+## Router metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `router_top1_agreement` | router_behavior | unknown | >= 99.0% | - | pending downstream pilot evidence |
+
+## Block metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `block_output_cosine` | block_behavior | unknown | >= 0.995 | - | tracked once bounded pilot outputs exist |
+
+## Weight metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `weight_reconstruction_mse` | weight_reconstruction | unknown | - | - | secondary to router-behavior preservation |
+
+## Notes
+
+- This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.
