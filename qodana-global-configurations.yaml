@@ -1,0 +1,4 @@
+qodana:
+  version: '2024.1'
+  profile:
+    name: qodana.starter
