@@ -1017,6 +1017,102 @@ pub fn write_quant_plan_markdown(plan: &QuantPlan, out: &Path) -> Result<()> {
     write_text(&s, out)
 }
 
+/// Render a human-readable Markdown summary of a conversion manifest.
+pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> String {
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# xai-dissect conversion manifest");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", manifest.model_family);
+    let _ = writeln!(
+        md,
+        "- **checkpoint**: `{}`",
+        manifest.checkpoint_path.display()
+    );
+    let _ = writeln!(md, "- **baseline_profile**: `{}`", manifest.baseline_profile);
+    let _ = writeln!(md, "- **schema_version**: {}", manifest.schema_version);
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Validation");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Metric | Required | Discovered |");
+    let _ = writeln!(md, "| ------ | -------: | ---------: |");
+    let _ = writeln!(
+        md,
+        "| blocks | {} | {} |",
+        manifest.required_validation.blocks,
+        manifest.discovered_validation.blocks
+    );
+    let _ = writeln!(
+        md,
+        "| tensors | {} | {} |",
+        manifest.required_validation.tensors,
+        manifest.discovered_validation.tensors
+    );
+    let _ = writeln!(
+        md,
+        "| routers | {} | {} |",
+        manifest.required_validation.routers,
+        manifest.discovered_validation.routers
+    );
+    let _ = writeln!(
+        md,
+        "| expert_families | {} | {} |",
+        manifest.required_validation.expert_families,
+        manifest.discovered_validation.expert_families
+    );
+    let _ = writeln!(
+        md,
+        "| unknown_tensors | {} | {} |",
+        manifest.required_validation.unknown_tensors,
+        manifest.discovered_validation.unknown_tensors
+    );
+
+    if let Some(ref shape) = manifest.router_shape {
+        let _ = writeln!(md, "| router_shape | `{}` | |", shape.render());
+    }
+    if let Some(ref orientation) = manifest.router_orientation {
+        let _ = writeln!(md, "| router_orientation | `{}` | |", orientation.label());
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Tensor summary");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Policy | Count |");
+    let _ = writeln!(md, "| ------ | ----: |");
+
+    let mut policy_counts: BTreeMap<String, usize> = BTreeMap::new();
+    for tensor in &manifest.tensors {
+        *policy_counts
+            .entry(format!("{:?}", tensor.quant_policy))
+            .or_insert(0) += 1;
+    }
+    for (policy, count) in &policy_counts {
+        let _ = writeln!(md, "| `{}` | {} |", policy, count);
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Warnings");
+    let _ = writeln!(md);
+    if manifest.warnings.is_empty() {
+        let _ = writeln!(md, "None.");
+    } else {
+        for warning in &manifest.warnings {
+            let _ = writeln!(md, "- {}", warning);
+        }
+    }
+
+    md
+}
+
+/// Write the conversion manifest Markdown summary to `out`.
+pub fn write_conversion_manifest_markdown(
+    manifest: &ConversionManifest,
+    out: &Path,
+) -> Result<()> {
+    let s = render_conversion_manifest_markdown(manifest);
+    write_text(&s, out)
+}
+
 // --- Helpers ---------------------------------------------------------------
 
 fn write_pretty_json<T: Serialize>(value: &T, context: &str, out: &Path) -> Result<()> {

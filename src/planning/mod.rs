@@ -675,6 +675,72 @@ mod tests {
         assert_eq!(embedding.region, SaaqRegionClass::Unknown);
     }
 
+    #[test]
+    fn conversion_manifest_token_embedding_is_only_saaq_candidate() {
+        let (inv, atlas, routing, readiness) = complete_inputs();
+        let (conversion, _) = build_grok1_planning_artifacts(&inv, &atlas, &routing, &readiness)
+            .expect("planning artifacts");
+
+        let saaq_candidates: Vec<_> = conversion
+            .tensors
+            .iter()
+            .filter(|t| {
+                t.quant_policy == crate::schema::QuantPolicy::CandidateSaaqEmbedding
+            })
+            .collect();
+
+        assert_eq!(
+            saaq_candidates.len(),
+            1,
+            "token_embedding should be the only CandidateSaaqEmbedding"
+        );
+        assert_eq!(saaq_candidates[0].kind, "token_embedding");
+    }
+
+    #[test]
+    fn conversion_manifest_warns_on_unresolved_projections() {
+        let unresolved = tensor(
+            999,
+            0,
+            Some(0),
+            Some(0),
+            TensorKind::MoeExpertProjection {
+                projection: MoeProjection::Unresolved,
+            },
+            TensorRole::QuantWeight,
+            TensorDType::I8,
+            vec![8, 6_144, 32_768],
+        );
+        let (_policy, _protected, warnings) =
+            super::quant_policy_for_tensor(&unresolved, super::ReadinessGroup::QuantizationCandidate);
+        assert!(
+            warnings.iter().any(|w| w.contains("unresolved")),
+            "expected warning about unresolved projection"
+        );
+    }
+
+    #[test]
+    fn conversion_manifest_warns_on_unknown_tensors() {
+        let unknown = tensor(
+            999,
+            0,
+            None,
+            None,
+            TensorKind::Unknown {
+                reason: "dense slot does not match any known signature".into(),
+            },
+            TensorRole::Tensor,
+            TensorDType::F32,
+            vec![1],
+        );
+        let (_policy, _protected, warnings) =
+            super::quant_policy_for_tensor(&unknown, super::ReadinessGroup::Deferred);
+        assert!(
+            warnings.iter().any(|w| w.contains("unknown")),
+            "expected warning about unknown tensor classification"
+        );
+    }
+
     fn complete_inputs() -> (
         ModelInventory,
         ExpertAtlas,
