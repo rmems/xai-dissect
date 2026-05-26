@@ -112,6 +112,7 @@ pub fn build_saaq_readiness_report(
                     | SaaqRegionClass::NormalizationSensitive
                     | SaaqRegionClass::AlreadyCompressed
                     | SaaqRegionClass::EmbeddingHeavy
+                    | SaaqRegionClass::Unknown
             )
         }) {
             scored[fallback_index].disposition = SaaqDisposition::Candidate;
@@ -953,13 +954,38 @@ mod tests {
     }
 
     #[test]
-    fn saaq_fallback_promotion_updates_layer_readiness() {
+    fn saaq_unknown_not_promoted_by_fallback() {
         let inv = inventory(Vec::new());
         let stats = stats_report(vec![stat(
             "block_007.slot_03.custom",
             "custom",
             Some(7),
             0.0,
+            0.0,
+        )]);
+
+        let readiness = build_saaq_readiness_report(&inv, &stats);
+
+        assert_eq!(readiness.candidate_targets.len(), 0);
+        assert_eq!(readiness.quantization_candidates.len(), 0);
+        assert_eq!(
+            readiness
+                .layer_readiness
+                .iter()
+                .find(|layer| layer.block_index == Some(7))
+                .map(|layer| layer.candidate_target_count),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn saaq_fallback_promotion_updates_layer_readiness() {
+        let inv = inventory_with_total(Vec::new(), 1000);
+        let stats = stats_report(vec![stat(
+            "block_007.slot_03.attn_proj_f32",
+            "attn_proj_f32",
+            Some(7),
+            0.05,
             0.0,
         )]);
 
@@ -1034,6 +1060,10 @@ mod tests {
     }
 
     fn inventory(tensors: Vec<TensorInfo>) -> ModelInventory {
+        inventory_with_total(tensors, 32)
+    }
+
+    fn inventory_with_total(tensors: Vec<TensorInfo>, total_nbytes: u64) -> ModelInventory {
         ModelInventory {
             model_family: "grok-1".to_string(),
             checkpoint_path: PathBuf::from("/tmp/grok-1"),
@@ -1064,7 +1094,7 @@ mod tests {
                 quant_tensors: 0,
                 f32_tensors: 2,
                 i8_tensors: 0,
-                total_nbytes: 32,
+                total_nbytes,
                 total_elements: 8,
             },
             schema_version: 1,

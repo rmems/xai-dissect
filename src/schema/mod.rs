@@ -638,7 +638,7 @@ pub struct SaaqReadinessReport {
     /// Backward-compatible alias for the actionable quantization-candidate set.
     #[serde(default)]
     pub candidate_targets: Vec<SaaqCandidate>,
-    #[serde(default)]
+    #[serde(default, alias = "candidate_targets")]
     pub quantization_candidates: Vec<SaaqCandidate>,
     #[serde(default)]
     pub routing_critical_tensors: Vec<SaaqCandidate>,
