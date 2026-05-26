@@ -12,6 +12,7 @@ pub mod experts;
 pub mod exports;
 pub mod inventory;
 pub mod parser;
+pub mod planning;
 pub mod report;
 pub mod routing;
 pub mod schema;

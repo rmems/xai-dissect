@@ -13,9 +13,9 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 
 use crate::schema::{
-    BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ExpertAtlas,
-    ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
-    RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
+    BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ConversionManifest,
+    ExpertAtlas, ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
+    QuantPlan, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
     SaaqReadinessReport, StatsProfileReport,
 };
 
@@ -49,6 +49,16 @@ pub fn write_saaq_readiness_json(report_doc: &SaaqReadinessReport, out: &Path) -
 /// Write the candidate manifest as pretty-printed JSON.
 pub fn write_candidate_manifest_json(manifest: &CandidateTensorManifest, out: &Path) -> Result<()> {
     write_pretty_json(manifest, "serialize candidate manifest to json", out)
+}
+
+/// Write the conversion-ready manifest as pretty-printed JSON.
+pub fn write_conversion_manifest_json(manifest: &ConversionManifest, out: &Path) -> Result<()> {
+    write_pretty_json(manifest, "serialize conversion manifest to json", out)
+}
+
+/// Write the deterministic quant plan as pretty-printed JSON.
+pub fn write_quant_plan_json(plan: &QuantPlan, out: &Path) -> Result<()> {
+    write_pretty_json(plan, "serialize quant plan to json", out)
 }
 
 /// Write the inventory snapshot manifest as pretty-printed JSON.
@@ -756,8 +766,18 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
     let _ = writeln!(md, "- **shards**: {}", report_doc.shard_count);
     let _ = writeln!(
         md,
-        "- **candidate_targets**: {}",
-        report_doc.candidate_targets.len()
+        "- **quantization_candidates**: {}",
+        report_doc.quantization_candidates.len()
+    );
+    let _ = writeln!(
+        md,
+        "- **precision_sensitive_tensors**: {}",
+        report_doc.precision_sensitive_tensors.len()
+    );
+    let _ = writeln!(
+        md,
+        "- **deferred_tensors**: {}",
+        report_doc.deferred_tensors.len()
     );
     let _ = writeln!(
         md,
@@ -767,7 +787,7 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
     let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
 
     let _ = writeln!(md);
-    let _ = writeln!(md, "## Candidate target tensors");
+    let _ = writeln!(md, "## Quantization candidates");
     let _ = writeln!(md);
     let _ = writeln!(
         md,
@@ -777,7 +797,7 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
         md,
         "| ---: | ------ | ---- | ------ | --------: | ----------: | ---: | ----------- |"
     );
-    for candidate in &report_doc.candidate_targets {
+    for candidate in &report_doc.quantization_candidates {
         let _ = writeln!(
             md,
             "| {} | `{}` | {} | {} | {:.3} | {:.3} | {:.3} | {} |",
@@ -807,6 +827,45 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
                 candidate.structural_name,
                 candidate.readiness_score,
                 candidate.risk_score,
+                candidate.reasons.join("<br>")
+            );
+        }
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Precision-sensitive tensors");
+    let _ = writeln!(md);
+    if report_doc.precision_sensitive_tensors.is_empty() {
+        let _ = writeln!(md, "None detected.");
+    } else {
+        let _ = writeln!(md, "| Tensor | Risk | Reasons |");
+        let _ = writeln!(md, "| ------ | ---: | ------- |");
+        for candidate in &report_doc.precision_sensitive_tensors {
+            let _ = writeln!(
+                md,
+                "| `{}` | {:.3} | {} |",
+                candidate.structural_name,
+                candidate.risk_score,
+                candidate.reasons.join("<br>")
+            );
+        }
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Deferred tensors");
+    let _ = writeln!(md);
+    if report_doc.deferred_tensors.is_empty() {
+        let _ = writeln!(md, "None detected.");
+    } else {
+        let _ = writeln!(md, "| Tensor | Kind | Disposition | Reasons |");
+        let _ = writeln!(md, "| ------ | ---- | ----------- | ------- |");
+        for candidate in &report_doc.deferred_tensors {
+            let _ = writeln!(
+                md,
+                "| `{}` | {} | {} | {} |",
+                candidate.structural_name,
+                candidate.kind_label,
+                saaq_disposition_label(candidate.disposition),
                 candidate.reasons.join("<br>")
             );
         }
@@ -873,6 +932,88 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
 /// Write the SAAQ-readiness Markdown summary to `out`.
 pub fn write_saaq_readiness_markdown(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
     let s = render_saaq_readiness_markdown(report_doc);
+    write_text(&s, out)
+}
+
+/// Render a Markdown summary for the deterministic Grok-1 quant plan.
+pub fn render_quant_plan_markdown(plan: &QuantPlan) -> String {
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# xai-dissect quant plan");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "- **model_family**: `{}`", plan.model_family);
+    let _ = writeln!(md, "- **checkpoint**: `{}`", plan.checkpoint_path.display());
+    let _ = writeln!(md, "- **baseline**: `{}`", plan.baseline);
+    let _ = writeln!(md, "- **schema_version**: {}", plan.schema_version);
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Required validation");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Metric | Required | Discovered |");
+    let _ = writeln!(md, "| ------ | -------: | ---------: |");
+    let _ = writeln!(
+        md,
+        "| blocks | {} | {} |",
+        plan.required_validation.blocks, plan.discovered_validation.blocks
+    );
+    let _ = writeln!(
+        md,
+        "| tensors | {} | {} |",
+        plan.required_validation.tensors, plan.discovered_validation.tensors
+    );
+    let _ = writeln!(
+        md,
+        "| routers | {} | {} |",
+        plan.required_validation.routers, plan.discovered_validation.routers
+    );
+    let _ = writeln!(
+        md,
+        "| expert_families | {} | {} |",
+        plan.required_validation.expert_families, plan.discovered_validation.expert_families
+    );
+    let _ = writeln!(
+        md,
+        "| unknown_tensors | {} | {} |",
+        plan.required_validation.unknown_tensors, plan.discovered_validation.unknown_tensors
+    );
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Keep fp32");
+    let _ = writeln!(md);
+    for kind in &plan.keep_fp32 {
+        let _ = writeln!(md, "- `{kind}`");
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Pilot quantize");
+    let _ = writeln!(md);
+    for kind in &plan.pilot_quantize {
+        let _ = writeln!(md, "- `{kind}`");
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Defer");
+    let _ = writeln!(md);
+    for kind in &plan.defer {
+        let _ = writeln!(md, "- `{kind}`");
+    }
+
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Notes");
+    let _ = writeln!(md);
+    if plan.notes.is_empty() {
+        let _ = writeln!(md, "None.");
+    } else {
+        for note in &plan.notes {
+            let _ = writeln!(md, "- {}", note);
+        }
+    }
+
+    md
+}
+
+/// Write the quant-plan Markdown summary to `out`.
+pub fn write_quant_plan_markdown(plan: &QuantPlan, out: &Path) -> Result<()> {
+    let s = render_quant_plan_markdown(plan);
     write_text(&s, out)
 }
 

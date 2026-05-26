@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
+
 /// Numpy-style dtype of a tensor as it lives on disk. The set is intentionally
 /// narrow: Grok-1 shards only contain `float32` and `int8`. New dtypes are
 /// added only when a supported checkpoint actually requires them.
@@ -633,10 +635,23 @@ pub struct SaaqReadinessReport {
     pub checkpoint_path: PathBuf,
     pub shard_count: u32,
     pub inferred: InferredHyperparams,
+    /// Backward-compatible alias for the actionable quantization-candidate set.
+    /// Skips deserialization so the legacy key can be aliased into quantization_candidates.
+    #[serde(default, skip_deserializing)]
     pub candidate_targets: Vec<SaaqCandidate>,
+    #[serde(default, alias = "candidate_targets")]
+    pub quantization_candidates: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub routing_critical_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    pub precision_sensitive_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    pub deferred_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub risky_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
     pub layer_readiness: Vec<SaaqLayerReadiness>,
+    #[serde(default)]
     pub notes: Vec<String>,
     pub manifest: CandidateTensorManifest,
     pub schema_version: u32,
@@ -680,6 +695,8 @@ pub struct CheckpointInventoryBlockSnapshot {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Grok1CoverageManifest {
     pub model_family: String,
+    #[serde(default = "default_grok1_baseline_profile")]
+    pub baseline_profile: String,
     pub schema_version: u32,
     pub coverage_schema_version: u32,
     pub validation: String,
@@ -707,6 +724,10 @@ pub struct Grok1UnknownSlot {
     pub reason: String,
 }
 
+fn default_grok1_baseline_profile() -> String {
+    GROK1_BASELINE_PROFILE.to_string()
+}
+
 /// Machine-readable routing-critical tensor list for downstream
 /// compression / orchestration tooling.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -729,6 +750,73 @@ pub struct RoutingCriticalTensor {
     pub linked_expert_count: Option<u64>,
     pub total_nbytes: u64,
     pub criticality_reason: Option<String>,
+}
+
+/// Conversion-ready tensor-by-tensor handoff manifest for downstream
+/// packing or quantization tooling.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ConversionManifest {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub baseline_profile: String,
+    pub required_validation: Grok1CoverageCounts,
+    pub discovered_validation: Grok1CoverageCounts,
+    pub relevant_block_count: u32,
+    pub expected_experts_per_block: Option<u64>,
+    pub expert_tensor_families_per_block: Option<u32>,
+    pub router_orientation: Option<RoutingOrientation>,
+    pub router_shape: Option<TensorShape>,
+    pub tensors: Vec<ConversionManifestTensor>,
+    pub warnings: Vec<String>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ConversionManifestTensor {
+    pub tensor_name: String,
+    pub structural_name: String,
+    pub model_family: String,
+    pub block: Option<u32>,
+    pub slot: Option<u32>,
+    pub kind: String,
+    pub region: SaaqRegionClass,
+    pub dtype: TensorDType,
+    pub shape: TensorShape,
+    pub numel: u64,
+    pub byte_len: u64,
+    pub shard_index: u32,
+    pub source_shard_path: PathBuf,
+    pub source_in_shard_index: u32,
+    pub quant_policy: QuantPolicy,
+    pub protected_reason: Option<String>,
+    pub deterministic_hash: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantPolicy {
+    PassthroughF32Router,
+    PassthroughF32Norm,
+    CandidateSaaqEmbedding,
+    WrapExistingInt8Expert,
+    WrapExistingInt8Unknown,
+    UnknownPassthroughOrWarn,
+}
+
+/// Deterministic family-level quantization plan for downstream pilot work.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuantPlan {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub baseline: String,
+    pub required_validation: Grok1CoverageCounts,
+    pub discovered_validation: Grok1CoverageCounts,
+    pub keep_fp32: Vec<String>,
+    pub pilot_quantize: Vec<String>,
+    pub defer: Vec<String>,
+    pub notes: Vec<String>,
+    pub schema_version: u32,
 }
 
 /// Small machine-readable summary of the main findings from a single

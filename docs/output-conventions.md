@@ -39,6 +39,7 @@ pipeline needs a stable custom name.
 - `exports/<slug>/inventory.json`
 - `exports/<slug>/inventory-findings.json`
 - `manifests/<slug>/checkpoint-inventory-snapshot.json`
+- `manifests/<slug>/grok1-coverage.json` for complete Grok-1 inventories
 
 ### `experts`
 
@@ -66,6 +67,12 @@ pipeline needs a stable custom name.
 - `exports/<slug>/saaq-readiness-findings.json`
 - `manifests/<slug>/candidate-saaq-targets.json`
 
+### `quant-plan`
+
+- `reports/<slug>/quant-plan.md`
+- `manifests/<slug>/conversion-manifest.json`
+- `manifests/<slug>/quant-plan.json`
+
 ## Summary and manifest intent
 
 - `reports/`: human-readable Markdown meant for inspection and PR review
@@ -75,6 +82,24 @@ pipeline needs a stable custom name.
 
 The output tree is additive. Existing explicit file flags remain supported
 and are not replaced by the unified tree.
+
+## Contract Profiles
+
+### `grok-ozempic` handoff v1
+
+- Required machine-ingest files are:
+  - `exports/<slug>/inventory.json`
+  - `exports/<slug>/experts.json`
+  - `manifests/<slug>/routing-critical-tensors.json`
+  - `manifests/<slug>/grok1-coverage.json`
+- These files must be emitted for the same `<checkpoint_slug>`.
+- `reports/` is never a machine-ingest surface for this profile.
+- `checkpoint_path` fields inside the JSON documents remain informative only;
+  downstream bundle identity is the parent `<checkpoint_slug>` plus tensor
+  locators inside the documents.
+- `stats`, `saaq-readiness`, `candidate-saaq-targets`, `conversion-manifest`, and
+  `quant-plan` remain optional planning/analysis outputs and are not part of this
+  minimal ingest profile.
 
 See `docs/export-contracts.md` for the stable schema types behind each
 artifact.

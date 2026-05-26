@@ -12,9 +12,10 @@ use anyhow::{Context, Result, bail};
 use crate::inventory;
 use crate::report;
 use crate::schema::{
-    CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ExpertAtlas, FindingsSeverity,
-    FindingsSummary, FindingsSummaryItem, ModelInventory, RoutingCriticalTensor,
-    RoutingCriticalTensorManifest, RoutingReport, SaaqReadinessReport, StatsProfileReport,
+    CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ConversionManifest, ExpertAtlas,
+    FindingsSeverity, FindingsSummary, FindingsSummaryItem, ModelInventory, QuantPlan,
+    RoutingCriticalTensor, RoutingCriticalTensorManifest, RoutingReport, SaaqReadinessReport,
+    StatsProfileReport,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -259,6 +260,33 @@ pub fn write_saaq_bundle(
     let manifest_path = layout.manifests_dir.join("candidate-saaq-targets.json");
     report::write_candidate_manifest_json(&report_doc.manifest, &manifest_path)?;
     bundle.written_paths.push(manifest_path);
+
+    Ok(bundle)
+}
+
+pub fn write_quant_plan_bundle(
+    conversion_manifest: &ConversionManifest,
+    quant_plan: &QuantPlan,
+    root: &Path,
+    slug_override: Option<&str>,
+) -> Result<OutputBundle> {
+    let layout = prepare_output_layout(root, &quant_plan.checkpoint_path, slug_override)?;
+    let mut bundle = OutputBundle {
+        checkpoint_slug: layout.checkpoint_slug.clone(),
+        written_paths: Vec::new(),
+    };
+
+    let conversion_path = layout.manifests_dir.join("conversion-manifest.json");
+    report::write_conversion_manifest_json(conversion_manifest, &conversion_path)?;
+    bundle.written_paths.push(conversion_path);
+
+    let plan_path = layout.manifests_dir.join("quant-plan.json");
+    report::write_quant_plan_json(quant_plan, &plan_path)?;
+    bundle.written_paths.push(plan_path);
+
+    let md_path = layout.reports_dir.join("quant-plan.md");
+    report::write_quant_plan_markdown(quant_plan, &md_path)?;
+    bundle.written_paths.push(md_path);
 
     Ok(bundle)
 }

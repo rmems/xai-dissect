@@ -24,6 +24,7 @@ use xai_dissect::experts::build_expert_atlas;
 use xai_dissect::exports;
 use xai_dissect::inventory::{InventoryConfig, build_inventory};
 use xai_dissect::parser;
+use xai_dissect::planning::build_grok1_planning_artifacts;
 use xai_dissect::report;
 use xai_dissect::routing::build_routing_report;
 use xai_dissect::schema::{
@@ -202,6 +203,36 @@ enum Command {
         #[command(flatten)]
         output_tree: OutputTreeArgs,
     },
+    /// Emit deterministic Grok-1 conversion and quant-planning artifacts.
+    QuantPlan {
+        /// Checkpoint directory (e.g. `/path/to/grok-1/ckpt-0`).
+        path: PathBuf,
+        /// Filename prefix filter.
+        #[arg(long, default_value = "tensor")]
+        prefix: String,
+        /// Only process the first N shards (sorted by filename).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Model family tag written into the export header. Only `grok-1`
+        /// is officially supported today.
+        #[arg(long, default_value = "grok-1")]
+        family: String,
+        /// Maximum sampled values per tensor when computing readiness.
+        #[arg(long, default_value_t = 65_536)]
+        sample_values: usize,
+        /// If set, write the deterministic quant-plan JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// If set, write the quant-plan Markdown summary to this path. If
+        /// unset, the Markdown report is printed to stdout.
+        #[arg(long)]
+        md: Option<PathBuf>,
+        /// If set, write the conversion-ready manifest JSON to this path.
+        #[arg(long)]
+        conversion_manifest: Option<PathBuf>,
+        #[command(flatten)]
+        output_tree: OutputTreeArgs,
+    },
 }
 
 struct CommandFields {
@@ -220,6 +251,7 @@ impl Command {
             Command::RoutingReport { .. } => "routing-report",
             Command::Stats { .. } => "stats",
             Command::SaaqReadiness { .. } => "saaq-readiness",
+            Command::QuantPlan { .. } => "quant-plan",
         }
     }
 
@@ -262,6 +294,13 @@ impl Command {
                 ..
             }
             | Command::SaaqReadiness {
+                limit,
+                prefix,
+                family,
+                sample_values,
+                ..
+            }
+            | Command::QuantPlan {
                 limit,
                 prefix,
                 family,
@@ -396,6 +435,27 @@ fn main() -> Result<()> {
             json.as_deref(),
             md.as_deref(),
             manifest.as_deref(),
+            &output_tree,
+        ),
+        Command::QuantPlan {
+            path,
+            prefix,
+            limit,
+            family,
+            sample_values,
+            json,
+            md,
+            conversion_manifest,
+            output_tree,
+        } => run_quant_plan(
+            &path,
+            &prefix,
+            limit,
+            &family,
+            sample_values,
+            json.as_deref(),
+            md.as_deref(),
+            conversion_manifest.as_deref(),
             &output_tree,
         ),
     };
@@ -706,12 +766,130 @@ fn run_saaq_readiness(
     Ok(())
 }
 
+// --- `quant-plan` ---------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+fn run_quant_plan(
+    path: &std::path::Path,
+    prefix: &str,
+    limit: Option<usize>,
+    family: &str,
+    sample_values: usize,
+    json_out: Option<&std::path::Path>,
+    md_out: Option<&std::path::Path>,
+    conversion_manifest_out: Option<&std::path::Path>,
+    output_tree: &OutputTreeArgs,
+) -> Result<()> {
+    validate_quant_plan_inventory_scope(prefix, limit)?;
+    let cfg = InventoryConfig {
+        prefix: prefix.to_string(),
+        limit,
+        model_family: family.to_string(),
+    };
+    let inv = build_inventory(path, &cfg)?;
+    let atlas = build_expert_atlas(&inv);
+    let routing = build_routing_report(&inv);
+    let stats_cfg = StatsConfig {
+        max_sample_values: sample_values,
+        ..Default::default()
+    };
+    let stats = build_stats_report(&inv, &stats_cfg)?;
+    let readiness = build_saaq_readiness_report(&inv, &stats);
+    let (conversion_manifest, quant_plan) =
+        build_grok1_planning_artifacts(&inv, &atlas, &routing, &readiness)?;
+
+    print_quant_plan_console_summary(&quant_plan, &conversion_manifest);
+
+    if let Some(p) = conversion_manifest_out {
+        report::write_conversion_manifest_json(&conversion_manifest, p)?;
+        eprintln!("wrote conversion manifest -> {}", p.display());
+    }
+    if let Some(p) = json_out {
+        report::write_quant_plan_json(&quant_plan, p)?;
+        eprintln!("wrote JSON quant plan -> {}", p.display());
+    }
+    if let Some(p) = md_out {
+        report::write_quant_plan_markdown(&quant_plan, p)?;
+        eprintln!("wrote Markdown quant plan -> {}", p.display());
+    } else {
+        println!();
+        println!("{}", report::render_quant_plan_markdown(&quant_plan));
+    }
+    if let Some(root) = output_tree.output_root.as_deref() {
+        let bundle = exports::write_quant_plan_bundle(
+            &conversion_manifest,
+            &quant_plan,
+            root,
+            output_tree.checkpoint_slug.as_deref(),
+        )?;
+        print_output_bundle("quant-plan bundle", root, &bundle);
+    }
+
+    Ok(())
+}
+
+fn validate_quant_plan_inventory_scope(prefix: &str, limit: Option<usize>) -> Result<()> {
+    if prefix != "tensor" {
+        bail!(
+            "quant-plan requires a complete Grok-1 inventory; `--prefix {}` is not supported",
+            prefix
+        );
+    }
+    if let Some(limit) = limit {
+        bail!(
+            "quant-plan requires a complete Grok-1 inventory; `--limit {limit}` is not supported"
+        );
+    }
+    Ok(())
+}
+
+fn print_quant_plan_console_summary(
+    quant_plan: &xai_dissect::schema::QuantPlan,
+    conversion_manifest: &xai_dissect::schema::ConversionManifest,
+) {
+    eprintln!(
+        "checkpoint: {}  baseline: {}  tensors: {}",
+        quant_plan.checkpoint_path.display(),
+        quant_plan.baseline,
+        conversion_manifest.tensors.len(),
+    );
+    eprintln!(
+        "keep_fp32: {}  pilot_quantize: {}  defer: {}",
+        quant_plan.keep_fp32.len(),
+        quant_plan.pilot_quantize.len(),
+        quant_plan.defer.len(),
+    );
+    if !conversion_manifest.warnings.is_empty() {
+        eprintln!(
+            "warn: conversion manifest emitted {} warning categories",
+            conversion_manifest.warnings.len()
+        );
+    }
+}
+
 fn print_output_bundle(label: &str, root: &std::path::Path, bundle: &exports::OutputBundle) {
     eprintln!(
         "wrote {label} -> {}/{{reports,exports,manifests}}/{}/...",
         root.display(),
         bundle.checkpoint_slug
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_quant_plan_inventory_scope;
+
+    #[test]
+    fn quant_plan_rejects_non_default_prefix() {
+        let err = validate_quant_plan_inventory_scope("tensor-shard", None).unwrap_err();
+        assert!(format!("{err:#}").contains("--prefix tensor-shard"));
+    }
+
+    #[test]
+    fn quant_plan_rejects_limited_inventory() {
+        let err = validate_quant_plan_inventory_scope("tensor", Some(4)).unwrap_err();
+        assert!(format!("{err:#}").contains("--limit 4"));
+    }
 }
 
 fn print_console_summary(inv: &ModelInventory) {

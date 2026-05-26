@@ -8,10 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use xai_dissect::exports::OutputBundle;
 use xai_dissect::inventory;
 use xai_dissect::schema::{
-    BlockSummary, CandidateTensorManifest, ExpertAtlas, ExpertBlock, ExpertNamingCheck,
-    ExpertNamingPattern, ExpertSlice, ExpertSliceTensor, ExpertTensorRef, InferredHyperparams,
-    InventoryTotals, KindCount, LayerStats, ModelInventory, MoeProjection, NormSummary,
-    OutlierSummary, RankedTensorStat, RoutingBlockReport, RoutingCriticalBlock, RoutingGateMetrics,
+    BlockSummary, CandidateTensorManifest, ConversionManifest, ConversionManifestTensor,
+    ExpertAtlas, ExpertBlock, ExpertNamingCheck, ExpertNamingPattern, ExpertSlice,
+    ExpertSliceTensor, ExpertTensorRef, Grok1CoverageCounts, InferredHyperparams, InventoryTotals,
+    KindCount, LayerStats, ModelInventory, MoeProjection, NormSummary, OutlierSummary, QuantPlan,
+    QuantPolicy, RankedTensorStat, RoutingBlockReport, RoutingCriticalBlock, RoutingGateMetrics,
     RoutingOrientation, RoutingOrientationSummary, RoutingReport, RoutingTensorLocator,
     RoutingTensorRef, SaaqCandidate, SaaqDisposition, SaaqLayerReadiness, SaaqReadinessReport,
     SaaqRegionClass, ShardRange, StatsProfileReport, StatsSamplingConfig, TensorDType, TensorInfo,
@@ -653,6 +654,23 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
         risk_score: 0.74,
         reasons: vec!["normalization-sensitive tensor".into()],
     };
+    let deferred = SaaqCandidate {
+        rank: 1,
+        shard_ordinal: 0,
+        in_shard_index: 0,
+        block_index: None,
+        block_slot: None,
+        structural_name: "embedding.slot_00.token_embedding".into(),
+        kind_label: "token_embedding".into(),
+        dtype: TensorDType::F32,
+        shape: TensorShape::new(vec![16, 4]),
+        region_class: SaaqRegionClass::EmbeddingHeavy,
+        disposition: SaaqDisposition::ObserveOnly,
+        readiness_score: 0.08,
+        opportunity_score: 0.15,
+        risk_score: 0.55,
+        reasons: vec!["embedding is deferred from first-pass quantization".into()],
+    };
     SaaqReadinessReport {
         model_family: "grok-1".into(),
         checkpoint_path: sample_checkpoint_path(),
@@ -664,7 +682,10 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
             ..Default::default()
         },
         candidate_targets: vec![candidate.clone()],
+        quantization_candidates: vec![candidate.clone()],
         routing_critical_tensors: vec![routing_critical.clone()],
+        precision_sensitive_tensors: vec![risky.clone()],
+        deferred_tensors: vec![deferred.clone()],
         risky_tensors: vec![risky],
         layer_readiness: vec![SaaqLayerReadiness {
             block_index: Some(0),
@@ -676,7 +697,7 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
         }],
         notes: vec![
             "routing tensors remain avoid-for-now in this structural profile".into(),
-            "attention projection is the top candidate in the synthetic sample".into(),
+            "attention projection is the top quantization candidate in the synthetic sample".into(),
         ],
         manifest: CandidateTensorManifest {
             model_family: "grok-1".into(),
@@ -684,7 +705,7 @@ pub fn sample_saaq_readiness() -> SaaqReadinessReport {
             candidates: vec![candidate],
             schema_version: 1,
         },
-        schema_version: 1,
+        schema_version: 2,
     }
 }
 
@@ -696,5 +717,136 @@ fn rank(stats: &TensorStats, kind_label: &str, value: f64) -> RankedTensorStat {
         kind_label: kind_label.into(),
         block_index: stats.block_index,
         value,
+    }
+}
+
+pub fn sample_quant_plan() -> QuantPlan {
+    QuantPlan {
+        model_family: "grok-1".into(),
+        checkpoint_path: sample_checkpoint_path(),
+        baseline: "grok1-map-v1-clean".into(),
+        required_validation: Grok1CoverageCounts {
+            blocks: 64,
+            tensors: 770,
+            routers: 64,
+            expert_families: 192,
+            unknown_tensors: 0,
+        },
+        discovered_validation: Grok1CoverageCounts {
+            blocks: 64,
+            tensors: 770,
+            routers: 64,
+            expert_families: 192,
+            unknown_tensors: 0,
+        },
+        keep_fp32: vec!["router".into(), "block_norm".into(), "final_norm".into()],
+        pilot_quantize: vec![
+            "attn_proj_i8.model_width".into(),
+            "attn_proj_i8.narrow".into(),
+            "moe_expert.gate".into(),
+            "moe_expert.up".into(),
+            "moe_expert.down".into(),
+        ],
+        defer: vec!["token_embedding".into()],
+        notes: vec![
+            "770 tensors partition into 1 quantization candidates, 1 routing-critical, 1 precision-sensitive, and 1 deferred entries.".into(),
+            "Top quantization candidate is `block_000.slot_01.attn_proj` with readiness 0.820.".into(),
+        ],
+        schema_version: 1,
+    }
+}
+
+pub fn sample_conversion_manifest() -> ConversionManifest {
+    ConversionManifest {
+        model_family: "grok-1".into(),
+        checkpoint_path: sample_checkpoint_path(),
+        baseline_profile: "grok1-map-v1-clean".into(),
+        required_validation: Grok1CoverageCounts {
+            blocks: 64,
+            tensors: 770,
+            routers: 64,
+            expert_families: 192,
+            unknown_tensors: 0,
+        },
+        discovered_validation: Grok1CoverageCounts {
+            blocks: 64,
+            tensors: 770,
+            routers: 64,
+            expert_families: 192,
+            unknown_tensors: 0,
+        },
+        relevant_block_count: 64,
+        expected_experts_per_block: Some(8),
+        expert_tensor_families_per_block: Some(3),
+        router_orientation: Some(RoutingOrientation::DModelToExperts),
+        router_shape: Some(TensorShape::new(vec![6144, 8])),
+        tensors: vec![
+            ConversionManifestTensor {
+                tensor_name: "tensor0000#0".into(),
+                structural_name: "embedding.slot_00.token_embedding".into(),
+                model_family: "grok-1".into(),
+                block: None,
+                slot: None,
+                kind: "token_embedding".into(),
+                region: SaaqRegionClass::EmbeddingHeavy,
+                dtype: TensorDType::F32,
+                shape: TensorShape::new(vec![16, 4]),
+                numel: 64,
+                byte_len: 256,
+                shard_index: 0,
+                source_shard_path: PathBuf::from("/fixtures/grok-1-official/ckpt-0/tensor0000"),
+                source_in_shard_index: 0,
+                quant_policy: QuantPolicy::CandidateSaaqEmbedding,
+                protected_reason: None,
+                deterministic_hash: "fnv1a64:1111111111111111".into(),
+                warnings: Vec::new(),
+            },
+            ConversionManifestTensor {
+                tensor_name: "tensor0001#0".into(),
+                structural_name: "block_000.routing_slot_00".into(),
+                model_family: "grok-1".into(),
+                block: Some(0),
+                slot: Some(0),
+                kind: "router".into(),
+                region: SaaqRegionClass::RoutingCritical,
+                dtype: TensorDType::F32,
+                shape: TensorShape::new(vec![4, 2]),
+                numel: 8,
+                byte_len: 32,
+                shard_index: 1,
+                source_shard_path: PathBuf::from("/fixtures/grok-1-official/ckpt-0/tensor0001"),
+                source_in_shard_index: 0,
+                quant_policy: QuantPolicy::PassthroughF32Router,
+                protected_reason: Some(
+                    "protected router tensor; keep f32 to preserve expert selection".into(),
+                ),
+                deterministic_hash: "fnv1a64:2222222222222222".into(),
+                warnings: Vec::new(),
+            },
+            ConversionManifestTensor {
+                tensor_name: "tensor0001#2".into(),
+                structural_name: "block_000.slot_02.block_norm".into(),
+                model_family: "grok-1".into(),
+                block: Some(0),
+                slot: Some(2),
+                kind: "block_norm".into(),
+                region: SaaqRegionClass::NormalizationSensitive,
+                dtype: TensorDType::F32,
+                shape: TensorShape::new(vec![4]),
+                numel: 4,
+                byte_len: 16,
+                shard_index: 1,
+                source_shard_path: PathBuf::from("/fixtures/grok-1-official/ckpt-0/tensor0001"),
+                source_in_shard_index: 2,
+                quant_policy: QuantPolicy::PassthroughF32Norm,
+                protected_reason: Some(
+                    "protected normalization tensor; keep f32 in first-pass planning".into(),
+                ),
+                deterministic_hash: "fnv1a64:3333333333333333".into(),
+                warnings: Vec::new(),
+            },
+        ],
+        warnings: Vec::new(),
+        schema_version: 1,
     }
 }

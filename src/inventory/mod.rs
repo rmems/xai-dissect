@@ -24,6 +24,7 @@ use crate::schema::{
 
 mod grok1_coverage;
 
+pub use crate::schema::GROK1_BASELINE_PROFILE;
 pub use grok1_coverage::{should_validate_grok1_coverage, validate_grok1_complete_manifest};
 
 pub const SCHEMA_VERSION: u32 = 2;
