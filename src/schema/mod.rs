@@ -636,7 +636,8 @@ pub struct SaaqReadinessReport {
     pub shard_count: u32,
     pub inferred: InferredHyperparams,
     /// Backward-compatible alias for the actionable quantization-candidate set.
-    #[serde(default)]
+    /// Skips deserialization so the legacy key can be aliased into quantization_candidates.
+    #[serde(default, skip_deserializing)]
     pub candidate_targets: Vec<SaaqCandidate>,
     #[serde(default, alias = "candidate_targets")]
     pub quantization_candidates: Vec<SaaqCandidate>,
