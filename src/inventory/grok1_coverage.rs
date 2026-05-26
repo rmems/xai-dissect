@@ -16,6 +16,7 @@ use crate::schema::{
 use super::SCHEMA_VERSION;
 
 pub const GROK1_COVERAGE_SCHEMA_VERSION: u32 = 1;
+pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
 
 const GROK1_EXPECTED_BLOCKS: u32 = 64;
 const GROK1_EXPECTED_TENSORS: u64 = 770;
@@ -94,6 +95,7 @@ pub fn validate_grok1_complete_manifest(inv: &ModelInventory) -> Result<Grok1Cov
     let checksum = grok1_checksum(inv, &discovered, &unknown_slots);
     Ok(Grok1CoverageManifest {
         model_family: inv.model_family.clone(),
+        baseline_profile: GROK1_BASELINE_PROFILE.to_string(),
         schema_version: inv.schema_version,
         coverage_schema_version: GROK1_COVERAGE_SCHEMA_VERSION,
         validation: "pass".to_string(),
@@ -590,6 +592,7 @@ mod tests {
         assert_eq!(manifest.discovered.routers, 64);
         assert_eq!(manifest.expected.expert_families, 192);
         assert_eq!(manifest.discovered.expert_families, 192);
+        assert_eq!(manifest.baseline_profile, GROK1_BASELINE_PROFILE);
         assert!(manifest.unknown_slots.is_empty());
         assert_eq!(manifest.checksum, "fnv1a64:de5a1c978121c62c");
     }

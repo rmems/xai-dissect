@@ -9,6 +9,7 @@ fn top_level_help_lists_current_commands() {
         "routing-report",
         "stats",
         "saaq-readiness",
+        "quant-plan",
     ] {
         assert!(
             stdout.contains(command),
@@ -25,6 +26,7 @@ fn analysis_commands_expose_output_tree_options() {
         "routing-report",
         "stats",
         "saaq-readiness",
+        "quant-plan",
     ] {
         let stdout = run_help(&[command, "--help"]);
         assert!(

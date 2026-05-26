@@ -52,7 +52,8 @@ Main commands:
 - `experts`: expert atlas for MoE block structure
 - `routing-report`: routing/gating structure inspection
 - `stats`: offline tensor-statistics profiling
-- `saaq-readiness`: candidate scouting for future SAAQ experiments
+- `saaq-readiness`: candidate scouting for future SAAQ work
+- `quant-plan`: deterministic Grok-1 conversion and policy-planning artifacts
 
 ## Usage Examples
 
@@ -102,6 +103,22 @@ All examples assume a checkpoint directory such as
   --manifest out/candidate-saaq-targets.json
 ```
 
+### Quant Plan
+
+```bash
+./target/release/xai-dissect quant-plan /path/to/grok-1/ckpt-0 \
+  --sample-values 65536 \
+  --json out/quant-plan.json \
+  --md out/quant-plan.md \
+  --conversion-manifest out/conversion-manifest.json
+```
+
+This command requires the clean Grok-1 structural baseline and emits:
+
+- a named baseline gate via `grok1-coverage.json` with profile `grok1-map-v1-clean`
+- a per-tensor `conversion-manifest.json` for downstream conversion / packing work
+- a family-level `quant-plan.json` for pilot quantization policy selection
+
 ### Unified Output Tree
 
 ```bash
@@ -135,7 +152,8 @@ Examples:
 
 - `inventory` writes a checkpoint inventory plus an inventory snapshot manifest
 - `routing-report` writes a routing report plus a routing-critical tensor list
-- `saaq-readiness` writes a readiness report plus a ranked candidate manifest
+- `saaq-readiness` writes a grouped readiness report plus a ranked candidate manifest
+- `quant-plan` writes a conversion manifest plus a deterministic family-level quant plan
 
 ## Stability Notes
 
@@ -192,6 +210,9 @@ upstream of that work: it tells you what you are touching before any
 compression-oriented repo starts changing representation or execution.
 `grok-ozempic` is still under construction for further upgrades, and the
 "ozempic" part of the name is meant to make that repo's purpose obvious.
+The current Grok-1 downstream handoff contract is documented in
+[`docs/export-contracts.md`](docs/export-contracts.md) and intentionally keeps
+the required ingest surface smaller than the full export tree.
 
 ### Surrogate_Viz.jl
 

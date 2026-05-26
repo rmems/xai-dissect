@@ -98,18 +98,19 @@ pub fn build_saaq_readiness_report(
         candidate.rank = (index + 1) as u32;
     }
 
-    let mut candidate_targets = scored
+    let mut quantization_candidates = scored
         .iter()
         .filter(|candidate| candidate.disposition == SaaqDisposition::Candidate)
         .cloned()
         .collect::<Vec<_>>();
-    if candidate_targets.is_empty() {
+    if quantization_candidates.is_empty() {
         if let Some(fallback_index) = scored.iter().position(|candidate| {
             !matches!(
                 candidate.region_class,
                 SaaqRegionClass::RoutingCritical
                     | SaaqRegionClass::NormalizationSensitive
                     | SaaqRegionClass::AlreadyCompressed
+                    | SaaqRegionClass::EmbeddingHeavy
             )
         }) {
             scored[fallback_index].disposition = SaaqDisposition::Candidate;
@@ -117,15 +118,28 @@ pub fn build_saaq_readiness_report(
                 "promoted as the best available non-routing target in a constrained sample"
                     .to_string(),
             );
-            candidate_targets.push(scored[fallback_index].clone());
+            quantization_candidates.push(scored[fallback_index].clone());
         }
     }
-    for (index, candidate) in candidate_targets.iter_mut().enumerate() {
+    for (index, candidate) in quantization_candidates.iter_mut().enumerate() {
         candidate.rank = (index + 1) as u32;
     }
     let routing_critical_tensors = scored
         .iter()
         .filter(|candidate| candidate.region_class == SaaqRegionClass::RoutingCritical)
+        .cloned()
+        .collect::<Vec<_>>();
+    let precision_sensitive_tensors = scored
+        .iter()
+        .filter(|candidate| candidate.region_class == SaaqRegionClass::NormalizationSensitive)
+        .cloned()
+        .collect::<Vec<_>>();
+    let deferred_tensors = scored
+        .iter()
+        .filter(|candidate| {
+            candidate.region_class == SaaqRegionClass::EmbeddingHeavy
+                || candidate.disposition == SaaqDisposition::ObserveOnly
+        })
         .cloned()
         .collect::<Vec<_>>();
     let mut risky_tensors = scored
@@ -136,11 +150,15 @@ pub fn build_saaq_readiness_report(
     risky_tensors.sort_by(|a, b| b.risk_score.total_cmp(&a.risk_score));
     risky_tensors.truncate(25);
     let layer_readiness = summarize_layer_readiness(&scored, &routing_blocks);
-    let notes = build_saaq_notes(&candidate_targets, &routing_critical_tensors, &routing);
+    let notes = build_saaq_notes(
+        &quantization_candidates,
+        &routing_critical_tensors,
+        &routing,
+    );
     let manifest = CandidateTensorManifest {
         model_family: inv.model_family.clone(),
         checkpoint_path: inv.checkpoint_path.clone(),
-        candidates: candidate_targets.clone(),
+        candidates: quantization_candidates.clone(),
         schema_version: SAAQ_READINESS_SCHEMA_VERSION,
     };
 
@@ -149,8 +167,11 @@ pub fn build_saaq_readiness_report(
         checkpoint_path: inv.checkpoint_path.clone(),
         shard_count: inv.shard_count,
         inferred: clone_hyperparams(&inv.inferred),
-        candidate_targets,
+        candidate_targets: quantization_candidates.clone(),
+        quantization_candidates,
         routing_critical_tensors,
+        precision_sensitive_tensors,
+        deferred_tensors,
         risky_tensors,
         layer_readiness,
         notes,
@@ -569,10 +590,10 @@ fn score_tensor(
     let structural_penalty = match region_class {
         SaaqRegionClass::RoutingCritical => 0.95,
         SaaqRegionClass::NormalizationSensitive => 0.85,
-        SaaqRegionClass::AlreadyCompressed => 0.9,
-        SaaqRegionClass::EmbeddingHeavy => 0.55,
+        SaaqRegionClass::AlreadyCompressed => 0.7,
+        SaaqRegionClass::EmbeddingHeavy => 0.7,
         SaaqRegionClass::PotentialCompressionTarget => 0.2,
-        SaaqRegionClass::Unknown => 0.4,
+        SaaqRegionClass::Unknown => 0.45,
     };
     let risk_score = clamp01(structural_penalty * 0.65 + outlier_penalty * 0.35);
     let readiness_score = clamp01(opportunity_score * (1.0 - structural_penalty * 0.85));
@@ -580,10 +601,10 @@ fn score_tensor(
         SaaqRegionClass::PotentialCompressionTarget if readiness_score >= 0.15 => {
             SaaqDisposition::Candidate
         }
-        SaaqRegionClass::EmbeddingHeavy if readiness_score >= 0.12 => SaaqDisposition::Candidate,
         SaaqRegionClass::RoutingCritical
         | SaaqRegionClass::NormalizationSensitive
         | SaaqRegionClass::AlreadyCompressed => SaaqDisposition::AvoidForNow,
+        SaaqRegionClass::EmbeddingHeavy | SaaqRegionClass::Unknown => SaaqDisposition::ObserveOnly,
         _ => SaaqDisposition::ObserveOnly,
     };
 
@@ -644,19 +665,21 @@ fn classify_region(
     if tensor.kind_label == "block_norm" || tensor.kind_label == "final_norm" {
         return SaaqRegionClass::NormalizationSensitive;
     }
-    if tensor.dtype == TensorDType::I8
-        || tensor.kind_label.starts_with("moe_scales")
-        || tensor.kind_label.starts_with("moe_expert.")
-    {
-        return SaaqRegionClass::AlreadyCompressed;
-    }
     if tensor.kind_label == "token_embedding" {
         return SaaqRegionClass::EmbeddingHeavy;
     }
+    if tensor.kind_label.starts_with("moe_scales") {
+        return SaaqRegionClass::AlreadyCompressed;
+    }
+    if tensor.kind_label.starts_with("moe_expert.")
+        || tensor.kind_label.starts_with("attn_proj_i8.")
+        || tensor.kind_label == "attn_proj_f32"
+    {
+        return SaaqRegionClass::PotentialCompressionTarget;
+    }
     if tensor.dtype == TensorDType::F32
-        && (tensor.kind_label == "attn_proj_f32"
-            || tensor.kind_label == "unknown"
-            || routing_blocks.contains(&tensor.block_index))
+        && tensor.kind_label == "unknown"
+        && routing_blocks.contains(&tensor.block_index)
     {
         return SaaqRegionClass::PotentialCompressionTarget;
     }
@@ -716,7 +739,7 @@ fn build_saaq_notes(
     let mut notes = Vec::new();
     if let Some(top) = candidate_targets.first() {
         notes.push(format!(
-            "Top candidate target is `{}` with readiness {:.3}.",
+            "Top quantization candidate is `{}` with readiness {:.3}.",
             top.structural_name, top.readiness_score
         ));
     }

@@ -1,0 +1,182 @@
+=== manifests/grok-1-official__ckpt-0/conversion-manifest.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "baseline_profile": "grok1-map-v1-clean",
+  "required_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "discovered_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "relevant_block_count": 64,
+  "expected_experts_per_block": 8,
+  "expert_tensor_families_per_block": 3,
+  "router_orientation": "d_model_to_experts",
+  "router_shape": [
+    6144,
+    8
+  ],
+  "tensors": [
+    {
+      "tensor_name": "tensor0000#0",
+      "structural_name": "embedding.slot_00.token_embedding",
+      "model_family": "grok-1",
+      "block": null,
+      "slot": null,
+      "kind": "token_embedding",
+      "region": "embedding_heavy",
+      "dtype": "f32",
+      "shape": [
+        16,
+        4
+      ],
+      "numel": 64,
+      "byte_len": 256,
+      "shard_index": 0,
+      "source_shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0000",
+      "source_in_shard_index": 0,
+      "quant_policy": "candidate_saaq_embedding",
+      "protected_reason": null,
+      "deterministic_hash": "fnv1a64:1111111111111111",
+      "warnings": []
+    },
+    {
+      "tensor_name": "tensor0001#0",
+      "structural_name": "block_000.routing_slot_00",
+      "model_family": "grok-1",
+      "block": 0,
+      "slot": 0,
+      "kind": "router",
+      "region": "routing_critical",
+      "dtype": "f32",
+      "shape": [
+        4,
+        2
+      ],
+      "numel": 8,
+      "byte_len": 32,
+      "shard_index": 1,
+      "source_shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0001",
+      "source_in_shard_index": 0,
+      "quant_policy": "passthrough_f32_router",
+      "protected_reason": "protected router tensor; keep f32 to preserve expert selection",
+      "deterministic_hash": "fnv1a64:2222222222222222",
+      "warnings": []
+    },
+    {
+      "tensor_name": "tensor0001#2",
+      "structural_name": "block_000.slot_02.block_norm",
+      "model_family": "grok-1",
+      "block": 0,
+      "slot": 2,
+      "kind": "block_norm",
+      "region": "normalization_sensitive",
+      "dtype": "f32",
+      "shape": [
+        4
+      ],
+      "numel": 4,
+      "byte_len": 16,
+      "shard_index": 1,
+      "source_shard_path": "/fixtures/grok-1-official/ckpt-0/tensor0001",
+      "source_in_shard_index": 2,
+      "quant_policy": "passthrough_f32_norm",
+      "protected_reason": "protected normalization tensor; keep f32 in first-pass planning",
+      "deterministic_hash": "fnv1a64:3333333333333333",
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "schema_version": 1
+}
+
+=== manifests/grok-1-official__ckpt-0/quant-plan.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "baseline": "grok1-map-v1-clean",
+  "required_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "discovered_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "keep_fp32": [
+    "router",
+    "block_norm",
+    "final_norm"
+  ],
+  "pilot_quantize": [
+    "attn_proj_i8.model_width",
+    "attn_proj_i8.narrow",
+    "moe_expert.gate",
+    "moe_expert.up",
+    "moe_expert.down"
+  ],
+  "defer": [
+    "token_embedding"
+  ],
+  "notes": [
+    "770 tensors partition into 1 quantization candidates, 1 routing-critical, 1 precision-sensitive, and 1 deferred entries.",
+    "Top quantization candidate is `block_000.slot_01.attn_proj` with readiness 0.820."
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/quant-plan.md ===
+# xai-dissect quant plan
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **baseline**: `grok1-map-v1-clean`
+- **schema_version**: 1
+
+## Required validation
+
+| Metric | Required | Discovered |
+| ------ | -------: | ---------: |
+| blocks | 64 | 64 |
+| tensors | 770 | 770 |
+| routers | 64 | 64 |
+| expert_families | 192 | 192 |
+| unknown_tensors | 0 | 0 |
+
+## Keep fp32
+
+- `router`
+- `block_norm`
+- `final_norm`
+
+## Pilot quantize
+
+- `attn_proj_i8.model_width`
+- `attn_proj_i8.narrow`
+- `moe_expert.gate`
+- `moe_expert.up`
+- `moe_expert.down`
+
+## Defer
+
+- `token_embedding`
+
+## Notes
+
+- 770 tensors partition into 1 quantization candidates, 1 routing-critical, 1 precision-sensitive, and 1 deferred entries.
+- Top quantization candidate is `block_000.slot_01.attn_proj` with readiness 0.820.

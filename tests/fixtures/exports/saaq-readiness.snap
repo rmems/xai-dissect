@@ -67,6 +67,31 @@
       ]
     }
   ],
+  "quantization_candidates": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 1,
+      "block_index": 0,
+      "block_slot": 1,
+      "structural_name": "block_000.slot_01.attn_proj",
+      "kind_label": "attn_proj_f32",
+      "dtype": "f32",
+      "shape": [
+        4,
+        4
+      ],
+      "region_class": "potential_compression_target",
+      "disposition": "candidate",
+      "readiness_score": 0.82,
+      "opportunity_score": 0.78,
+      "risk_score": 0.24,
+      "reasons": [
+        "f32 tensor with moderate size share",
+        "not marked routing-critical"
+      ]
+    }
+  ],
   "routing_critical_tensors": [
     {
       "rank": 1,
@@ -88,6 +113,53 @@
       "risk_score": 0.91,
       "reasons": [
         "routing tensor linked to expert selection"
+      ]
+    }
+  ],
+  "precision_sensitive_tensors": [
+    {
+      "rank": 1,
+      "shard_ordinal": 1,
+      "in_shard_index": 2,
+      "block_index": 0,
+      "block_slot": 2,
+      "structural_name": "block_000.slot_02.norm",
+      "kind_label": "block_norm",
+      "dtype": "f32",
+      "shape": [
+        4
+      ],
+      "region_class": "normalization_sensitive",
+      "disposition": "avoid_for_now",
+      "readiness_score": 0.1,
+      "opportunity_score": 0.12,
+      "risk_score": 0.74,
+      "reasons": [
+        "normalization-sensitive tensor"
+      ]
+    }
+  ],
+  "deferred_tensors": [
+    {
+      "rank": 1,
+      "shard_ordinal": 0,
+      "in_shard_index": 0,
+      "block_index": null,
+      "block_slot": null,
+      "structural_name": "embedding.slot_00.token_embedding",
+      "kind_label": "token_embedding",
+      "dtype": "f32",
+      "shape": [
+        16,
+        4
+      ],
+      "region_class": "embedding_heavy",
+      "disposition": "observe_only",
+      "readiness_score": 0.08,
+      "opportunity_score": 0.15,
+      "risk_score": 0.55,
+      "reasons": [
+        "embedding is deferred from first-pass quantization"
       ]
     }
   ],
@@ -126,7 +198,7 @@
   ],
   "notes": [
     "routing tensors remain avoid-for-now in this structural profile",
-    "attention projection is the top candidate in the synthetic sample"
+    "attention projection is the top quantization candidate in the synthetic sample"
   ],
   "manifest": {
     "model_family": "grok-1",
@@ -199,11 +271,13 @@
 - **model_family**: `grok-1`
 - **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
 - **shards**: 2
-- **candidate_targets**: 1
+- **quantization_candidates**: 1
+- **precision_sensitive_tensors**: 1
+- **deferred_tensors**: 1
 - **routing_critical_tensors**: 1
 - **schema_version**: 1
 
-## Candidate target tensors
+## Quantization candidates
 
 | Rank | Tensor | Kind | Region | Readiness | Opportunity | Risk | Disposition |
 | ---: | ------ | ---- | ------ | --------: | ----------: | ---: | ----------- |
@@ -214,6 +288,18 @@
 | Tensor | Readiness | Risk | Reasons |
 | ------ | --------: | ---: | ------- |
 | `block_000.routing_slot_00` | 0.050 | 0.910 | routing tensor linked to expert selection |
+
+## Precision-sensitive tensors
+
+| Tensor | Risk | Reasons |
+| ------ | ---: | ------- |
+| `block_000.slot_02.norm` | 0.740 | normalization-sensitive tensor |
+
+## Deferred tensors
+
+| Tensor | Kind | Disposition | Reasons |
+| ------ | ---- | ----------- | ------- |
+| `embedding.slot_00.token_embedding` | token_embedding | observe_only | embedding is deferred from first-pass quantization |
 
 ## Highest-risk tensors
 
@@ -230,4 +316,4 @@
 ## Notes
 
 - routing tensors remain avoid-for-now in this structural profile
-- attention projection is the top candidate in the synthetic sample
+- attention projection is the top quantization candidate in the synthetic sample

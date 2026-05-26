@@ -5,9 +5,9 @@ use std::fs;
 use xai_dissect::exports;
 
 use support::{
-    assert_snapshot_sections, bundle_sections, sample_checkpoint_slug, sample_expert_atlas,
-    sample_inventory, sample_routing_report, sample_saaq_readiness, sample_stats_profile,
-    unique_temp_root,
+    assert_snapshot_sections, bundle_sections, sample_checkpoint_slug, sample_conversion_manifest,
+    sample_expert_atlas, sample_inventory, sample_quant_plan, sample_routing_report,
+    sample_saaq_readiness, sample_stats_profile, unique_temp_root,
 };
 
 #[test]
@@ -62,5 +62,21 @@ fn saaq_bundle_matches_snapshot() {
     assert_eq!(bundle.checkpoint_slug, sample_checkpoint_slug());
     let sections = bundle_sections(&root, &bundle);
     assert_snapshot_sections("tests/fixtures/exports/saaq-readiness.snap", &sections);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn quant_plan_bundle_matches_snapshot() {
+    let root = unique_temp_root("quant-plan-bundle");
+    let bundle = exports::write_quant_plan_bundle(
+        &sample_conversion_manifest(),
+        &sample_quant_plan(),
+        &root,
+        None,
+    )
+    .expect("write quant-plan bundle");
+    assert_eq!(bundle.checkpoint_slug, sample_checkpoint_slug());
+    let sections = bundle_sections(&root, &bundle);
+    assert_snapshot_sections("tests/fixtures/exports/quant-plan.snap", &sections);
     let _ = fs::remove_dir_all(root);
 }
