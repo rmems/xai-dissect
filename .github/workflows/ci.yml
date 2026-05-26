@@ -1,4 +1,8 @@
 name: CI
+#
+# Authoritative Rust correctness gate.
+# This workflow is required; Qodana and Security workflows are advisory only.
+#
 
 on:
   pull_request:
@@ -20,7 +24,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -28,5 +32,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
       - name: Run tests
-        run: cargo test --locked
+        run: cargo test --all-features --locked

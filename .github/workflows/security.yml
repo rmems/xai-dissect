@@ -1,0 +1,47 @@
+name: Security
+#
+# Dependency vulnerability scanning.
+# Runs cargo-audit against the Cargo.lock file.
+# This job is advisory (continue-on-error: true) so that new advisory
+# publications do not block unrelated PRs, while still surfacing issues.
+#
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run daily at 06:00 UTC to catch newly published advisories
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  cargo-audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit 2>&1 | tee cargo-audit.log
+
+      - name: Upload audit log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-log-${{ github.run_id }}
+          path: cargo-audit.log
+          retention-days: 30

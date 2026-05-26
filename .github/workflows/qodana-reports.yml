@@ -1,0 +1,44 @@
+name: Qodana Report
+#
+# Non-blocking static-analysis report workflow.
+# Qodana provides supplementary code-quality signals (YAML, Markdown, JSON,
+# TOML, etc.); it is NOT the Rust correctness gate.
+# Cargo fmt, Clippy, and cargo test in CI.yml remain the required checks.
+#
+# This job is allowed to fail (continue-on-error: true) so that Qodana
+# results never block merge.
+#
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  qodana-scan:
+    name: Qodana Scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      checks: write          # needed to publish SARIF / check results
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Qodana performs incremental analysis when history is available
+
+      - name: Qodana Scan
+        uses: JetBrains/qodana-action@v2024.1
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+
+      - name: Upload Qodana report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qodana-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/qodana/report/
+          retention-days: 30
