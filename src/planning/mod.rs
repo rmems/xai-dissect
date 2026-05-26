@@ -684,9 +684,7 @@ mod tests {
         let saaq_candidates: Vec<_> = conversion
             .tensors
             .iter()
-            .filter(|t| {
-                t.quant_policy == crate::schema::QuantPolicy::CandidateSaaqEmbedding
-            })
+            .filter(|t| t.quant_policy == crate::schema::QuantPolicy::CandidateSaaqEmbedding)
             .collect();
 
         assert_eq!(
@@ -711,8 +709,10 @@ mod tests {
             TensorDType::I8,
             vec![8, 6_144, 32_768],
         );
-        let (_policy, _protected, warnings) =
-            super::quant_policy_for_tensor(&unresolved, super::ReadinessGroup::QuantizationCandidate);
+        let (_policy, _protected, warnings) = super::quant_policy_for_tensor(
+            &unresolved,
+            super::ReadinessGroup::QuantizationCandidate,
+        );
         assert!(
             warnings.iter().any(|w| w.contains("unresolved")),
             "expected warning about unresolved projection"

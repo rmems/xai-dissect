@@ -15,8 +15,8 @@ use serde::Serialize;
 use crate::schema::{
     BlockSummary, CandidateTensorManifest, CheckpointInventorySnapshot, ConversionManifest,
     ExpertAtlas, ExpertIssueCategory, FindingsSummary, Grok1CoverageManifest, ModelInventory,
-    QuantPlan, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport, SaaqDisposition,
-    SaaqReadinessReport, StatsProfileReport,
+    QuantPlan, QuantPolicy, RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport,
+    SaaqDisposition, SaaqReadinessReport, StatsProfileReport,
 };
 
 /// Write the full inventory as pretty-printed JSON. The JSON layout is the
@@ -1029,8 +1029,18 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
         "- **checkpoint**: `{}`",
         manifest.checkpoint_path.display()
     );
-    let _ = writeln!(md, "- **baseline_profile**: `{}`", manifest.baseline_profile);
+    let _ = writeln!(
+        md,
+        "- **baseline_profile**: `{}`",
+        manifest.baseline_profile
+    );
     let _ = writeln!(md, "- **schema_version**: {}", manifest.schema_version);
+    if let Some(ref shape) = manifest.router_shape {
+        let _ = writeln!(md, "- **router_shape**: `{}`", shape.render());
+    }
+    if let Some(ref orientation) = manifest.router_orientation {
+        let _ = writeln!(md, "- **router_orientation**: `{}`", orientation.label());
+    }
     let _ = writeln!(md);
     let _ = writeln!(md, "## Validation");
     let _ = writeln!(md);
@@ -1039,20 +1049,17 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
     let _ = writeln!(
         md,
         "| blocks | {} | {} |",
-        manifest.required_validation.blocks,
-        manifest.discovered_validation.blocks
+        manifest.required_validation.blocks, manifest.discovered_validation.blocks
     );
     let _ = writeln!(
         md,
         "| tensors | {} | {} |",
-        manifest.required_validation.tensors,
-        manifest.discovered_validation.tensors
+        manifest.required_validation.tensors, manifest.discovered_validation.tensors
     );
     let _ = writeln!(
         md,
         "| routers | {} | {} |",
-        manifest.required_validation.routers,
-        manifest.discovered_validation.routers
+        manifest.required_validation.routers, manifest.discovered_validation.routers
     );
     let _ = writeln!(
         md,
@@ -1067,24 +1074,23 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
         manifest.discovered_validation.unknown_tensors
     );
 
-    if let Some(ref shape) = manifest.router_shape {
-        let _ = writeln!(md, "| router_shape | `{}` | |", shape.render());
-    }
-    if let Some(ref orientation) = manifest.router_orientation {
-        let _ = writeln!(md, "| router_orientation | `{}` | |", orientation.label());
-    }
-
     let _ = writeln!(md);
     let _ = writeln!(md, "## Tensor summary");
     let _ = writeln!(md);
     let _ = writeln!(md, "| Policy | Count |");
     let _ = writeln!(md, "| ------ | ----: |");
 
-    let mut policy_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut policy_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
     for tensor in &manifest.tensors {
-        *policy_counts
-            .entry(format!("{:?}", tensor.quant_policy))
-            .or_insert(0) += 1;
+        let policy_name = match tensor.quant_policy {
+            QuantPolicy::PassthroughF32Router => "PassthroughF32Router",
+            QuantPolicy::PassthroughF32Norm => "PassthroughF32Norm",
+            QuantPolicy::CandidateSaaqEmbedding => "CandidateSaaqEmbedding",
+            QuantPolicy::WrapExistingInt8Expert => "WrapExistingInt8Expert",
+            QuantPolicy::WrapExistingInt8Unknown => "WrapExistingInt8Unknown",
+            QuantPolicy::UnknownPassthroughOrWarn => "UnknownPassthroughOrWarn",
+        };
+        *policy_counts.entry(policy_name).or_insert(0) += 1;
     }
     for (policy, count) in &policy_counts {
         let _ = writeln!(md, "| `{}` | {} |", policy, count);
@@ -1105,10 +1111,7 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
 }
 
 /// Write the conversion manifest Markdown summary to `out`.
-pub fn write_conversion_manifest_markdown(
-    manifest: &ConversionManifest,
-    out: &Path,
-) -> Result<()> {
+pub fn write_conversion_manifest_markdown(manifest: &ConversionManifest, out: &Path) -> Result<()> {
     let s = render_conversion_manifest_markdown(manifest);
     write_text(&s, out)
 }
