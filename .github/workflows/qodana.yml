@@ -1,28 +1,46 @@
-name: Qodana Configuration Upload
+name: Qodana Report
+#
+# Non-blocking static-analysis report workflow.
+# Qodana provides supplementary code-quality signals (YAML, Markdown, JSON,
+# TOML, shell scripts, etc.); it is NOT the Rust correctness gate.
+# Cargo fmt, Clippy, and cargo test in ci.yml remain the required checks.
+#
+# This job is allowed to fail (continue-on-error: true) so that Qodana
+# results never block merge.
+#
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  upload-qodana-config:
+  qodana-scan:
+    name: Qodana Scan
     runs-on: ubuntu-latest
-
+    continue-on-error: true
+    permissions:
+      contents: read
+      checks: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Run Qodana Configuration Uploader
+      - name: Qodana Scan
+        uses: JetBrains/qodana-action@v2024.1
         env:
-          QODANA_CONFIGURATIONS_TOKEN: ${{ secrets.QODANA_CONFIGURATIONS_TOKEN }}
-        run: |
-          docker run --rm \
-            -v $(pwd):/workspace \
-            -w /workspace \
-            -e QODANA_CONFIGURATIONS_TOKEN=$QODANA_CONFIGURATIONS_TOKEN \
-            jetbrains/qodana-configuration-uploader:latest \
-            --global-configs-file qodana-global-configurations.yaml \
-            --qodana-host https://qodana.cloud
+          QODANA_TOKEN: ${{ secrets.QODANA_CONFIGURATIONS_TOKEN }}
+
+      - name: Upload Qodana report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qodana-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/qodana/results/
+          retention-days: 30
