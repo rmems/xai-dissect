@@ -232,7 +232,9 @@
       "threshold": null,
       "observed": null,
       "detail": "Summarize per-channel scale/error drift where quantization metadata is available."
-    },
+    }
+  ],
+  "model_metrics": [
     {
       "name": "logit_kl",
       "scope": "model_behavior",
@@ -299,6 +301,11 @@
 | `weight_cosine_similarity` | weight_reconstruction | unknown | - | - | Useful companion metric, but not sufficient by itself to clear a full quantization run. |
 | `weight_max_absolute_error` | weight_reconstruction | unknown | - | - | Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas. |
 | `per_channel_scale_error_summary` | weight_reconstruction | unknown | - | - | Summarize per-channel scale/error drift where quantization metadata is available. |
+
+## Model metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
 | `logit_kl` | model_behavior | unknown | - | - | Report-only placeholder for model/logit KL when downstream pilot inference captures logits. |
 | `perplexity_delta` | model_behavior | unknown | - | - | Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists. |
 | `generation_sanity_summary` | model_behavior | unknown | - | - | Report-only placeholder for short generation sanity checks when pilot inference is available. |

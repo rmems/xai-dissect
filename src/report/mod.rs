@@ -1420,6 +1420,7 @@ pub fn render_route_preservation_markdown(report_doc: &RoutePreservationReport) 
     render_route_metric_section(&mut md, "Router metrics", &report_doc.router_metrics);
     render_route_metric_section(&mut md, "Block metrics", &report_doc.block_metrics);
     render_route_metric_section(&mut md, "Weight metrics", &report_doc.weight_metrics);
+    render_route_metric_section(&mut md, "Model metrics", &report_doc.model_metrics);
 
     let _ = writeln!(md);
     let _ = writeln!(md, "## Notes");

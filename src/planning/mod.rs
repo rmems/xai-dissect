@@ -1496,6 +1496,8 @@ pub fn build_grok1_route_preservation_report(
             observed: None,
             detail: "Summarize per-channel scale/error drift where quantization metadata is available.".to_string(),
         },
+    ];
+    let model_metrics = vec![
         RouteMetricStatus {
             name: "logit_kl".to_string(),
             scope: "model_behavior".to_string(),
@@ -1525,6 +1527,7 @@ pub fn build_grok1_route_preservation_report(
     summary.extend(router_metrics.iter().cloned());
     summary.extend(block_metrics.iter().cloned());
     summary.extend(weight_metrics.iter().cloned());
+    summary.extend(model_metrics.iter().cloned());
     Ok(RoutePreservationReport {
         model_family: inv.model_family.clone(),
         checkpoint_path: inv.checkpoint_path.clone(),
@@ -1534,6 +1537,7 @@ pub fn build_grok1_route_preservation_report(
         router_metrics,
         block_metrics,
         weight_metrics,
+        model_metrics,
         notes: vec![
             "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.".to_string(),
             "Statuses remain unknown until downstream pilot artifacts supply the observed values.".to_string(),

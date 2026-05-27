@@ -59,6 +59,7 @@ fn route_preservation_markdown_shows_router_thresholds() {
         }],
         block_metrics: vec![],
         weight_metrics: vec![],
+        model_metrics: vec![],
         notes: vec!["planning only".into()],
         schema_version: 1,
     };

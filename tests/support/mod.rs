@@ -1140,6 +1140,8 @@ pub fn sample_route_preservation_report() -> RoutePreservationReport {
                 observed: None,
                 detail: "Summarize per-channel scale/error drift where quantization metadata is available.".into(),
             },
+        ],
+        model_metrics: vec![
             RouteMetricStatus {
                 name: "logit_kl".into(),
                 scope: "model_behavior".into(),

@@ -868,6 +868,7 @@ pub struct RoutePreservationReport {
     pub router_metrics: Vec<RouteMetricStatus>,
     pub block_metrics: Vec<RouteMetricStatus>,
     pub weight_metrics: Vec<RouteMetricStatus>,
+    pub model_metrics: Vec<RouteMetricStatus>,
     pub notes: Vec<String>,
     pub schema_version: u32,
 }
