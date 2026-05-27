@@ -48,6 +48,7 @@ cargo test
 
 Main commands:
 
+- `dissect`: raw per-shard byte-table view (parser output only; no classification or grouping)
 - `inventory`: full checkpoint inventory and architecture-oriented summary
 - `experts`: expert atlas for MoE block structure
 - `routing-report`: routing/gating structure inspection

@@ -2,7 +2,7 @@
 
 All notable changes to `xai-dissect` are documented here.
 
-## Unreleased
+## Unreleased - 2026-05-27
 
 ### Changed
 
