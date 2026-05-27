@@ -1413,7 +1413,11 @@ pub fn render_route_preservation_markdown(report_doc: &RoutePreservationReport) 
     let _ = writeln!(md, "# xai-dissect Grok-1 route-preservation report");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
-    let _ = writeln!(md, "- **checkpoint**: `{}`", report_doc.checkpoint_path.display());
+    let _ = writeln!(
+        md,
+        "- **checkpoint**: `{}`",
+        report_doc.checkpoint_path.display()
+    );
     let _ = writeln!(md, "- **baseline**: `{}`", report_doc.baseline);
     let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
     let _ = writeln!(md);
