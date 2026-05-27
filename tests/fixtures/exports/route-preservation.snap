@@ -271,6 +271,7 @@
 # xai-dissect Grok-1 route-preservation report
 
 - **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
 - **baseline**: `grok1-map-v1-clean`
 - **schema_version**: 1
 
