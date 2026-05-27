@@ -1035,7 +1035,11 @@ fn run_quant_plan(
     Ok(())
 }
 
-fn validate_complete_inventory_scope(command: &str, prefix: &str, limit: Option<usize>) -> Result<()> {
+fn validate_complete_inventory_scope(
+    command: &str,
+    prefix: &str,
+    limit: Option<usize>,
+) -> Result<()> {
     if prefix != "tensor" {
         bail!(
             "{command} requires a complete Grok-1 inventory; `--prefix {}` is not supported",
@@ -1043,9 +1047,7 @@ fn validate_complete_inventory_scope(command: &str, prefix: &str, limit: Option<
         );
     }
     if let Some(limit) = limit {
-        bail!(
-            "{command} requires a complete Grok-1 inventory; `--limit {limit}` is not supported"
-        );
+        bail!("{command} requires a complete Grok-1 inventory; `--limit {limit}` is not supported");
     }
     Ok(())
 }
@@ -1108,7 +1110,8 @@ mod tests {
 
     #[test]
     fn quant_plan_rejects_non_default_prefix() {
-        let err = validate_complete_inventory_scope("quant-plan", "tensor-shard", None).unwrap_err();
+        let err =
+            validate_complete_inventory_scope("quant-plan", "tensor-shard", None).unwrap_err();
         assert!(format!("{err:#}").contains("--prefix tensor-shard"));
     }
 
