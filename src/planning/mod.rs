@@ -1,8 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Static planning artifacts that bridge validated Grok-1 structure into
-// downstream conversion / quantization repos without executing or mutating the
-// checkpoint.
+//! Static planning artifacts that bridge validated Grok-1 structure into
+//! downstream conversion and quantization repos without executing or mutating
+//! the checkpoint.
+//!
+//! ## Planning artifacts
+//! | Artifact | Schema type | Purpose |
+//! |----------|-----------|---------|
+//! | `pilot-selection-plan.json` | `PilotSelectionPlan` | Which transformer blocks to pilot-quantize, in which mode |
+//! | `route-preservation-report.json` | `RoutePreservationReport` | Metric gate definitions for routing preservation (thresholds + status) |
+//! | `conversion-manifest.json` | `ConversionManifest` | Per-tensor policy and deterministic hash for downstream packing |
+//! | `quant-plan.json` | `QuantPlan` | Family-level policy: keep_fp32, pilot_quantize, defer lists |
+//!
+//! ## QuantPolicy variants (from ConversionManifestTensor.quant_policy)
+//! - `PassthroughF32Router` — router must remain FP32 in first pilot
+//! - `PassthroughF32Norm` — norms must remain FP32 in first pilot
+//! - `CandidateSaaqEmbedding` — embedding is a SAAQ candidate with risk score
+//! - `WrapExistingInt8Expert` — MoE expert projection already int8, just wrap
+//! - `WrapExistingInt8Unknown` — unknown int8 tensor, wrap but flag
+//! - `UnknownPassthroughOrWarn` — cannot determine policy, pass through with warning
+//!
+//! ## What this module does NOT do
+//! - It does **not** execute quantization or produce quantized weights
+//! - It does **not** run pilot inference to measure router agreement
+//! - It does **not** mutate checkpoint files
 
 use std::collections::{BTreeMap, BTreeSet};
 

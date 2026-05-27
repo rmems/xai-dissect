@@ -112,6 +112,11 @@ Exports are the only supported integration surface for downstream repos
 (`corinth-canal`, `SAAQ-latent`, `Surrogate_Viz.jl`). No in-process API is
 guaranteed across versions; the export schema is.
 
+For Grok-1-specific architecture details — the per-layer MoE composition,
+the `QuantizedWeight8bit` shard structure, how the 12-shard-per-block
+layout maps to tensor kinds, and the source-backed disambiguation of gate
+vs. up projections — see [`docs/grok1-architecture.md`](grok1-architecture.md).
+
 ## Current file tree
 
 ```

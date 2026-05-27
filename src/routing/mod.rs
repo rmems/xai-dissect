@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Routing-structure analysis derived from `ModelInventory`. This layer
-// identifies candidate router tensors, summarizes their shape/orientation,
-// links them to block-local expert structure, and reports layout anomalies
-// without executing any routing logic.
+//! Routing-structure analysis derived from `ModelInventory`.
+//!
+//! This layer identifies candidate router/gate tensors by shape signature,
+//! summarizes their geometry and orientation, links them to the expert
+//! count inferred from the inventory, and reports layout anomalies. It is
+//! purely structural — no routing decisions are executed.
+//!
+//! ## Router identification
+//! A router tensor is identified as a bare f32 2-D tensor with shape
+//! `(d_model, n_experts)` where the inferred expert count matches the
+//! inventory's n_experts. For Grok-1 this is `(6144, 8)`. The leading
+//! dimension (expert_axis=1) determines the routing orientation:
+//! `ExpertsToDModel` if d_model is trailing, `DModelToExperts` if leading.
+//!
+//! ## RoutingCriticalTensorManifest
+//! The manifest at `manifests/<slug>/routing-critical-tensors.json` is the
+//! machine-ingest guardrail list for grok-ozempic. All 64 router tensors
+//! are listed with their structural_name, orientation, linked_expert_count,
+//! and total_nbytes. Downstream compression or packing logic must treat
+//! these as routing-sensitive.
+//!
+//! ## What it does NOT do
+//! - It does **not** execute routing or compute expert selection
+//! - It does **not** compute top-k router agreement or logits
+//! - It does **not** mutate router weights
 
 use std::collections::{BTreeMap, BTreeSet};
 

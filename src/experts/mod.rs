@@ -1,8 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Expert-level structural analysis derived from `ModelInventory`. This layer
-// maps block-local MoE tensor families, associates each family with every
-// expert index, and reports missing or irregular layout patterns.
+//! Expert-level structural analysis derived from `ModelInventory`.
+//!
+//! This layer maps block-local MoE tensor families, resolves expert index
+//! slices for each projection, and reports missing or irregular layout
+//! patterns. It is purely shape-based — no tensor payload bytes are read.
+//!
+//! ## What it resolves
+//! - Which of the three MoE projection slots (gate / down / up) each
+//!   3-D int8 quant_weight tensor corresponds to, using the source-backed
+//!   Grok-1 slot ordering (gate=slot 0, down=slot 1, up=slot 2)
+//! - The per-expert slice shape of each projection family
+//! - The expert_axis (which leading dimension is the expert count)
+//! - Anomalies: missing expert families, inconsistent expert counts across
+//!   blocks, naming pattern deviations
+//!
+//! ## What it does NOT do
+//! - It does **not** compute expert load statistics
+//! - It does **not** execute MoE routing
+//! - It does **not** estimate dequantized parameter counts beyond shape
 
 use std::collections::BTreeMap;
 

@@ -1,8 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Export layer: stable serialization of `ModelInventory` to JSON and a
-// human-readable Markdown summary. These two formats are the public
-// integration surface for sibling repositories.
+//! Markdown and JSON export writers for all xai-dissect analysis outputs.
+//!
+//! This module is the only layer that produces files on disk. It serializes
+//! the stable schema types to JSON (machine-ingest) and renders Markdown
+//! (human-review and PR discussion). Each render function is versioned and
+//! documented so downstream tooling can predict the section structure.
+//!
+//! ## Stability guarantees
+//! - Section headings in Markdown outputs are treated as stable surface
+//!   identifiers (not schema-tagged, but intentionally stable)
+//! - Filenames under `exports/` and `manifests/` follow `docs/output-conventions.md`
+//! - The JSON export schema is the normative machine-ingest contract;
+//!   Markdown is a human-readable companion, not a machine interface
+//!
+//! ## Render functions
+//! | Function | Output type | File path |
+//! |----------|-------------|-----------|
+//! | `render_inventory_markdown` | `inventory.md` | `reports/<slug>/` |
+//! | `render_expert_markdown` | `experts.md` | `reports/<slug>/` |
+//! | `render_routing_markdown` | `routing-report.md` | `reports/<slug>/` |
+//! | `render_stats_markdown` | `stats.md` | `reports/<slug>/` |
+//! | `render_saaq_readiness_markdown` | `saaq-readiness.md` | `reports/<slug>/` |
+//! | `render_pilot_selection_plan_markdown` | `pilot-selection-plan.md` | `reports/<slug>/` |
+//! | `render_route_preservation_markdown` | `route-preservation-report.md` | `reports/<slug>/` |
+//! | `render_quant_plan_markdown` | `quant-plan.md` | `reports/<slug>/` |
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
