@@ -819,6 +819,78 @@ pub struct QuantPlan {
     pub schema_version: u32,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PilotSelectionPlan {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub baseline: String,
+    pub required_validation: Grok1CoverageCounts,
+    pub selected_blocks: Vec<PilotBlockSelection>,
+    pub modes: Vec<PilotQuantizationMode>,
+    pub protection_rules: Vec<String>,
+    pub comparison_artifacts: Vec<String>,
+    pub notes: Vec<String>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PilotBlockSelection {
+    pub block_index: u32,
+    pub label: String,
+    pub rationale: String,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PilotQuantizationMode {
+    AttentionOnly,
+    ExpertOnly,
+    AttentionPlusExpert,
+}
+
+impl PilotQuantizationMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            PilotQuantizationMode::AttentionOnly => "attention_only",
+            PilotQuantizationMode::ExpertOnly => "expert_only",
+            PilotQuantizationMode::AttentionPlusExpert => "attention_plus_expert",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RoutePreservationReport {
+    pub model_family: String,
+    pub checkpoint_path: PathBuf,
+    pub baseline: String,
+    pub required_validation: Grok1CoverageCounts,
+    pub summary: Vec<RouteMetricStatus>,
+    pub router_metrics: Vec<RouteMetricStatus>,
+    pub block_metrics: Vec<RouteMetricStatus>,
+    pub weight_metrics: Vec<RouteMetricStatus>,
+    pub model_metrics: Vec<RouteMetricStatus>,
+    pub notes: Vec<String>,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RouteMetricStatus {
+    pub name: String,
+    pub scope: String,
+    pub status: MetricStatus,
+    pub threshold: Option<String>,
+    pub observed: Option<String>,
+    pub detail: String,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetricStatus {
+    Pass,
+    Fail,
+    Unknown,
+}
+
 /// Small machine-readable summary of the main findings from a single
 /// analysis artifact.
 #[derive(Clone, Debug, Serialize, Deserialize)]

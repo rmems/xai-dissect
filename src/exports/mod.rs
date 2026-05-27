@@ -13,9 +13,9 @@ use crate::inventory;
 use crate::report;
 use crate::schema::{
     CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ConversionManifest, ExpertAtlas,
-    FindingsSeverity, FindingsSummary, FindingsSummaryItem, ModelInventory, QuantPlan,
-    RoutingCriticalTensor, RoutingCriticalTensorManifest, RoutingReport, SaaqReadinessReport,
-    StatsProfileReport,
+    FindingsSeverity, FindingsSummary, FindingsSummaryItem, ModelInventory, PilotSelectionPlan,
+    QuantPlan, RoutePreservationReport, RoutingCriticalTensor, RoutingCriticalTensorManifest,
+    RoutingReport, SaaqReadinessReport, StatsProfileReport,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -286,6 +286,50 @@ pub fn write_quant_plan_bundle(
 
     let md_path = layout.reports_dir.join("quant-plan.md");
     report::write_quant_plan_markdown(quant_plan, &md_path)?;
+    bundle.written_paths.push(md_path);
+
+    Ok(bundle)
+}
+
+pub fn write_pilot_plan_bundle(
+    plan: &PilotSelectionPlan,
+    root: &Path,
+    slug_override: Option<&str>,
+) -> Result<OutputBundle> {
+    let layout = prepare_output_layout(root, &plan.checkpoint_path, slug_override)?;
+    let mut bundle = OutputBundle {
+        checkpoint_slug: layout.checkpoint_slug.clone(),
+        written_paths: Vec::new(),
+    };
+
+    let json_path = layout.manifests_dir.join("pilot-selection-plan.json");
+    report::write_pilot_selection_plan_json(plan, &json_path)?;
+    bundle.written_paths.push(json_path);
+
+    let md_path = layout.reports_dir.join("pilot-selection-plan.md");
+    report::write_pilot_selection_plan_markdown(plan, &md_path)?;
+    bundle.written_paths.push(md_path);
+
+    Ok(bundle)
+}
+
+pub fn write_route_preservation_bundle(
+    report_doc: &RoutePreservationReport,
+    root: &Path,
+    slug_override: Option<&str>,
+) -> Result<OutputBundle> {
+    let layout = prepare_output_layout(root, &report_doc.checkpoint_path, slug_override)?;
+    let mut bundle = OutputBundle {
+        checkpoint_slug: layout.checkpoint_slug.clone(),
+        written_paths: Vec::new(),
+    };
+
+    let json_path = layout.manifests_dir.join("route-preservation-report.json");
+    report::write_route_preservation_report_json(report_doc, &json_path)?;
+    bundle.written_paths.push(json_path);
+
+    let md_path = layout.reports_dir.join("route-preservation-report.md");
+    report::write_route_preservation_markdown(report_doc, &md_path)?;
     bundle.written_paths.push(md_path);
 
     Ok(bundle)

@@ -1059,6 +1059,113 @@ mod tests {
         );
     }
 
+    #[test]
+    fn saaq_readiness_promotes_resolved_grok1_families_and_keeps_protected_buckets() {
+        let inv = inventory_with_total(Vec::new(), 10_000);
+        let stats = stats_report(vec![
+            stat(
+                "block_000.slot_01.moe_expert.gate",
+                "moe_expert.gate",
+                Some(0),
+                0.02,
+                0.01,
+            ),
+            stat(
+                "block_000.slot_02.moe_expert.up",
+                "moe_expert.up",
+                Some(0),
+                0.03,
+                0.01,
+            ),
+            stat(
+                "block_000.slot_03.moe_expert.down",
+                "moe_expert.down",
+                Some(0),
+                0.03,
+                0.01,
+            ),
+            stat(
+                "block_000.slot_04.attn_proj_i8.model_width",
+                "attn_proj_i8.model_width",
+                Some(0),
+                0.01,
+                0.01,
+            ),
+            stat(
+                "block_000.slot_05.attn_proj_i8.narrow",
+                "attn_proj_i8.narrow",
+                Some(0),
+                0.01,
+                0.01,
+            ),
+            stat("block_000.slot_00.router", "router", Some(0), 0.0, 0.25),
+            stat(
+                "block_000.slot_06.block_norm",
+                "block_norm",
+                Some(0),
+                0.0,
+                0.30,
+            ),
+            stat(
+                "final_norm.slot_00.final_norm",
+                "final_norm",
+                None,
+                0.0,
+                0.30,
+            ),
+            stat(
+                "embedding.slot_00.token_embedding",
+                "token_embedding",
+                None,
+                0.01,
+                0.05,
+            ),
+        ]);
+
+        let readiness = build_saaq_readiness_report(&inv, &stats);
+
+        for kind in [
+            "moe_expert.gate",
+            "moe_expert.up",
+            "moe_expert.down",
+            "attn_proj_i8.model_width",
+            "attn_proj_i8.narrow",
+        ] {
+            assert!(
+                readiness
+                    .quantization_candidates
+                    .iter()
+                    .any(|candidate| candidate.kind_label == kind),
+                "missing quantization candidate for {kind}"
+            );
+        }
+
+        assert!(
+            readiness
+                .routing_critical_tensors
+                .iter()
+                .any(|candidate| candidate.kind_label == "router")
+        );
+        assert!(
+            readiness
+                .precision_sensitive_tensors
+                .iter()
+                .any(|candidate| candidate.kind_label == "block_norm")
+        );
+        assert!(
+            readiness
+                .precision_sensitive_tensors
+                .iter()
+                .any(|candidate| candidate.kind_label == "final_norm")
+        );
+        assert!(
+            readiness
+                .deferred_tensors
+                .iter()
+                .any(|candidate| candidate.kind_label == "token_embedding")
+        );
+    }
+
     fn inventory(tensors: Vec<TensorInfo>) -> ModelInventory {
         inventory_with_total(tensors, 32)
     }

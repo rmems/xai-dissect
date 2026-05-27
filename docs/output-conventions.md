@@ -67,6 +67,16 @@ pipeline needs a stable custom name.
 - `exports/<slug>/saaq-readiness-findings.json`
 - `manifests/<slug>/candidate-saaq-targets.json`
 
+### `pilot-plan`
+
+- `reports/<slug>/pilot-selection-plan.md`
+- `manifests/<slug>/pilot-selection-plan.json`
+
+### `route-preservation`
+
+- `reports/<slug>/route-preservation-report.md`
+- `manifests/<slug>/route-preservation-report.json`
+
 ### `quant-plan`
 
 - `reports/<slug>/quant-plan.md`

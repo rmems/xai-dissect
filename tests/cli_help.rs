@@ -9,6 +9,8 @@ fn top_level_help_lists_current_commands() {
         "routing-report",
         "stats",
         "saaq-readiness",
+        "pilot-plan",
+        "route-preservation",
         "quant-plan",
     ] {
         assert!(
@@ -26,6 +28,8 @@ fn analysis_commands_expose_output_tree_options() {
         "routing-report",
         "stats",
         "saaq-readiness",
+        "pilot-plan",
+        "route-preservation",
         "quant-plan",
     ] {
         let stdout = run_help(&[command, "--help"]);

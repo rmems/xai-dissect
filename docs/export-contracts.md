@@ -144,6 +144,20 @@ Current schema version: **2**.
 - `manifests/<slug>/candidate-saaq-targets.json`
   Contract: `schema::CandidateTensorManifest`
 
+## Pilot Planning
+
+- `manifests/<slug>/pilot-selection-plan.json`
+  Contract: `schema::PilotSelectionPlan`
+- `reports/<slug>/pilot-selection-plan.md`
+  Contract: `report::render_pilot_selection_plan_markdown`
+
+## Route Preservation Gate
+
+- `manifests/<slug>/route-preservation-report.json`
+  Contract: `schema::RoutePreservationReport`
+- `reports/<slug>/route-preservation-report.md`
+  Contract: `report::render_route_preservation_markdown`
+
 ## Quant Planning
 
 - `manifests/<slug>/conversion-manifest.json`

@@ -1,0 +1,317 @@
+=== manifests/grok-1-official__ckpt-0/route-preservation-report.json ===
+{
+  "model_family": "grok-1",
+  "checkpoint_path": "/fixtures/grok-1-official/ckpt-0",
+  "baseline": "grok1-map-v1-clean",
+  "required_validation": {
+    "blocks": 64,
+    "tensors": 770,
+    "routers": 64,
+    "expert_families": 192,
+    "unknown_tensors": 0
+  },
+  "summary": [
+    {
+      "name": "router_top1_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.0%",
+      "observed": null,
+      "detail": "Threshold reserved for downstream pilot comparison artifacts; xai-dissect defines the gate but does not execute pilot inference."
+    },
+    {
+      "name": "router_top2_set_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.5%",
+      "observed": null,
+      "detail": "Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available."
+    },
+    {
+      "name": "expert_load_distribution_delta",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Capture expert-load distribution drift once bounded pilot routing traces are available."
+    },
+    {
+      "name": "expert_load_js_divergence",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists."
+    },
+    {
+      "name": "router_logit_rank_correlation",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report rank correlation for router logits when logits are captured by downstream pilot comparisons."
+    },
+    {
+      "name": "block_output_cosine",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": ">= 0.995",
+      "observed": null,
+      "detail": "Tracked as a go/no-go threshold once bounded pilot outputs exist."
+    },
+    {
+      "name": "block_output_rmse",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report alongside cosine similarity for bounded pilot comparisons."
+    },
+    {
+      "name": "residual_stream_drift",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations."
+    },
+    {
+      "name": "weight_reconstruction_mse",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Generic reconstruction metrics remain secondary to router-behavior preservation for Grok-1 MoE validation."
+    },
+    {
+      "name": "weight_cosine_similarity",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Useful companion metric, but not sufficient by itself to clear a full quantization run."
+    },
+    {
+      "name": "weight_max_absolute_error",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas."
+    },
+    {
+      "name": "per_channel_scale_error_summary",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Summarize per-channel scale/error drift where quantization metadata is available."
+    },
+    {
+      "name": "logit_kl",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for model/logit KL when downstream pilot inference captures logits."
+    },
+    {
+      "name": "perplexity_delta",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists."
+    },
+    {
+      "name": "generation_sanity_summary",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for short generation sanity checks when pilot inference is available."
+    }
+  ],
+  "router_metrics": [
+    {
+      "name": "router_top1_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.0%",
+      "observed": null,
+      "detail": "Threshold reserved for downstream pilot comparison artifacts; xai-dissect defines the gate but does not execute pilot inference."
+    },
+    {
+      "name": "router_top2_set_agreement",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": ">= 99.5%",
+      "observed": null,
+      "detail": "Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available."
+    },
+    {
+      "name": "expert_load_distribution_delta",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Capture expert-load distribution drift once bounded pilot routing traces are available."
+    },
+    {
+      "name": "expert_load_js_divergence",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists."
+    },
+    {
+      "name": "router_logit_rank_correlation",
+      "scope": "router_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report rank correlation for router logits when logits are captured by downstream pilot comparisons."
+    }
+  ],
+  "block_metrics": [
+    {
+      "name": "block_output_cosine",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": ">= 0.995",
+      "observed": null,
+      "detail": "Tracked as a go/no-go threshold once bounded pilot outputs exist."
+    },
+    {
+      "name": "block_output_rmse",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report alongside cosine similarity for bounded pilot comparisons."
+    },
+    {
+      "name": "residual_stream_drift",
+      "scope": "block_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations."
+    }
+  ],
+  "weight_metrics": [
+    {
+      "name": "weight_reconstruction_mse",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Generic reconstruction metrics remain secondary to router-behavior preservation for Grok-1 MoE validation."
+    },
+    {
+      "name": "weight_cosine_similarity",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Useful companion metric, but not sufficient by itself to clear a full quantization run."
+    },
+    {
+      "name": "weight_max_absolute_error",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas."
+    },
+    {
+      "name": "per_channel_scale_error_summary",
+      "scope": "weight_reconstruction",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Summarize per-channel scale/error drift where quantization metadata is available."
+    }
+  ],
+  "model_metrics": [
+    {
+      "name": "logit_kl",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for model/logit KL when downstream pilot inference captures logits."
+    },
+    {
+      "name": "perplexity_delta",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists."
+    },
+    {
+      "name": "generation_sanity_summary",
+      "scope": "model_behavior",
+      "status": "unknown",
+      "threshold": null,
+      "observed": null,
+      "detail": "Report-only placeholder for short generation sanity checks when pilot inference is available."
+    }
+  ],
+  "notes": [
+    "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.",
+    "Statuses remain unknown until downstream pilot artifacts supply the observed values."
+  ],
+  "schema_version": 1
+}
+
+=== reports/grok-1-official__ckpt-0/route-preservation-report.md ===
+# xai-dissect Grok-1 route-preservation report
+
+- **model_family**: `grok-1`
+- **checkpoint**: `/fixtures/grok-1-official/ckpt-0`
+- **baseline**: `grok1-map-v1-clean`
+- **schema_version**: 1
+
+
+## Router metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `router_top1_agreement` | router_behavior | unknown | >= 99.0% | - | Threshold reserved for downstream pilot comparison artifacts; xai-dissect defines the gate but does not execute pilot inference. |
+| `router_top2_set_agreement` | router_behavior | unknown | >= 99.5% | - | Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available. |
+| `expert_load_distribution_delta` | router_behavior | unknown | - | - | Capture expert-load distribution drift once bounded pilot routing traces are available. |
+| `expert_load_js_divergence` | router_behavior | unknown | - | - | Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists. |
+| `router_logit_rank_correlation` | router_behavior | unknown | - | - | Report rank correlation for router logits when logits are captured by downstream pilot comparisons. |
+
+## Block metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `block_output_cosine` | block_behavior | unknown | >= 0.995 | - | Tracked as a go/no-go threshold once bounded pilot outputs exist. |
+| `block_output_rmse` | block_behavior | unknown | - | - | Report alongside cosine similarity for bounded pilot comparisons. |
+| `residual_stream_drift` | block_behavior | unknown | - | - | Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations. |
+
+## Weight metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `weight_reconstruction_mse` | weight_reconstruction | unknown | - | - | Generic reconstruction metrics remain secondary to router-behavior preservation for Grok-1 MoE validation. |
+| `weight_cosine_similarity` | weight_reconstruction | unknown | - | - | Useful companion metric, but not sufficient by itself to clear a full quantization run. |
+| `weight_max_absolute_error` | weight_reconstruction | unknown | - | - | Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas. |
+| `per_channel_scale_error_summary` | weight_reconstruction | unknown | - | - | Summarize per-channel scale/error drift where quantization metadata is available. |
+
+## Model metrics
+
+| Metric | Scope | Status | Threshold | Observed | Detail |
+| ------ | ----- | ------ | --------- | -------- | ------ |
+| `logit_kl` | model_behavior | unknown | - | - | Report-only placeholder for model/logit KL when downstream pilot inference captures logits. |
+| `perplexity_delta` | model_behavior | unknown | - | - | Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists. |
+| `generation_sanity_summary` | model_behavior | unknown | - | - | Report-only placeholder for short generation sanity checks when pilot inference is available. |
+
+## Notes
+
+- This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.
+- Statuses remain unknown until downstream pilot artifacts supply the observed values.

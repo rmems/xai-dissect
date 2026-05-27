@@ -53,7 +53,10 @@ Main commands:
 - `routing-report`: routing/gating structure inspection
 - `stats`: offline tensor-statistics profiling
 - `saaq-readiness`: candidate scouting for future SAAQ work
+- `pilot-plan`: planning-side Grok-1 representative block pilot selection artifact
+- `route-preservation`: planning-side Grok-1 route-preservation gate report
 - `quant-plan`: deterministic Grok-1 conversion and policy-planning artifacts
+- `docs/GO_NO_GO.md`: explicit Grok-1 quantization decision gate checklist
 
 ## Usage Examples
 
