@@ -17,6 +17,16 @@
       "rationale": "early baseline"
     },
     {
+      "block_index": 8,
+      "label": "block_008",
+      "rationale": "near-zero-sensitive router"
+    },
+    {
+      "block_index": 28,
+      "label": "block_028",
+      "rationale": "near-zero-sensitive router"
+    },
+    {
       "block_index": 60,
       "label": "block_060",
       "rationale": "high readiness/routing-critical sample"
@@ -34,7 +44,8 @@
   ],
   "protection_rules": [
     "router tensors must remain untouched in every first-pass pilot",
-    "block_norm and final_norm tensors must remain untouched in every first-pass pilot"
+    "block_norm and final_norm tensors must remain untouched in every first-pass pilot",
+    "pilot artifacts must be emitted per mode and remain comparable across selected blocks"
   ],
   "comparison_artifacts": [
     "pilot-selection-plan.json",
@@ -43,7 +54,8 @@
     "route-preservation-report.md"
   ],
   "notes": [
-    "This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime."
+    "This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime.",
+    "Use the selected blocks and protected-family rules to drive downstream bounded pilot runs."
   ],
   "schema_version": 1
 }
@@ -61,6 +73,8 @@
 | Block | Label | Rationale |
 | ----: | ----- | --------- |
 | 0 | `block_000` | early baseline |
+| 8 | `block_008` | near-zero-sensitive router |
+| 28 | `block_028` | near-zero-sensitive router |
 | 60 | `block_060` | high readiness/routing-critical sample |
 | 63 | `block_063` | late-layer / high peak-to-rms router region |
 
@@ -74,6 +88,7 @@
 
 - router tensors must remain untouched in every first-pass pilot
 - block_norm and final_norm tensors must remain untouched in every first-pass pilot
+- pilot artifacts must be emitted per mode and remain comparable across selected blocks
 
 ## Expected comparison artifacts
 
@@ -85,3 +100,4 @@
 ## Notes
 
 - This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime.
+- Use the selected blocks and protected-family rules to drive downstream bounded pilot runs.

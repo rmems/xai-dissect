@@ -1412,6 +1412,30 @@ pub fn build_grok1_route_preservation_report(
             observed: None,
             detail: "Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available.".to_string(),
         },
+        RouteMetricStatus {
+            name: "expert_load_distribution_delta".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Capture expert-load distribution drift once bounded pilot routing traces are available.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "expert_load_js_divergence".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "router_logit_rank_correlation".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report rank correlation for router logits when logits are captured by downstream pilot comparisons.".to_string(),
+        },
     ];
     let block_metrics = vec![
         RouteMetricStatus {
@@ -1430,6 +1454,14 @@ pub fn build_grok1_route_preservation_report(
             observed: None,
             detail: "Report alongside cosine similarity for bounded pilot comparisons.".to_string(),
         },
+        RouteMetricStatus {
+            name: "residual_stream_drift".to_string(),
+            scope: "block_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations.".to_string(),
+        },
     ];
     let weight_metrics = vec![
         RouteMetricStatus {
@@ -1447,6 +1479,46 @@ pub fn build_grok1_route_preservation_report(
             threshold: None,
             observed: None,
             detail: "Useful companion metric, but not sufficient by itself to clear a full quantization run.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "weight_max_absolute_error".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "per_channel_scale_error_summary".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Summarize per-channel scale/error drift where quantization metadata is available.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "logit_kl".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for model/logit KL when downstream pilot inference captures logits.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "perplexity_delta".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "generation_sanity_summary".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for short generation sanity checks when pilot inference is available.".to_string(),
         },
     ];
     let mut summary = Vec::new();
