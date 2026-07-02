@@ -38,7 +38,7 @@ format is:
 ```text
 \x80\x04           PROTO magic (version 4)
 <opcode stream>   variable-length opcode encoding
-\x94              STOP opcode
++\x2e              STOP opcode
 ```
 
 Each ndarray in the stream is encoded as a `GLOBAL` or `REDUCE` opcode
