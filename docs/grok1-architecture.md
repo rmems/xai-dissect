@@ -86,7 +86,7 @@ separate `numpy.ndarray` reduce sites on disk:
 
 1. **The int8 weight body** — the first ndarray reduce site in the shard.
    This is what the parser records as `role = quant.weight`. Shape is
-   `(E, d_ff, d_model)` for up/gate and `(E, d_model, d_ff)` for down,
+   `(E, d_model, d_ff)` for up/gate and `(E, d_ff, d_model)` for down,
    where `E = n_experts = 8`.
 2. **The f32 scales / zero-points** — the second ndarray reduce site.
    This is recorded as `role = quant.scales`. Shape varies (the two
