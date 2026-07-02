@@ -17,7 +17,7 @@
 //! | `RoutingReport` | 1 | — |
 //! | `StatsProfileReport` | 1 | — |
 //! | `SaaqReadinessReport` | 1 | — |
-//! | `Grok1CoverageManifest` | 2 | 1 | (two independent version fields)
+//! | `Grok1CoverageManifest` | 2 | 2 | (two independent version fields)
 //! | `ConversionManifest` | 1 | — |
 //! | `QuantPlan` | 1 | — |
 //! | `PilotSelectionPlan` | 1 | — |
