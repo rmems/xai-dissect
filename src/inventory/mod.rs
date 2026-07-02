@@ -4,7 +4,7 @@
 //! applies shape-based semantic classification, and groups tensors into
 //! transformer blocks.
 //!
-//! ## Two-pass hyperparameter inference
+//! ## Three-step hyperparameter inference
 //! 1. The largest 2-D f32 bare tensor fixes `vocab_size` and `d_model`.
 //! 2. The first 3-D int8 quant_weight tensor fixes `n_experts` and `d_ff`.
 //! 3. Shard layout check derives `n_blocks` from the Grok-1 K=12 rule.

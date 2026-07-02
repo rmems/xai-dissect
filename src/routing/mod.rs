@@ -10,9 +10,9 @@
 //! ## Router identification
 //! A router tensor is identified as a bare f32 2-D tensor with shape
 //! `(d_model, n_experts)` where the inferred expert count matches the
-//! inventory's n_experts. For Grok-1 this is `(6144, 8)`. The leading
-//! dimension (expert_axis=1) determines the routing orientation:
-//! `ExpertsToDModel` if d_model is trailing, `DModelToExperts` if leading.
+//! inventory's n_experts. For Grok-1 this is `(6144, 8)` with d_model
+//! leading and experts trailing (`DModelToExperts`). If the expert count
+//! appears on the leading axis instead, orientation is `ExpertsToDModel`.
 //!
 //! ## RoutingCriticalTensorManifest
 //! The manifest at `manifests/<slug>/routing-critical-tensors.json` is the

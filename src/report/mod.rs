@@ -17,7 +17,7 @@
 //! ## Render functions
 //! | Function | Output type | File path |
 //! |----------|-------------|-----------|
-//! | `render_inventory_markdown` | `inventory.md` | `reports/<slug>/` |
+//! | `render_markdown` | `inventory.md` | `reports/<slug>/` |
 //! | `render_expert_markdown` | `experts.md` | `reports/<slug>/` |
 //! | `render_routing_markdown` | `routing-report.md` | `reports/<slug>/` |
 //! | `render_stats_markdown` | `stats.md` | `reports/<slug>/` |

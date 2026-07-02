@@ -6,7 +6,7 @@
 //!
 //! | Command | Driven by | Produces |
 //! |---------|----------|---------|
-//! | `dissect` | `parser::parse_single_shard` | Raw tensor table (no classification) |
+//! | `dissect` | `parser::dissect_shard` | Raw tensor table (no classification) |
 //! | `inventory` | `inventory::build_inventory` | Full tensor catalog + coverage manifest |
 //! | `experts` | `experts::build_expert_atlas` | Expert atlas |
 //! | `routing-report` | `routing::build_routing_report` | Routing structure + critical-tensors manifest |
