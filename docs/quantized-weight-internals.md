@@ -20,15 +20,15 @@ pickle stream:
 
 | Reduce site order | Role | dtype | Shape | xai-dissect role |
 |-----------------|------|-------|-------|-----------------|
-| 1st in shard | int8 weight body | i8 | `(E, d_ff, d_model)` or `(E, d_model, d_ff)` | `quant.weight` |
+| 1st in shard | int8 weight body | i8 | `(E, d_model, d_ff)` for gate/up; `(E, d_ff, d_model)` for down | `quant.weight` |
 | 2nd in shard | quantization scales | f32 | varies | `quant.scales` |
-| 3rd in shard | min values (asymmetric) | f32 | varies | `quant.scales` |
+| 3rd in shard | min values (asymmetric) | f32 | varies | bare `tensor` |
 
 `xai-dissect` does **not** decode the internal structure of this
 dataclass. It records each top-level ndarray reduce site as a separate
 `TensorInfo` record, preserving the pairing through the shard boundary
-(the `quant.weight` and both `quant.scales` records share the same
-`shard_path`).
+(the `quant.weight` and `quant.scales` records share the same `shard_path`;
+additional f32 ndarrays remain bare `tensor` records).
 
 ## PROTO 4 pickle framing
 
@@ -38,7 +38,7 @@ format is:
 ```text
 \x80\x04           PROTO magic (version 4)
 <opcode stream>   variable-length opcode encoding
-+\x2e              STOP opcode
+\x2e              STOP opcode
 ```
 
 Each ndarray in the stream is encoded as a `GLOBAL` or `REDUCE` opcode
@@ -67,21 +67,25 @@ The parser (`src/parser/mod.rs`) processes each shard as follows:
 1. Memory-map the shard file.
 2. Verify `\x80\x04` at the head — reject if not PROTO 4.
 3. Walk the opcode stream left-to-right.
-4. For each `numpy.ndarray` reduce site found, emit a `RawTensor`:
-   - `role = quant.weight` if it is the first ndarray in the shard
-   - `role = quant.scales` if it is the second ndarray in the shard
-   - `role = quant.scales` if it is the third ndarray in the shard
-5. The role assignment is structural — it does not examine the ndarray
-   dtype or contents.
+4. For each `QuantizedWeight8bit` reduce site, assign roles by dtype:
+   - `role = quant.weight` for the `i8` ndarray in the site
+   - `role = quant.scales` for the first `f32` ndarray after that `i8`
+     body within the same site
+   - any additional `f32` ndarrays in the site remain bare `tensor`
+5. The role assignment is dtype-aware — it does not rely on ndarray
+   order alone.
 
-This means every Grok-1 MoE/attention shard produces three separate
-records. Grok-1 never stores bare weight tensors mixed with quantized
-ones in the same shard file — the pairing is always within a single shard.
+This means every Grok-1 MoE/attention shard produces multiple records
+(typically three ndarray reduce sites, with one `quant.weight`, one
+`quant.scales`, and any remaining f32 leaves as bare `tensor`). Grok-1
+never stores bare weight tensors mixed with quantized ones in the same
+shard file — the pairing is always within a single shard.
 
 ## Why shape alone cannot disambiguate gate from up
 
-The gate and up projections both have the outer shape `(E=8, d_model=6144)`
-in Grok-1. When `xai-dissect` first encounters a 3-D int8 `quant.weight`
+The gate and up projections both have the outer shape
+`(E=8, d_model=6144, d_ff=32768)` in Grok-1. When `xai-dissect` first
+encounters a 3-D int8 `quant.weight`
 with `dims[0] == n_experts == 8`, it initially assigns
 `MoeExpertProjection { projection: unresolved }`. The resolved projection
 labels (gate, down, up) are applied later by the block-slot assignment
@@ -123,7 +127,7 @@ the parser. Both variants produce identical `role = quant.weight` records.
 Int8 quantization was chosen for the expert projections because:
 
 - Memory: 8 experts × 32,768 FFN width × 6,144 model width × 1 byte =
-  1.6 GiB per projection family per layer, vs 6.4 GiB for FP32. The
+  1.5 GiB per projection family per layer, vs 6.0 GiB for FP32. The
   memory savings enable fitting the full model in GPU memory.
 - Bandwidth: Router computations are memory-bandwidth-bound. Int8
   weight reads reduce bandwidth by 4×.

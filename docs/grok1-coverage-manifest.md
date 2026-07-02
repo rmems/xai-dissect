@@ -100,18 +100,28 @@ over a **canonical structural view** that excludes:
 - Field ordering (JSON field order must be canonical)
 - `offset` and `nbytes` (may vary slightly across filesystem block sizes)
 
-The canonical view includes only:
-1. `shard_ordinal` (stable 0-based index)
-2. `in_shard_index` (stable intra-shard index)
-3. `kind.kind` (the classification discriminant)
-4. `kind.detail` (the classification detail, if present)
-5. `shape` (the tensor shape as a list of u64 dimensions)
-6. `role` (parser-level role: tensor / quant_weight / quant_scales)
-7. `dtype` (f32 / i8)
+The canonical view is a newline-delimited text blob hashed with FNV-1a
+64-bit. It includes:
 
-For each tensor, these fields are serialized in a fixed order and
-concatenated into a byte sequence. The full inventory's canonical view
-bytes are then hashed with FNV-1a 64-bit.
+1. **Header lines** (fixed order):
+   - `model_family=<value>`
+   - `schema_version=<value>`
+   - `blocks=<discovered.blocks>`
+   - `tensors=<discovered.tensors>`
+   - `routers=<discovered.routers>`
+   - `expert_families=<discovered.expert_families>`
+   - `unknown_tensors=<discovered.unknown_tensors>`
+2. **Per-tensor lines** (sorted lexicographically), one per inventory
+   tensor, formatted as:
+   `tensor|<structural_name>|<shard_ordinal>|<in_shard_index>|<role>|<dtype>|<shape>|<kind>`
+   where `structural_name` is the block/slot label (for example
+   `block_000.slot_11.router`), `shape` is the rendered dimension list,
+   and `kind` is the short classification label.
+3. **Unknown-slot lines** (if any), formatted as
+   `unknown|<structural_name>|<reason>`.
+
+Machine-local fields (`shard_path`, `checkpoint_path`, `offset`, `nbytes`)
+are excluded. The full canonical text is then hashed with FNV-1a 64-bit.
 
 This means: the checksum is stable across different machine paths,
 different checkpoint directory names, and minor filesystem differences,
@@ -176,7 +186,7 @@ Complete 22-line file from `out/grok1_run2_after_fixes_20260525T002904Z/`:
 {
   "model_family": "grok-1",
   "schema_version": 2,
-  "coverage_schema_version": 1,
+  "coverage_schema_version": 2,
   "validation": "pass",
   "checksum": "fnv1a64:de5a1c978121c62c",
   "expected": {
@@ -191,7 +201,7 @@ Complete 22-line file from `out/grok1_run2_after_fixes_20260525T002904Z/`:
 }
 ```
 
-The two `coverage_schema_version` values distinguish the coverage
-manifest schema (`coverage_schema_version = 1`) from the outer
-`ModelInventory` schema (`schema_version = 2`). This allows the two
-versions to evolve independently.
+The two version fields distinguish the coverage manifest schema
+(`coverage_schema_version = 2`) from the outer `ModelInventory` schema
+(`schema_version = 2`). This allows the two versions to evolve
+independently.

@@ -24,11 +24,14 @@
 //! ## Role assignment for QuantizedWeight8bit
 //! Every shard file containing a Grok-1 MoE expert or attention projection
 //! is a `QuantizedWeight8bit` dataclass. In the pickle stream this produces
-//! three top-level ndarray reduce sites: the int8 weight body (first),
-//! the f32 quantization scales (second), and the per-min values (third).
-//! The parser assigns `role = quant_weight` to the first ndarray and
-//! `role = quant_scales` to the second and third. The pairing is preserved
-//! through the shard boundary — all three records share the same shard path.
+//! multiple ndarray reduce sites within each `QuantizedWeight8bit` site: an
+//! int8 weight body, one or more f32 quantization side-data arrays, and
+//! sometimes additional f32 leaves (for example per-expert minimum values).
+//! `assign_qw8_roles` marks the `i8` ndarray as `quant_weight` and only the
+//! first `f32` ndarray after it as `quant_scales`; any additional `f32`
+//! ndarrays in the same site remain bare `tensor`. The pairing is preserved
+//! through the shard boundary — all records from the site share the same
+//! shard path.
 //!
 //! ## Output
 //! Emits `RawTensor` records: `role`, `dtype`, `shape`, `offset`, `nbytes`.

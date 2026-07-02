@@ -65,7 +65,7 @@ knows exactly which tensors must be preserved as FP32.
 
 **Threshold**: `>= 99.5%`
 
-### Definition
+### Definition (Router top-2 set agreement)
 
 The top-2 set is the unordered pair of the two highest-logit experts.
 Even if the top-1 expert differs, the set agreement measures whether the
@@ -132,7 +132,7 @@ indicate that quantization error is compounding across layers. This
 threshold is conservative for Grok-1's 64-layer depth; accumulated error
 across 64 layers at 0.99 per layer would be catastrophic.
 
-### Responsible downstream repo
+### Responsible downstream repo (Block output cosine)
 
 **grok-ozempic** — it captures intermediate activation tensors from the
 bounded pilot runs and computes the per-block cosine similarity.

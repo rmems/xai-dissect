@@ -766,7 +766,7 @@ This is the complete 22-line file from the real Grok-1 run:
 {
   "model_family": "grok-1",
   "schema_version": 2,
-  "coverage_schema_version": 1,
+  "coverage_schema_version": 2,
   "validation": "pass",
   // FNV-1a 64-bit checksum over canonical structural tensor representation
   "checksum": "fnv1a64:de5a1c978121c62c",

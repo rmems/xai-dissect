@@ -737,7 +737,7 @@ pub struct Grok1CoverageManifest {
     /// Schema version for the outer ModelInventory. Grok-1 uses schema_version = 2.
     pub schema_version: u32,
     /// Independent schema version for the coverage sub-structure. Grok-1 uses
-    /// coverage_schema_version = 1. These two version fields evolve independently.
+    /// coverage_schema_version = 2. These two version fields evolve independently.
     pub coverage_schema_version: u32,
     /// Validation result. "pass" if all checks succeed, "fail" otherwise.
     /// Downstream consumers must reject bundles where this is not "pass".

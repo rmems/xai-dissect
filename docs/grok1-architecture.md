@@ -37,8 +37,8 @@ This is the `K = 12` constant hard-coded in the Grok-1 coverage validator
 | 2 | 1 | MoE expert projection | `(8, 6144, 32768)` | int8 | quantized `quant.weight` |
 | 3–4 | 2 | Attention projection | `(6144, 6144)` | int8 | quantized `quant.weight` (model-width) |
 | 5–6 | 2 | Attention projection | `(6144, 1024)` | int8 | quantized `quant.weight` (narrow) |
-| 7 | 1 | Router / gate | `(6144, 8)` | f32 | bare `tensor` |
-| 8–11 | 4 | RMSNorm | `(6144,)` | f32 | bare `tensor` |
+| 7–10 | 4 | RMSNorm | `(6144,)` | f32 | bare `tensor` |
+| 11 | 1 | Router / gate | `(6144, 8)` | f32 | bare `tensor` |
 | (norm singletons) | 1 | Final pre-head norm | `(6144,)` | f32 | bare `tensor` |
 | (embedding) | 1 | Token embedding | `(131072, 6144)` | f32 | bare `tensor` |
 
@@ -84,26 +84,26 @@ per-element f32 quantization scales.
 When this dataclass is saved to a pickle shard, it appears as three
 separate `numpy.ndarray` reduce sites on disk:
 
-1. **The int8 weight body** — the first ndarray reduce site in the shard.
-   This is what the parser records as `role = quant.weight`. Shape is
-   `(E, d_model, d_ff)` for up/gate and `(E, d_ff, d_model)` for down,
-   where `E = n_experts = 8`.
-2. **The f32 scales / zero-points** — the second ndarray reduce site.
-   This is recorded as `role = quant.scales`. Shape varies (the two
-   1.5 GiB shard variants differ by exactly 262,144 bytes — 65,536 f32
-   values — due to different quantization side-data shapes across the
-   three expert projection families).
-3. **The per-expert minimum values** (for the down projection only, due to
-   the asymmetric quantization layout used in Grok-1's `QuantizedWeight8bit`
-   dataclass). This is also `role = quant.scales` and appears in the same
-   shard.
+1. **The int8 weight body** — the ndarray with `dtype = i8` in each
+   `QuantizedWeight8bit` reduce site. The parser records this as
+   `role = quant.weight`. Shape is `(E, d_model, d_ff)` for gate/up and
+   `(E, d_ff, d_model)` for down, where `E = n_experts = 8`.
+2. **The f32 scales / zero-points** — the first f32 ndarray after the
+   int8 weight body in the same reduce site. The parser records this as
+   `role = quant.scales`. Shape varies (the two 1.5 GiB shard variants
+   differ by exactly 262,144 bytes — 65,536 f32 values — due to different
+   quantization side-data shapes across the three expert projection
+   families).
+3. **Additional f32 ndarrays** (for example per-expert minimum values in
+   the down projection's asymmetric quantization layout) remain bare
+   `role = tensor` records in the same shard.
 
 `xai-dissect` **does not decode the internal structure of the
-QuantizedWeight8bit dataclass**. It only records the two top-level ndarray
-reduce sites as separate tensor records. The pairing of `quant.weight`
-with its companion `quant.scales` is preserved by the shard grouping (both
-appear in the same shard file), but the exact internal layout is opaque
-to the parser.
+QuantizedWeight8bit dataclass**. It emits one `quant.weight` and at most
+one `quant.scales` record per reduce site, using dtype-aware role
+assignment. The pairing is preserved by the shard grouping (all records
+share the same shard file), but the exact internal layout is opaque to
+the parser.
 
 ## How xai-dissect maps shards to architecture
 
@@ -123,8 +123,9 @@ type before reading any shard body:
 | 24,727 B | RMSNorm vector `(6144,) f32` | 257 |
 
 The two model-width attention buckets (37,847,359 and 37,761,334) both
-have shape `(6144, 6144)`. The two narrow buckets (6,293,814 and its
-sibling) both have shape `(6144, 1024)`. Q/K/V/O disambiguation is not
+have shape `(6144, 6144)`. Both narrow attention projections share the
+single narrow bucket size (6,293,814 B) and shape `(6144, 1024)`. Q/K/V/O
+disambiguation is not
 attempted by `xai-dissect` — those roles are downstream disambiguation
 problems for `grok-ozempic`.
 
