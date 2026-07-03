@@ -76,8 +76,9 @@ This means:
 
 ## The QuantizedWeight8bit structure
 
-Grok-1 does not store any weight tensor as bare FP32. The MoE expert
-projections and attention projections are stored as `QuantizedWeight8bit`
+Grok-1 does not store MoE expert or attention weight tensors as bare
+FP32. Routers, norms, and the token embedding remain bare FP32. The MoE
+expert projections and attention projections are stored as `QuantizedWeight8bit`
 dataclass instances — a JAX-specific packing of an int8 weight body plus
 per-element f32 quantization scales.
 
