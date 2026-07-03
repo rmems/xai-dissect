@@ -16,3 +16,8 @@ ckpt-*/
 *.tar
 *.tar.gz
 *.zip
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
