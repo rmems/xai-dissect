@@ -35,8 +35,8 @@ This is the `K = 12` constant hard-coded in the Grok-1 coverage validator
 | 0 | 1 | MoE expert projection | `(8, 6144, 32768)` | int8 | quantized `quant.weight` |
 | 1 | 1 | MoE expert projection | `(8, 32768, 6144)` | int8 | quantized `quant.weight` |
 | 2 | 1 | MoE expert projection | `(8, 6144, 32768)` | int8 | quantized `quant.weight` |
-| 3–4 | 2 | Attention projection | `(6144, 6144)` | int8 | quantized `quant.weight` (model-width) |
-| 5–6 | 2 | Attention projection | `(6144, 1024)` | int8 | quantized `quant.weight` (narrow) |
+| 3, 6 | 2 | Attention projection | `(6144, 1024)` | int8 | quantized `quant.weight` (narrow) |
+| 4–5 | 2 | Attention projection | `(6144, 6144)` | int8 | quantized `quant.weight` (model-width) |
 | 7–10 | 4 | RMSNorm | `(6144,)` | f32 | bare `tensor` |
 | 11 | 1 | Router / gate | `(6144, 8)` | f32 | bare `tensor` |
 | (norm singletons) | 1 | Final pre-head norm | `(6144,)` | f32 | bare `tensor` |

@@ -98,7 +98,8 @@ over a **canonical structural view** that excludes:
 - `shard_path` (machine-local, not portable)
 - `checkpoint_path` (machine-local, not portable)
 - Field ordering (JSON field order must be canonical)
-- `offset` and `nbytes` (may vary slightly across filesystem block sizes)
+- `offset` and `nbytes` (pickle-framing implementation details, not
+  structural tensor properties)
 
 The canonical view is a newline-delimited text blob hashed with FNV-1a
 64-bit. It includes:
