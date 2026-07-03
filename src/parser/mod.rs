@@ -21,6 +21,7 @@
 //!    \x87 [\x94] R`.
 //! 2. The array payload is always emitted immediately after the fortran
 //!    bool: `[\x88|\x89] <C|B|\x8e> <len> <raw bytes>`.
+//!
 //! ## Role assignment for QuantizedWeight8bit
 //! Every shard file containing a Grok-1 MoE expert or attention projection
 //! is a `QuantizedWeight8bit` dataclass. In the pickle stream this produces
