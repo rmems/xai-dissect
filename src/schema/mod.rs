@@ -1,9 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Core schema types used across the parser, inventory, analysis, and export
-// layers. Any type that is serialized to an export artifact (JSON / CSV /
-// Markdown) must live here, must derive `Serialize`, and must be stable
-// across patch releases.
+//! Stable schema types for all xai-dissect export artifacts.
+//!
+//! Any type serialized to a JSON / CSV / Markdown export artifact lives
+//! here. All such types derive `Serialize` and `Deserialize` and must remain
+//! stable across patch releases. The schema version discipline is:
+//! - `schema_version` bumps on any incompatible JSON shape change
+//! - `coverage_schema_version` is independent — tracks the coverage
+//!   manifest sub-structure separately
+//!
+//! ## Schema version map
+//! | Document | schema_version | coverage_schema_version |
+//! |----------|----------------|------------------------|
+//! | `ModelInventory` | 2 | — |
+//! | `ExpertAtlas` | 1 | — |
+//! | `RoutingReport` | 1 | — |
+//! | `StatsProfileReport` | 1 | — |
+//! | `SaaqReadinessReport` | 1 | — |
+//! | `Grok1CoverageManifest` | 2 | 2 | (two independent version fields)
+//! | `ConversionManifest` | 1 | — |
+//! | `QuantPlan` | 1 | — |
+//! | `PilotSelectionPlan` | 1 | — |
+//! | `RoutePreservationReport` | 1 | — |
+//! | `RoutingCriticalTensorManifest` | 1 | — |
+//!
+//! ## Key constants
+//! `GROK1_BASELINE_PROFILE = "grok1-map-v1-clean"` is the canonical baseline
+//! profile for Grok-1 ckpt-0. Downstream tools should reject bundles whose
+//! coverage validation is not `"pass"` and whose unknown_tensors is not 0.
 
 use std::path::PathBuf;
 
@@ -205,25 +229,34 @@ impl MoeProjection {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TensorInfo {
     /// Absolute path of the shard file on disk.
+    /// Note: machine-local path — downstream consumers use shard_ordinal +
+    /// in_shard_index as the stable tensor identity, not this field.
     pub shard_path: PathBuf,
     /// 0-based ordinal of the shard in the checkpoint's sorted shard list.
+    /// Stable across reruns and across machines — use this, not shard_path,
+    /// as the portable tensor identifier.
     pub shard_ordinal: u32,
-    /// 0-based index within the shard (in the order tensors were found).
+    /// 0-based index of the tensor within the shard (shards can hold >1
+    /// tensor for QuantizedWeight8bit dataclasses).
     pub in_shard_index: u32,
+    /// Parser-level role tag: bare ndarray, int8 weight body, or f32 scales.
     pub role: TensorRole,
+    /// Numpy-style dtype on disk.
     pub dtype: TensorDType,
+    /// Row-major shape as stored in the pickle stream.
     pub shape: TensorShape,
     /// Byte offset of the raw payload within the shard file.
     pub offset: u64,
     /// Payload length in bytes.
     pub nbytes: u64,
-    /// Inferred semantic classification.
+    /// Semantic classification inferred from rank, dtype, and shape.
     pub kind: TensorKind,
-    /// Inferred block (transformer layer) index, if assignable.
+    /// 0-based transformer block index, if assignable from shard layout.
+    /// Null for embedding and final norm singletons.
     pub block_index: Option<u32>,
-    /// Position within the block's shard ordering, if assignable.
-    /// Useful for disambiguating multiple tensors of the same kind inside
-    /// one block (e.g. the two `AttnProjF32` tensors per layer).
+    /// Position of this tensor within its block's shard ordering (0–11 for
+    /// Grok-1). Useful for disambiguating multiple tensors of the same kind
+    /// within one block (e.g., the four BlockNorm tensors per layer).
     pub block_slot: Option<u32>,
 }
 
@@ -692,35 +725,65 @@ pub struct CheckpointInventoryBlockSnapshot {
 /// Fail-closed Grok-1 coverage manifest for complete checkpoint inventories.
 /// The checksum is computed over a canonical, path-independent view of the
 /// structural tensor table so downstream tools can compare reruns.
+/// Downstream consumers must require: validation = "pass", expected == discovered,
+/// and unknown_slots = [] before treating a bundle as valid for grok-ozempic.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Grok1CoverageManifest {
+    /// Always "grok-1" for Grok-1 coverage manifests.
     pub model_family: String,
+    /// The baseline profile name. Always "grok1-map-v1-clean" for Grok-1.
     #[serde(default = "default_grok1_baseline_profile")]
     pub baseline_profile: String,
+    /// Schema version for the outer ModelInventory. Grok-1 uses schema_version = 2.
     pub schema_version: u32,
+    /// Independent schema version for the coverage sub-structure. Grok-1 uses
+    /// coverage_schema_version = 2. These two version fields evolve independently.
     pub coverage_schema_version: u32,
+    /// Validation result. "pass" if all checks succeed, "fail" otherwise.
+    /// Downstream consumers must reject bundles where this is not "pass".
     pub validation: String,
+    /// FNV-1a 64-bit checksum over the canonical structural tensor representation.
+    /// Format: "fnv1a64:<hex>". See docs/grok1-coverage-manifest.md for algorithm.
     pub checksum: String,
+    /// The grok1-map-v1-clean expected counts: blocks=64, tensors=770,
+    /// routers=64, expert_families=192, unknown_tensors=0.
     pub expected: Grok1CoverageCounts,
+    /// What was actually discovered in the parsed inventory. Must equal expected.
     pub discovered: Grok1CoverageCounts,
+    /// List of tensors that could not be classified. Empty array is required.
     pub unknown_slots: Vec<Grok1UnknownSlot>,
 }
 
+/// The five validation dimensions for the grok1-map-v1-clean baseline profile.
+/// See docs/grok1-coverage-manifest.md for definitions of each dimension.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Grok1CoverageCounts {
+    /// Must be 64 for Grok-1 ckpt-0.
     pub blocks: u32,
+    /// Must be 770 for Grok-1 ckpt-0 (1 embedding + 768 block shards + 1 final norm).
     pub tensors: u64,
+    /// Must be 64 for Grok-1 ckpt-0 (one router per block).
     pub routers: u64,
+    /// Must be 192 for Grok-1 ckpt-0 (3 projection families gate/down/up × 64 layers).
     pub expert_families: u64,
+    /// Must be 0. Any unknown tensor means the classifier encountered an unexpected
+    /// shape/dtype combination — quantization risk.
     pub unknown_tensors: u64,
 }
 
+/// A tensor that could not be classified by the inventory layer.
+/// Used in Grok1CoverageManifest.unknown_slots to report what is missing.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Grok1UnknownSlot {
+    /// The structural name assigned before the classification failure.
     pub structural_name: String,
+    /// The block index of the unclassified tensor, if assignable.
     pub block_index: Option<u32>,
+    /// The block slot of the unclassified tensor, if assignable.
     pub block_slot: Option<u32>,
+    /// The tensor shape that triggered the Unknown classification.
     pub shape: TensorShape,
+    /// The reason the classifier could not resolve this tensor.
     pub reason: String,
 }
 
@@ -728,21 +791,38 @@ fn default_grok1_baseline_profile() -> String {
     GROK1_BASELINE_PROFILE.to_string()
 }
 
-/// Machine-readable routing-critical tensor list for downstream
-/// compression / orchestration tooling.
+/// Machine-readable routing-critical tensor list for downstream compression
+/// and orchestration tooling. This is the normative machine-ingest artifact
+/// for the grok-ozempic handoff; the human-readable companion is
+/// `routing-report.md`. Downstream consumers must use the stable ingest fields
+/// (shard_ordinal, in_shard_index, structural_name, orientation,
+/// linked_expert_count, block_index, block_slot) — criticality_reason is for
+/// human review only.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RoutingCriticalTensorManifest {
+    /// Always "grok-1" for Grok-1 routing manifests.
     pub model_family: String,
+    /// Machine-local path of the checkpoint directory. Not portable across
+    /// environments — do not use as a cache key or artifact identifier.
     pub checkpoint_path: PathBuf,
+    /// The 64 router tensors, one per transformer block.
     pub tensors: Vec<RoutingCriticalTensor>,
     pub schema_version: u32,
 }
 
+/// A single routing-critical tensor. These tensors must remain FP32 in the
+/// first pilot pass to preserve routing behavior. See
+/// docs/metric-definitions.md for why router quantization is sensitive.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RoutingCriticalTensor {
+    /// Stable 0-based shard ordinal. Use this + in_shard_index as the
+    /// portable tensor identity, not the shard path.
     pub shard_ordinal: u32,
+    /// 0-based index within the shard file.
     pub in_shard_index: u32,
+    /// 0-based transformer block index.
     pub block_index: Option<u32>,
+    /// Position within the block's shard ordering (0–11 for Grok-1).
     pub block_slot: Option<u32>,
     pub structural_name: String,
     pub kind_label: String,
@@ -753,7 +833,9 @@ pub struct RoutingCriticalTensor {
 }
 
 /// Conversion-ready tensor-by-tensor handoff manifest for downstream
-/// packing or quantization tooling.
+/// packing or quantization tooling. Each entry encodes the per-tensor
+/// quantization policy decision and a deterministic hash for integrity
+/// verification across pipeline runs.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConversionManifest {
     pub model_family: String,
@@ -771,36 +853,59 @@ pub struct ConversionManifest {
     pub schema_version: u32,
 }
 
+/// One entry in the ConversionManifest. The quant_policy field is the primary
+/// actionable field for downstream packing logic.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConversionManifestTensor {
+    /// Human-readable name derived from the shard filename.
     pub tensor_name: String,
+    /// Stable structural name: `block_NNN.slot_SS.kind_label`.
     pub structural_name: String,
     pub model_family: String,
+    /// 0-based transformer block index, null for embedding/final_norm singletons.
     pub block: Option<u32>,
+    /// Block slot within the shard ordering (0–11 for Grok-1).
     pub slot: Option<u32>,
     pub kind: String,
+    /// SAAQ region class driving the policy decision.
     pub region: SaaqRegionClass,
     pub dtype: TensorDType,
     pub shape: TensorShape,
+    /// Total element count for this tensor.
     pub numel: u64,
+    /// Total byte length for this tensor.
     pub byte_len: u64,
     pub shard_index: u32,
     pub source_shard_path: PathBuf,
     pub source_in_shard_index: u32,
+    /// The quantization policy decision for this tensor. This is the primary
+    /// actionable field for downstream packing and quantization logic.
     pub quant_policy: QuantPolicy,
+    /// If this tensor is protected (e.g., router), explains why.
     pub protected_reason: Option<String>,
+    /// FNV-1a 64-bit hash over the canonical tensor representation for
+    /// integrity verification across pipeline runs.
     pub deterministic_hash: String,
     pub warnings: Vec<String>,
 }
 
+/// Quantization policy for a single tensor in the conversion manifest.
+/// These values drive what grok-ozempic does (or does not do) with each
+/// tensor during the pilot quantization pass.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuantPolicy {
+    /// Router must remain FP32 — quantization changes expert selection behavior.
     PassthroughF32Router,
+    /// Normalization tensors must remain FP32 — numerical sensitivity too high.
     PassthroughF32Norm,
+    /// Embedding is a SAAQ candidate with measurable risk score.
     CandidateSaaqEmbedding,
+    /// MoE expert projection already int8 — wrap in existing quantization envelope.
     WrapExistingInt8Expert,
+    /// Unknown int8 tensor — wrap but flag for review before full pipeline.
     WrapExistingInt8Unknown,
+    /// Cannot determine policy — pass through as-is with a warning.
     UnknownPassthroughOrWarn,
 }
 

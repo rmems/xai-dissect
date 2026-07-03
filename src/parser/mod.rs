@@ -1,22 +1,43 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Pickle Protocol 4 byte-grammar scanner for Grok-1 JAX shards. Extracts
-// `(dtype, shape, offset, nbytes)` tuples and `QuantizedWeight8bit` pairing
-// without running a real unpickler or decoding tensor bodies.
-//
-// This module is intentionally free of schema/inventory concerns: it speaks
-// only in terms of raw tensor anchors. The higher layers map these anchors
-// into `schema::TensorInfo` and assign semantics.
-//
-// Stable pickle-4 invariants we rely on (documented in the original
-// single-file CLI):
-//
-//   1. Every `numpy.ndarray` is reconstructed via a state tuple whose dtype
-//      is built by `numpy.dtype('f4' | 'i1', False, True)`. That guarantees
-//      the byte signature `<dtype class push> \x8c\x02XX [\x94] \x89 \x88
-//      \x87 [\x94] R`.
-//   2. The array payload is always emitted immediately after the fortran
-//      bool: `[\x88|\x89] <C|B|\x8e> <len> <raw bytes>`.
+//! Pickle Protocol 4 byte-grammar scanner for Grok-1 JAX shards.
+//!
+//! This module walks the raw opcode stream of a `.pkl` shard file,
+//! locating every `numpy.ndarray` reduce site and emitting a `RawTensor`
+//! record without decoding tensor payload bytes or running a Python
+//! interpreter.
+//!
+//! ## What this module does NOT do
+//! - It does **not** unpickle or deserialize Python objects
+//! - It does **not** decode int8 weight bodies or f32 scale values
+//! - It does **not** classify tensors by semantic role (that is the
+//!   inventory layer's responsibility)
+//! - It does **not** execute model code or routing logic
+//!
+//! ## Stable PROTO 4 invariants relied upon
+//! 1. Every `numpy.ndarray` is reconstructed via a state tuple whose dtype
+//!    is built by `numpy.dtype('f4' | 'i1', False, True)`. This produces
+//!    the byte signature `<dtype class push> \x8c\x02XX [\x94] \x89 \x88
+//!    \x87 [\x94] R`.
+//! 2. The array payload is always emitted immediately after the fortran
+//!    bool: `[\x88|\x89] <C|B|\x8e> <len> <raw bytes>`.
+//!
+//! ## Role assignment for QuantizedWeight8bit
+//! Every shard file containing a Grok-1 MoE expert or attention projection
+//! is a `QuantizedWeight8bit` dataclass. In the pickle stream this produces
+//! multiple ndarray reduce sites within each `QuantizedWeight8bit` site: an
+//! int8 weight body, one or more f32 quantization side-data arrays, and
+//! sometimes additional f32 leaves (for example per-expert minimum values).
+//! `assign_qw8_roles` marks the `i8` ndarray as `quant_weight` and only the
+//! first `f32` ndarray after it as `quant_scales`; any additional `f32`
+//! ndarrays in the same site remain bare `tensor`. The pairing is preserved
+//! through the shard boundary — all records from the site share the same
+//! shard path.
+//!
+//! ## Output
+//! Emits `RawTensor` records: `role`, `dtype`, `shape`, `offset`, `nbytes`.
+//! These are consumed by `inventory::build_inventory()` which maps them into
+//! `schema::TensorInfo` and applies semantic classification.
 
 use std::cmp::min;
 use std::fs::File;

@@ -1,8 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Offline tensor-payload profiling for SAAQ-readiness scouting. This layer
-// may read tensor payload bytes, but it never mutates weights and never
-// executes model code.
+//! Offline tensor-payload profiling for SAAQ-readiness scouting.
+//!
+//! This layer may read tensor payload bytes via memory-mapped sampling,
+//! but it never mutates weights and never executes model code. It produces
+//! two reports:
+//! - `StatsProfileReport`: per-tensor statistical moments (mean, variance,
+//!   stddev, min, max, zero_fraction, near_zero_fraction, outlier_fraction,
+//!   peak_to_rms, distribution_label) and per-layer aggregates
+//! - `SaaqReadinessReport`: candidate ranking for future SAAQ experiments,
+//!   with region classifications (routing_critical, normalization_sensitive,
+//!   already_compressed, potential_compression_target, embedding_heavy)
+//!
+//! ## Sampling
+//! By default up to 65,536 values are sampled per tensor (configurable
+//! via `--sample-values`). For large tensors this is a tiny fraction of
+//! total elements but is sufficient for statistical moment estimation.
+//!
+//! ## What it does NOT do
+//! - It does **not** compute SAAQ calibration scores
+//! - It does **not** select quantization bit-widths
+//! - It does **not** mutate checkpoint weights
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;

@@ -1,7 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Unified output-tree planning and bundle writers. This layer keeps path
-// conventions and manifest generation out of the analyzers themselves.
+//! Unified output-tree planning and bundle writers.
+//!
+//! This layer keeps path conventions and manifest generation out of the
+//! analyzer layers themselves. It resolves `<checkpoint_slug>` from the
+//! checkpoint path, manages the `reports/`, `exports/`, and `manifests/`
+//! directory layout, and orchestrates the bundle-write sequence.
+//!
+//! ## Slug resolution
+//! The slug is inferred from the last two path components:
+//! `/path/to/grok-1-official/ckpt-0` → `grok-1-official__ckpt-0`.
+//! Use `--checkpoint-slug` to override when a pipeline needs a custom name.
+//!
+//! ## Output tree
+//! ```text
+//! <output-root>/
+//!   reports/<checkpoint_slug>/     # human-readable Markdown
+//!   exports/<checkpoint_slug>/      # full JSON + findings summaries
+//!   manifests/<checkpoint_slug>/    # focused machine-readable manifests
+//! ```
+//!
+//! ## Bundle rules
+//! All required files for a grok-ozempic handoff must exist under the same
+//! `<checkpoint_slug>`. The `OutputBundle` struct coordinates the write
+//! order: inventory must be validated before coverage manifest is written,
+//! and coverage must pass before planning artifacts are emitted.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

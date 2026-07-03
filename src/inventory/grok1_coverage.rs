@@ -1,8 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Strict Grok-1 coverage validation. This module is intentionally separate
-// from the generic inventory builder so parser/classification logic remains
-// usable for partial scans while full Grok-1 exports fail closed.
+//! Strict Grok-1 coverage validation for the grok1-map-v1-clean baseline.
+//!
+//! This module is intentionally separate from the generic inventory builder
+//! so parser/classification logic remains usable for partial scans while full
+//! Grok-1 exports fail closed. It is only invoked when the inventory
+//! has `model_family = "grok-1"` and the `--family` flag is left at its
+//! default value.
+//!
+//! ## grok1-map-v1-clean baseline profile
+//! The canonical structural invariants for a clean Grok-1 ckpt-0 parse:
+//! ```text
+//! blocks           = 64
+//! tensors          = 770
+//! routers          = 64
+//! expert_families   = 192  (3 families × 64 layers)
+//! unknown_tensors   = 0
+//! ```
+//!
+//! ## FNV-1a 64-bit checksum
+//! The manifest checksum is computed over a canonical, path-independent view
+//! of the structural tensor table (shard_ordinal, in_shard_index, kind.kind,
+//! kind.detail, shape, role, dtype) so downstream tools can compare reruns
+//! on different machines without path dependencies.
+//!
+//! ## Fail-closed semantics
+//! If any validation dimension fails, `validation` becomes `"fail"` and the
+//! manifest is rejected by downstream consumers. A `"pass"` manifest with
+//! `unknown_slots: []` and `expected == discovered` is the only acceptable
+//! gate for grok-ozempic ingestion.
 
 use std::collections::{BTreeMap, BTreeSet};
 

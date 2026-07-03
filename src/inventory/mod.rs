@@ -1,16 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Inventory layer: walks a checkpoint directory, drives the parser, applies
-// shape-based semantic classification, and groups tensors into blocks.
-//
-// This layer is intentionally conservative. It identifies what can be
-// identified from `(rank, dtype, dims)` alone plus an inferred `(d_model,
-// vocab_size, n_experts)` triple. Anything ambiguous is reported as
-// `Unknown { reason }` or `MoeProjection::Unresolved` unless a supported
-// checkpoint layout provides source-backed disambiguation.
-//
-// Deeper semantic analysis (routing math, expert-level statistics,
-// dequantized parameter accounting) is explicitly *not* done here.
+//! Inventory layer: walks a checkpoint directory, drives the parser,
+//! applies shape-based semantic classification, and groups tensors into
+//! transformer blocks.
+//!
+//! ## Three-step hyperparameter inference
+//! 1. The largest 2-D f32 bare tensor fixes `vocab_size` and `d_model`.
+//! 2. The first 3-D int8 quant_weight tensor fixes `n_experts` and `d_ff`.
+//! 3. Shard layout check derives `n_blocks` from the Grok-1 K=12 rule.
+//!
+//! ## Seven-rule classification
+//! Tensors are classified in order; the first matching rule wins:
+//! 1. `(role=quant_weight, rank=3)` → `MoeExpertProjection` (disambiguated to
+//!    gate/down/up by source-backed slot mapping for supported checkpoints)
+//! 2. `(role=quant_scales)` → `MoeScales`
+//! 3. `(role=quant_weight, rank=2)` → `QuantizedAttentionProjection`
+//! 4. `(role=tensor, rank=2, shape=vocab×d_model)` → `TokenEmbedding`
+//! 5. `(role=tensor, rank=2, shape=d_model×n_experts)` → `Router`
+//! 6. `(role=tensor, rank=2)` → `AttnProjF32`
+//! 7. `(role=tensor, rank=1, shape=d_model)` → `BlockNorm` (promoted to
+//!    `FinalNorm` for the norm singleton)
+//!
+//! ## What this layer does NOT do
+//! - It does **not** read tensor payload bytes for classification
+//! - It does **not** execute routing logic or rank experts
+//! - It does **not** compute SAAQ scores or readiness metrics
+//! - It does **not** mutate checkpoint files
 
 use std::path::{Path, PathBuf};
 

@@ -1,15 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// xai-dissect CLI. Thin wrapper over the library crate.
-//
-// Primary commands:
-//
-//   dissect         - legacy per-shard byte-table view (parser output only)
-//   inventory       - full checkpoint cartography with JSON / Markdown export
-//   experts         - expert atlas discovery
-//   routing-report  - routing / gating structure inspection
-//   stats           - offline tensor-statistics profiling
-//   saaq-readiness  - candidate scouting for future SAAQ work
+//! xai-dissect CLI. Thin wrapper over the `xai_dissect` library crate.
+//!
+//! ## Command map
+//!
+//! | Command | Driven by | Produces |
+//! |---------|----------|---------|
+//! | `dissect` | `parser::dissect_shard` | Raw tensor table (no classification) |
+//! | `inventory` | `inventory::build_inventory` | Full tensor catalog + coverage manifest |
+//! | `experts` | `experts::build_expert_atlas` | Expert atlas |
+//! | `routing-report` | `routing::build_routing_report` | Routing structure + critical-tensors manifest |
+//! | `stats` | `stats::build_stats_report` | Offline tensor statistics |
+//! | `saaq-readiness` | `stats::build_saaq_readiness_report` | SAAQ candidate manifest |
+//! | `pilot-plan` | `planning::build_grok1_pilot_selection_plan` | Pilot block selection plan |
+//! | `route-preservation` | `planning::build_grok1_route_preservation_report` | Route preservation gate report |
+//! | `quant-plan` | `planning::build_grok1_planning_artifacts` | Conversion manifest + quant plan |
+//!
+//! ## OutputTreeArgs semantics
+//! `--output-root` enables the unified output tree (`reports/`, `exports/`,
+//! `manifests/`). `--checkpoint-slug` overrides the inferred slug and is
+//! required when `--output-root` is set and a custom name is needed.
+//!
+//! ## What this module does NOT do
+//! - It does **not** execute model inference
+//! - It does **not** mutate checkpoint files
+//! - It does **not** implement quantization kernels
 
 use std::path::PathBuf;
 use std::time::Instant;

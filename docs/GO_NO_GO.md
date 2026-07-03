@@ -18,6 +18,10 @@ exists.
 - Artifact directories / filenames are stable and documented
 - Cloud runbook exists before burning time-limited credits
 
+Each threshold metric (router top-1/top-2 agreement, block output cosine,
+etc.) is defined and its measurement methodology is explained in
+[`docs/metric-definitions.md`](metric-definitions.md).
+
 ## GO thresholds
 
 All of the following must be true:
