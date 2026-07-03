@@ -18,7 +18,7 @@ repos control) are clearly documented.
 
 **Threshold**: `>= 99.0%`
 
-### Definition
+### Definition (Router top-1 agreement)
 
 For a calibration dataset of input tokens, compute the router's top-1
 expert selection (the expert with the highest logit) under the FP32
@@ -96,7 +96,7 @@ affects model quality.
 
 **Threshold**: `>= 0.995`
 
-### Definition
+### Definition (Block output cosine)
 
 For each of the 64 transformer blocks, run a forward pass with the same
 input activations through both the FP32 baseline and the quantized
