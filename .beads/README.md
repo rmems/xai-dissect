@@ -60,10 +60,12 @@ Issues in Beads are:
 Try Beads in your own projects:
 
 ```bash
-# Install Beads (prefer a release binary or package from upstream docs).
-# If using the install script, require HTTP failure detection and a known
-# upstream; do not pipe unreviewed main-branch scripts into bash in prod CI.
-curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+# Install Beads from a reviewed release (do not pipe main-branch scripts to bash).
+# See https://github.com/gastownhall/beads/releases for current assets.
+# Example (adjust version/arch to match the release you reviewed):
+#   curl -fsSL -o bd.tgz "https://github.com/gastownhall/beads/releases/download/vX.Y.Z/bd_…_linux_amd64.tar.gz"
+#   echo "<published-sha256>  bd.tgz" | sha256sum -c -
+#   tar -xzf bd.tgz && sudo install -m 755 bd /usr/local/bin/bd
 
 # Initialize in your repo
 bd init

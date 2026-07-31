@@ -99,11 +99,12 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 
 ```bash
 # Per PR N:
-gh pr view N --json mergedAt,mergeCommit,title,state
-
-# Resolved threads (GraphQL) — paginate reviewThreads via $after until hasNextPage=false.
-# Each thread includes id (for audit table) and paginated comments (first:100 + after).
+set -euo pipefail
 PR=N
+gh pr view "$PR" --json mergedAt,mergeCommit,title,state
+
+# Resolved threads only (GraphQL). Fail the loop on API errors (no silent truncate).
+# Paginate reviewThreads via $after; each node includes id for the audit table.
 AFTER=""
 while true; do
   if [ -n "$AFTER" ]; then AFTER_ARG=(-f after="$AFTER"); else AFTER_ARG=(); fi
@@ -121,22 +122,55 @@ while true; do
                 line
                 comments(first:100) {
                   pageInfo { hasNextPage endCursor }
-                  nodes { author { login } body }
+                  nodes { author { login } body databaseId }
                 }
               }
             }
           }
         }
       }' \
-    -f owner=rmems -f repo=xai-dissect -F pr="$PR" "${AFTER_ARG[@]}")
-  echo "$PAGE" | jq -c '.data.repository.pullRequest.reviewThreads.nodes[]'
-  HAS=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+    -f owner=rmems -f repo=xai-dissect -F pr="$PR" "${AFTER_ARG[@]}") \
+    || { echo "gh api graphql failed for reviewThreads page" >&2; exit 1; }
+
+  # Emit only resolved threads for the gh-30 audit table.
+  echo "$PAGE" | jq -c \
+    '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == true)'
+
+  # Paginate comments when a resolved thread has more than 100 comments.
+  echo "$PAGE" | jq -r \
+    '.data.repository.pullRequest.reviewThreads.nodes[]
+     | select(.isResolved == true and .comments.pageInfo.hasNextPage == true)
+     | .id' | while read -r THREAD_ID; do
+    C_AFTER=""
+    while true; do
+      if [ -n "$C_AFTER" ]; then C_ARG=(-f after="$C_AFTER"); else C_ARG=(); fi
+      C_PAGE=$(gh api graphql \
+        -f query='
+          query($id:ID!,$after:String) {
+            node(id:$id) {
+              ... on PullRequestReviewThread {
+                id
+                comments(first:100, after:$after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { author { login } body databaseId }
+                }
+              }
+            }
+          }' \
+        -f id="$THREAD_ID" "${C_ARG[@]}") \
+        || { echo "gh api graphql failed for thread comments $THREAD_ID" >&2; exit 1; }
+      echo "$C_PAGE" | jq -c '{threadId: .data.node.id, comments: .data.node.comments.nodes}'
+      C_HAS=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.hasNextPage')
+      [ "$C_HAS" = "true" ] || break
+      C_AFTER=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.endCursor')
+    done
+  done
+
+  HAS=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage // empty')
+  [ -n "$HAS" ] || { echo "missing hasNextPage in GraphQL response" >&2; exit 1; }
   [ "$HAS" = "true" ] || break
   AFTER=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
 done
-
-# If a thread's comments.pageInfo.hasNextPage is true, re-query that thread's
-# comments connection with after=<endCursor> until complete (max 100 per page).
 
 # Per thread with cited SHA:
 git merge-base --is-ancestor <sha> main

@@ -1,7 +1,7 @@
 # Full CI for xai-dissect (GH #33 / RM-148)
-# - rust-ci: fmt, test, clippy, CLI smoke (required)
-# - coverage: llvm-cov → Codecov (upload soft if token missing)
-# - qodana: static analysis (hard when QODANA_TOKEN set; soft otherwise)
+# - rust-ci: fmt, test, clippy, CLI smoke (required merge gate)
+# - coverage: llvm-cov → Codecov (upload soft; token preferred, else OIDC)
+# - qodana: static analysis (job fails when QODANA_TOKEN set; skip when unset)
 # - release-observability: optional Sentry on main only
 #
 # Out of scope: New Relic, Aikido, checkpoint/weight downloads, GPU jobs.
@@ -70,6 +70,8 @@ jobs:
       contents: read
       # Tokenless Codecov upload via OIDC when CODECOV_TOKEN is unset.
       id-token: write
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,9 +97,9 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: false
-          # Token preferred when set; OIDC covers tokenless public-repo uploads.
-          token: ${{ secrets.CODECOV_TOKEN }}
-          use_oidc: true
+          # Prefer explicit token when set; OIDC only when token is empty.
+          token: ${{ env.CODECOV_TOKEN }}
+          use_oidc: ${{ env.CODECOV_TOKEN == '' }}
         continue-on-error: true
 
   qodana:
@@ -107,8 +109,6 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
-    env:
-      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,15 +117,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Detect token without putting it on every step env.
+      - name: Detect Qodana token
+        id: qodana_token
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        run: |
+          if [ -n "${QODANA_TOKEN}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Qodana Scan
-        if: env.QODANA_TOKEN != ''
+        if: steps.qodana_token.outputs.present == 'true'
         uses: JetBrains/qodana-action@v2026.1
         with:
           # Let qodana.yaml pin the linter image/version; do not override here.
           pr-mode: true
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
       - name: Qodana skipped (no token)
-        if: env.QODANA_TOKEN == ''
+        if: steps.qodana_token.outputs.present != 'true'
         run: |
           echo "QODANA_TOKEN not set; skipping Qodana for Rust (Ultimate/Cloud required)."
           echo "Configure the secret to enforce qodana.yaml failureConditions."
@@ -144,20 +158,40 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Install without Sentry secrets in the environment (no curl|bash).
+      - name: Detect Sentry secrets
+        id: sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT_XAI_DISSECT: ${{ secrets.SENTRY_PROJECT_XAI_DISSECT }}
+        run: |
+          if [ -n "${SENTRY_AUTH_TOKEN}" ] && [ -n "${SENTRY_ORG}" ] && [ -n "${SENTRY_PROJECT_XAI_DISSECT}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Sentry secrets not fully configured; skipping install and release."
+          fi
+
+      # Install only when configured; no secrets in this step; pin version + SHA-256 file.
       - name: Install pinned sentry-cli
+        if: steps.sentry.outputs.configured == 'true'
         env:
           SENTRY_CLI_VERSION: "2.46.0"
         run: |
           set -euo pipefail
           base="https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}"
           asset="sentry-cli-Linux-x86_64"
-          curl -fsSL -o /tmp/sentry-cli "${base}/${asset}"
-          chmod +x /tmp/sentry-cli
-          sudo mv /tmp/sentry-cli /usr/local/bin/sentry-cli
+          curl -fsSL -o "/tmp/${asset}" "${base}/${asset}"
+          # Public release digest (committed under scripts/observability/, not a secret).
+          expected="$(awk '{print $1}' "scripts/observability/${asset}.sha256")"
+          actual="$(sha256sum "/tmp/${asset}" | awk '{print $1}')"
+          test "${expected}" = "${actual}"
+          chmod +x "/tmp/${asset}"
+          sudo mv -f "/tmp/${asset}" /usr/local/bin/sentry-cli
           sentry-cli --version
 
       - name: Optional Sentry release
+        if: steps.sentry.outputs.configured == 'true'
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -166,10 +200,5 @@ jobs:
           AGENTOS_GIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [[ -z "${SENTRY_AUTH_TOKEN:-}" || -z "${SENTRY_ORG:-}" || -z "${SENTRY_PROJECT_XAI_DISSECT:-}" ]]; then
-            echo "Sentry secrets not fully configured; skipping release hook."
-            echo "Set SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT_XAI_DISSECT to enable."
-            exit 0
-          fi
           chmod +x scripts/observability/sentry_release.sh
           ./scripts/observability/sentry_release.sh
