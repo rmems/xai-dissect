@@ -2,6 +2,20 @@
 
 All notable changes to `xai-dissect` are documented here.
 
+## Unreleased - 2026-07-31
+
+### Added
+
+- Full GitHub Actions CI: fmt, test, clippy (`-D warnings`), CLI help smoke,
+  llvm-cov → Codecov, Qodana (`qodana.yaml`), optional Sentry release on `main`
+  ([#33](https://github.com/rmems/xai-dissect/issues/33)).
+- Maintainer CI secrets / disable notes in `docs/ci.md`.
+
+### Fixed
+
+- Clippy `items_after_test_module` in `main.rs` and `planning/mod.rs` so
+  `-D warnings` is clean under CI.
+
 ## Unreleased - 2026-05-27
 
 ### Changed

@@ -170,6 +170,12 @@ This milestone is intended to feel like a coherent tool, not a runtime:
 
 Release notes live in [CHANGELOG.md](CHANGELOG.md).
 
+## CI
+
+Pull requests and `main` run fmt, tests, clippy (`-D warnings`), and CLI help
+smokes. Optional Codecov, Qodana, and Sentry hooks are documented in
+[docs/ci.md](docs/ci.md).
+
 ## Future Grok-2 Support
 
 Grok-2 is not yet in scope for implementation, but the repo now includes a
