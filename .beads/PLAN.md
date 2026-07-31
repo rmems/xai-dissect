@@ -1,12 +1,13 @@
 # xai-dissect Beads Plan — Bot Review Backfill Audit (gh-30)
 
 > **Handoff doc for agent/model switches.** Read this + run `bd ready` before starting work.
-> Last updated: 2026-07-03 (gh-33: Aikido added, New Relic dropped from CI scope)
+> Last updated: 2026-07-31 (gh-33: Codecov + Qodana + optional Sentry; Aikido and New Relic excluded from CI scope)
 
 ## Quick start (any agent)
 
 ```bash
-cd /home/raulmc/rmems/xai-dissect
+# From any clone of this repository root:
+cd "$(git rev-parse --show-toplevel)"
 bd prime                    # full beads workflow context
 bd ready                    # next unblocked bead
 bd show xai-dissect-iz3     # epic overview
@@ -77,15 +78,18 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 - Single markdown table on gh-30: PR | thread_id | file | bot | status | evidence
 
 ### iz3.10 — Fixes
+
 - Only if gaps found in .2–.8
 - Branch: `audit/bot-followups`
-- `cargo test --locked` + `cargo clippy -D warnings` green
+- `cargo test --locked` + `cargo clippy --all-targets --all-features -- -D warnings` green
 
 ### iz3.11 — Closeout
+
 - PR with `Refs #30` (not Fixes until all gaps closed)
 - Final summary comment on gh-30 with per-PR counts
 
 ### Epic iz3 — Done when
+
 - PRs #37, #36, #32, #34, #20, #24 audited (#35 if applicable)
 - Table posted; follow-up PR merged if needed
 
@@ -97,25 +101,42 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 # Per PR N:
 gh pr view N --json mergedAt,mergeCommit,title,state
 
-# Resolved threads (GraphQL — paginate while hasNextPage):
-gh api graphql -f query='
-  query($owner:String!,$repo:String!,$pr:Int!,$after:String) {
-    repository(owner:$owner,name:$repo) {
-      pullRequest(number:$pr) {
-        reviewThreads(first:50, after:$after) {
-          pageInfo { hasNextPage endCursor }
-          nodes {
-            isResolved
-            path
-            line
-            comments(first:5) {
-              nodes { author { login } body }
+# Resolved threads (GraphQL) — paginate reviewThreads via $after until hasNextPage=false.
+# Each thread includes id (for audit table) and paginated comments (first:100 + after).
+PR=N
+AFTER=""
+while true; do
+  if [ -n "$AFTER" ]; then AFTER_ARG=(-f after="$AFTER"); else AFTER_ARG=(); fi
+  PAGE=$(gh api graphql \
+    -f query='
+      query($owner:String!,$repo:String!,$pr:Int!,$after:String) {
+        repository(owner:$owner,name:$repo) {
+          pullRequest(number:$pr) {
+            reviewThreads(first:50, after:$after) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                id
+                isResolved
+                path
+                line
+                comments(first:100) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { author { login } body }
+                }
+              }
             }
           }
         }
-      }
-    }
-  }' -f owner=rmems -f repo=xai-dissect -F pr=N
+      }' \
+    -f owner=rmems -f repo=xai-dissect -F pr="$PR" "${AFTER_ARG[@]}")
+  echo "$PAGE" | jq -c '.data.repository.pullRequest.reviewThreads.nodes[]'
+  HAS=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS" = "true" ] || break
+  AFTER=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
+
+# If a thread's comments.pageInfo.hasNextPage is true, re-query that thread's
+# comments connection with after=<endCursor> until complete (max 100 per page).
 
 # Per thread with cited SHA:
 git merge-base --is-ancestor <sha> main
@@ -154,7 +175,7 @@ git show main:<file>
 ## Repo / tooling notes
 
 - **Beads DB:** `.beads/` in repo root, prefix `xai-dissect-*`
-- **Beads MCP:** use `workspace_root: /home/raulmc/rmems/xai-dissect` (MCP may route to global DB if context not set — prefer `bd` CLI in-repo)
+- **Beads MCP:** set `workspace_root` to this repo’s root (`git rev-parse --show-toplevel`); MCP may route to a global DB if context is unset — prefer `bd` CLI in-repo
 - **Chroma:** collection `agent-workflows`, doc id `xai-dissect-beads-plan-gh30`
 - **Ogham:** tagged `project:xai-dissect`, `beads`, `gh-30`
 
@@ -164,7 +185,7 @@ git show main:<file>
 
 When picking up this work:
 
-1. `cd /home/raulmc/rmems/xai-dissect && git pull && bd ready`
+1. `cd "$(git rev-parse --show-toplevel)" && git pull && bd ready`
 2. Read this file + `bd show xai-dissect-iz3`
 3. Claim current bead: `bd update <id> --claim`
 4. Work only the claimed bead scope

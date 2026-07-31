@@ -1,7 +1,6 @@
 # Qodana configuration for xai-dissect (GH #33)
 # Linter: Qodana for Rust (Ultimate / Cloud token required via QODANA_TOKEN).
-# Without a token the GitHub Action job is allowed to soft-fail so PR CI still
-# enforces rust-ci + coverage generation.
+# CI skips the scan when QODANA_TOKEN is unset; when set, failureConditions apply.
 
 version: "1.0"
 

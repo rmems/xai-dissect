@@ -1,7 +1,7 @@
 # Full CI for xai-dissect (GH #33 / RM-148)
 # - rust-ci: fmt, test, clippy, CLI smoke (required)
 # - coverage: llvm-cov → Codecov (upload soft if token missing)
-# - qodana: static analysis (soft without QODANA_TOKEN / license)
+# - qodana: static analysis (hard when QODANA_TOKEN set; soft otherwise)
 # - release-observability: optional Sentry on main only
 #
 # Out of scope: New Relic, Aikido, checkpoint/weight downloads, GPU jobs.
@@ -14,14 +14,14 @@ on:
     branches:
       - main
 
+# Default least privilege; Qodana elevates only for PR comments/checks.
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Avoid cancelling in-flight main Sentry release mutations mid-run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust-ci:
@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -64,9 +66,15 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     needs: [rust-ci]
+    permissions:
+      contents: read
+      # Tokenless Codecov upload via OIDC when CODECOV_TOKEN is unset.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -87,40 +95,67 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: false
+          # Token preferred when set; OIDC covers tokenless public-repo uploads.
           token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
         continue-on-error: true
 
   qodana:
     name: Qodana
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    env:
+      QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Qodana Scan
+        if: env.QODANA_TOKEN != ''
         uses: JetBrains/qodana-action@v2026.1
         with:
-          args: --linter,qodana-rust
+          # Let qodana.yaml pin the linter image/version; do not override here.
           pr-mode: true
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-        # Rust linter needs Ultimate/Cloud token; soft-fail so required rust-ci
-        # still gates merges when token is unset.
-        continue-on-error: true
+
+      - name: Qodana skipped (no token)
+        if: env.QODANA_TOKEN == ''
+        run: |
+          echo "QODANA_TOKEN not set; skipping Qodana for Rust (Ultimate/Cloud required)."
+          echo "Configure the secret to enforce qodana.yaml failureConditions."
 
   release-observability:
     name: Release observability (Sentry)
     runs-on: ubuntu-latest
     needs: [rust-ci, coverage]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      # Install without Sentry secrets in the environment (no curl|bash).
+      - name: Install pinned sentry-cli
+        env:
+          SENTRY_CLI_VERSION: "2.46.0"
+        run: |
+          set -euo pipefail
+          base="https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}"
+          asset="sentry-cli-Linux-x86_64"
+          curl -fsSL -o /tmp/sentry-cli "${base}/${asset}"
+          chmod +x /tmp/sentry-cli
+          sudo mv /tmp/sentry-cli /usr/local/bin/sentry-cli
+          sentry-cli --version
 
       - name: Optional Sentry release
         env:
@@ -135,10 +170,6 @@ jobs:
             echo "Sentry secrets not fully configured; skipping release hook."
             echo "Set SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT_XAI_DISSECT to enable."
             exit 0
-          fi
-          if ! command -v sentry-cli >/dev/null 2>&1; then
-            curl -sL https://sentry.io/get-cli/ | bash
-            export PATH="${HOME}/.local/bin:${PATH}"
           fi
           chmod +x scripts/observability/sentry_release.sh
           ./scripts/observability/sentry_release.sh

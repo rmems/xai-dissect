@@ -33,10 +33,10 @@ bd dolt push
 ### Working with Issues
 
 Issues in Beads are:
-- **Git-native**: Stored in Dolt database with version control and branching
+- **Git-native**: Stored in a local Dolt database (under `.beads/`), separate from ordinary Git commits
 - **AI-friendly**: CLI-first design works perfectly with AI coding agents
 - **Branch-aware**: Issues can follow your branch workflow
-- **Always in sync**: Auto-syncs with your commits
+- **Sync is explicit**: Issue data is **not** auto-pushed with `git push` — run `bd dolt push` / `bd dolt pull` to sync Dolt refs (`refs/dolt/data`)
 
 ## Why Beads?
 
@@ -60,8 +60,10 @@ Issues in Beads are:
 Try Beads in your own projects:
 
 ```bash
-# Install Beads
-curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+# Install Beads (prefer a release binary or package from upstream docs).
+# If using the install script, require HTTP failure detection and a known
+# upstream; do not pipe unreviewed main-branch scripts into bash in prod CI.
+curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 
 # Initialize in your repo
 bd init
