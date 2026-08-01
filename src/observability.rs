@@ -88,6 +88,19 @@ fn scrub_str(value: &str, home: &str) -> String {
     value.replace(home, "$HOME")
 }
 
+fn scrub_optional(value: &mut Option<String>, home: &str) {
+    if let Some(text) = value.as_mut() {
+        *text = scrub_str(text, home);
+    }
+}
+
+fn scrub_stacktrace(stacktrace: &mut sentry::protocol::Stacktrace, home: &str) {
+    for frame in &mut stacktrace.frames {
+        scrub_optional(&mut frame.abs_path, home);
+        scrub_optional(&mut frame.filename, home);
+    }
+}
+
 /// Redact home-directory prefixes from messages, exceptions, frames, breadcrumbs.
 fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
     let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) else {
@@ -98,38 +111,18 @@ fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
         return;
     }
 
-    if let Some(message) = event.message.as_mut() {
-        *message = scrub_str(message, home);
-    }
+    scrub_optional(&mut event.message, home);
     for exception in &mut event.exception.values {
-        if let Some(value) = exception.value.as_mut() {
-            *value = scrub_str(value, home);
-        }
+        scrub_optional(&mut exception.value, home);
         if let Some(stacktrace) = exception.stacktrace.as_mut() {
-            for frame in &mut stacktrace.frames {
-                if let Some(abs_path) = frame.abs_path.as_mut() {
-                    *abs_path = scrub_str(abs_path, home);
-                }
-                if let Some(filename) = frame.filename.as_mut() {
-                    *filename = scrub_str(filename, home);
-                }
-            }
+            scrub_stacktrace(stacktrace, home);
         }
     }
     if let Some(stacktrace) = event.stacktrace.as_mut() {
-        for frame in &mut stacktrace.frames {
-            if let Some(abs_path) = frame.abs_path.as_mut() {
-                *abs_path = scrub_str(abs_path, home);
-            }
-            if let Some(filename) = frame.filename.as_mut() {
-                *filename = scrub_str(filename, home);
-            }
-        }
+        scrub_stacktrace(stacktrace, home);
     }
     for breadcrumb in &mut event.breadcrumbs.values {
-        if let Some(message) = breadcrumb.message.as_mut() {
-            *message = scrub_str(message, home);
-        }
+        scrub_optional(&mut breadcrumb.message, home);
     }
 }
 
