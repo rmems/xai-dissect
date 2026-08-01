@@ -376,7 +376,7 @@ fn assign_block_indices(tensors: &mut [TensorInfo], shard_count: usize) -> Optio
     let candidates = [12usize];
     let mut chosen: Option<(usize, usize)> = None; // (k_per_block, n_blocks)
     for &k in &candidates {
-        if k > 0 && interior % k == 0 {
+        if k > 0 && interior.is_multiple_of(k) {
             chosen = Some((k, interior / k));
             break;
         }

@@ -138,19 +138,19 @@ pub fn build_routing_report(inv: &ModelInventory) -> RoutingReport {
                     ),
                 });
             }
-            if let Some(local) = local_expert_count {
-                if primary.linked_expert_count != Some(local) {
-                    anomalies.push(RoutingIssue {
-                        severity: RoutingIssueSeverity::Warning,
-                        category: RoutingIssueCategory::ExpertCountLinkage,
-                        block_index,
-                        tensor: Some(locator_from_candidate(primary)),
-                        message: format!(
-                            "routing tensor expert count {:?} does not match local expert count {}",
-                            primary.linked_expert_count, local
-                        ),
-                    });
-                }
+            if let Some(local) = local_expert_count
+                && primary.linked_expert_count != Some(local)
+            {
+                anomalies.push(RoutingIssue {
+                    severity: RoutingIssueSeverity::Warning,
+                    category: RoutingIssueCategory::ExpertCountLinkage,
+                    block_index,
+                    tensor: Some(locator_from_candidate(primary)),
+                    message: format!(
+                        "routing tensor expert count {:?} does not match local expert count {}",
+                        primary.linked_expert_count, local
+                    ),
+                });
             }
         }
 
@@ -508,20 +508,20 @@ fn grok_layout_notes(
         ));
     }
 
-    if !primaries.is_empty() {
-        if let (Some(dm), Some(experts)) = (d_model, inferred_experts) {
-            let shape = TensorShape::new(vec![dm, experts]).render();
-            if primaries.iter().all(|(block, locator)| {
-                block.candidates.iter().any(|candidate| {
-                    candidate.shard_ordinal == locator.shard_ordinal
-                        && candidate.in_shard_index == locator.in_shard_index
-                        && candidate.shape.dims() == [dm, experts]
-                })
-            }) {
-                notes.push(format!(
-                    "Observed primary routing tensors match the Grok-style router shape `{shape}`."
-                ));
-            }
+    if !primaries.is_empty()
+        && let (Some(dm), Some(experts)) = (d_model, inferred_experts)
+    {
+        let shape = TensorShape::new(vec![dm, experts]).render();
+        if primaries.iter().all(|(block, locator)| {
+            block.candidates.iter().any(|candidate| {
+                candidate.shard_ordinal == locator.shard_ordinal
+                    && candidate.in_shard_index == locator.in_shard_index
+                    && candidate.shape.dims() == [dm, experts]
+            })
+        }) {
+            notes.push(format!(
+                "Observed primary routing tensors match the Grok-style router shape `{shape}`."
+            ));
         }
     }
 

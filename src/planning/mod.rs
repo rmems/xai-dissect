@@ -542,6 +542,216 @@ fn fnv1a64(input: &str) -> String {
     format!("fnv1a64:{hash:016x}")
 }
 
+pub const PILOT_SELECTION_PLAN_SCHEMA_VERSION: u32 = 1;
+pub const ROUTE_PRESERVATION_REPORT_SCHEMA_VERSION: u32 = 1;
+const GROK1_PILOT_BLOCKS: &[(u32, &str, &str)] = &[
+    (0, "block_000", "early baseline"),
+    (8, "block_008", "near-zero-sensitive router"),
+    (28, "block_028", "near-zero-sensitive router"),
+    (60, "block_060", "high readiness/routing-critical sample"),
+    (
+        63,
+        "block_063",
+        "late-layer / high peak-to-rms router region",
+    ),
+];
+
+pub fn build_grok1_pilot_selection_plan(inv: &ModelInventory) -> Result<PilotSelectionPlan> {
+    let coverage = validate_grok1_clean_baseline(inv)?;
+    Ok(PilotSelectionPlan {
+        model_family: inv.model_family.clone(),
+        checkpoint_path: inv.checkpoint_path.clone(),
+        baseline: coverage.baseline_profile.clone(),
+        required_validation: coverage.expected.clone(),
+        selected_blocks: GROK1_PILOT_BLOCKS
+            .iter()
+            .map(|(block_index, label, rationale)| PilotBlockSelection {
+                block_index: *block_index,
+                label: (*label).to_string(),
+                rationale: (*rationale).to_string(),
+            })
+            .collect(),
+        modes: vec![
+            PilotQuantizationMode::AttentionOnly,
+            PilotQuantizationMode::ExpertOnly,
+            PilotQuantizationMode::AttentionPlusExpert,
+        ],
+        protection_rules: vec![
+            "router tensors must remain untouched in every first-pass pilot".to_string(),
+            "block_norm and final_norm tensors must remain untouched in every first-pass pilot"
+                .to_string(),
+            "pilot artifacts must be emitted per mode and remain comparable across selected blocks"
+                .to_string(),
+        ],
+        comparison_artifacts: vec![
+            "pilot-selection-plan.json".to_string(),
+            "pilot-selection-plan.md".to_string(),
+            "route-preservation-report.json".to_string(),
+            "route-preservation-report.md".to_string(),
+        ],
+        notes: vec![
+            "This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime.".to_string(),
+            "Use the selected blocks and protected-family rules to drive downstream bounded pilot runs.".to_string(),
+        ],
+        schema_version: PILOT_SELECTION_PLAN_SCHEMA_VERSION,
+    })
+}
+
+pub fn build_grok1_route_preservation_report(
+    inv: &ModelInventory,
+) -> Result<RoutePreservationReport> {
+    let coverage = validate_grok1_clean_baseline(inv)?;
+    let router_metrics = vec![
+        RouteMetricStatus {
+            name: "router_top1_agreement".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: Some(">= 99.0%".to_string()),
+            observed: None,
+            detail: "Threshold reserved for downstream pilot comparison artifacts; xai-dissect defines the gate but does not execute pilot inference.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "router_top2_set_agreement".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: Some(">= 99.5%".to_string()),
+            observed: None,
+            detail: "Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "expert_load_distribution_delta".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Capture expert-load distribution drift once bounded pilot routing traces are available.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "expert_load_js_divergence".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "router_logit_rank_correlation".to_string(),
+            scope: "router_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report rank correlation for router logits when logits are captured by downstream pilot comparisons.".to_string(),
+        },
+    ];
+    let block_metrics = vec![
+        RouteMetricStatus {
+            name: "block_output_cosine".to_string(),
+            scope: "block_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: Some(">= 0.995".to_string()),
+            observed: None,
+            detail: "Tracked as a go/no-go threshold once bounded pilot outputs exist.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "block_output_rmse".to_string(),
+            scope: "block_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report alongside cosine similarity for bounded pilot comparisons.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "residual_stream_drift".to_string(),
+            scope: "block_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations.".to_string(),
+        },
+    ];
+    let weight_metrics = vec![
+        RouteMetricStatus {
+            name: "weight_reconstruction_mse".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Generic reconstruction metrics remain secondary to router-behavior preservation for Grok-1 MoE validation.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "weight_cosine_similarity".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Useful companion metric, but not sufficient by itself to clear a full quantization run.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "weight_max_absolute_error".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "per_channel_scale_error_summary".to_string(),
+            scope: "weight_reconstruction".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Summarize per-channel scale/error drift where quantization metadata is available.".to_string(),
+        },
+    ];
+    let model_metrics = vec![
+        RouteMetricStatus {
+            name: "logit_kl".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for model/logit KL when downstream pilot inference captures logits.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "perplexity_delta".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists.".to_string(),
+        },
+        RouteMetricStatus {
+            name: "generation_sanity_summary".to_string(),
+            scope: "model_behavior".to_string(),
+            status: MetricStatus::Unknown,
+            threshold: None,
+            observed: None,
+            detail: "Report-only placeholder for short generation sanity checks when pilot inference is available.".to_string(),
+        },
+    ];
+    let mut summary = Vec::new();
+    summary.extend(router_metrics.iter().cloned());
+    summary.extend(block_metrics.iter().cloned());
+    summary.extend(weight_metrics.iter().cloned());
+    summary.extend(model_metrics.iter().cloned());
+    Ok(RoutePreservationReport {
+        model_family: inv.model_family.clone(),
+        checkpoint_path: inv.checkpoint_path.clone(),
+        baseline: coverage.baseline_profile.clone(),
+        required_validation: coverage.expected.clone(),
+        summary,
+        router_metrics,
+        block_metrics,
+        weight_metrics,
+        model_metrics,
+        notes: vec![
+            "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.".to_string(),
+            "Statuses remain unknown until downstream pilot artifacts supply the observed values.".to_string(),
+        ],
+        schema_version: ROUTE_PRESERVATION_REPORT_SCHEMA_VERSION,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -1355,214 +1565,4 @@ mod tests {
         }
         totals
     }
-}
-
-pub const PILOT_SELECTION_PLAN_SCHEMA_VERSION: u32 = 1;
-pub const ROUTE_PRESERVATION_REPORT_SCHEMA_VERSION: u32 = 1;
-const GROK1_PILOT_BLOCKS: &[(u32, &str, &str)] = &[
-    (0, "block_000", "early baseline"),
-    (8, "block_008", "near-zero-sensitive router"),
-    (28, "block_028", "near-zero-sensitive router"),
-    (60, "block_060", "high readiness/routing-critical sample"),
-    (
-        63,
-        "block_063",
-        "late-layer / high peak-to-rms router region",
-    ),
-];
-
-pub fn build_grok1_pilot_selection_plan(inv: &ModelInventory) -> Result<PilotSelectionPlan> {
-    let coverage = validate_grok1_clean_baseline(inv)?;
-    Ok(PilotSelectionPlan {
-        model_family: inv.model_family.clone(),
-        checkpoint_path: inv.checkpoint_path.clone(),
-        baseline: coverage.baseline_profile.clone(),
-        required_validation: coverage.expected.clone(),
-        selected_blocks: GROK1_PILOT_BLOCKS
-            .iter()
-            .map(|(block_index, label, rationale)| PilotBlockSelection {
-                block_index: *block_index,
-                label: (*label).to_string(),
-                rationale: (*rationale).to_string(),
-            })
-            .collect(),
-        modes: vec![
-            PilotQuantizationMode::AttentionOnly,
-            PilotQuantizationMode::ExpertOnly,
-            PilotQuantizationMode::AttentionPlusExpert,
-        ],
-        protection_rules: vec![
-            "router tensors must remain untouched in every first-pass pilot".to_string(),
-            "block_norm and final_norm tensors must remain untouched in every first-pass pilot"
-                .to_string(),
-            "pilot artifacts must be emitted per mode and remain comparable across selected blocks"
-                .to_string(),
-        ],
-        comparison_artifacts: vec![
-            "pilot-selection-plan.json".to_string(),
-            "pilot-selection-plan.md".to_string(),
-            "route-preservation-report.json".to_string(),
-            "route-preservation-report.md".to_string(),
-        ],
-        notes: vec![
-            "This is a planning artifact only; xai-dissect does not mutate checkpoints or execute a quantization runtime.".to_string(),
-            "Use the selected blocks and protected-family rules to drive downstream bounded pilot runs.".to_string(),
-        ],
-        schema_version: PILOT_SELECTION_PLAN_SCHEMA_VERSION,
-    })
-}
-
-pub fn build_grok1_route_preservation_report(
-    inv: &ModelInventory,
-) -> Result<RoutePreservationReport> {
-    let coverage = validate_grok1_clean_baseline(inv)?;
-    let router_metrics = vec![
-        RouteMetricStatus {
-            name: "router_top1_agreement".to_string(),
-            scope: "router_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: Some(">= 99.0%".to_string()),
-            observed: None,
-            detail: "Threshold reserved for downstream pilot comparison artifacts; xai-dissect defines the gate but does not execute pilot inference.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "router_top2_set_agreement".to_string(),
-            scope: "router_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: Some(">= 99.5%".to_string()),
-            observed: None,
-            detail: "Threshold reserved for downstream pilot comparison artifacts; report as first-class sprint evidence when available.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "expert_load_distribution_delta".to_string(),
-            scope: "router_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Capture expert-load distribution drift once bounded pilot routing traces are available.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "expert_load_js_divergence".to_string(),
-            scope: "router_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report JS/KL-style divergence over expert-load distributions when downstream pilot evidence exists.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "router_logit_rank_correlation".to_string(),
-            scope: "router_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report rank correlation for router logits when logits are captured by downstream pilot comparisons.".to_string(),
-        },
-    ];
-    let block_metrics = vec![
-        RouteMetricStatus {
-            name: "block_output_cosine".to_string(),
-            scope: "block_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: Some(">= 0.995".to_string()),
-            observed: None,
-            detail: "Tracked as a go/no-go threshold once bounded pilot outputs exist.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "block_output_rmse".to_string(),
-            scope: "block_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report alongside cosine similarity for bounded pilot comparisons.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "residual_stream_drift".to_string(),
-            scope: "block_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Summarize residual-stream drift once downstream pilot artifacts provide comparable block activations.".to_string(),
-        },
-    ];
-    let weight_metrics = vec![
-        RouteMetricStatus {
-            name: "weight_reconstruction_mse".to_string(),
-            scope: "weight_reconstruction".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Generic reconstruction metrics remain secondary to router-behavior preservation for Grok-1 MoE validation.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "weight_cosine_similarity".to_string(),
-            scope: "weight_reconstruction".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Useful companion metric, but not sufficient by itself to clear a full quantization run.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "weight_max_absolute_error".to_string(),
-            scope: "weight_reconstruction".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report max absolute reconstruction error when downstream pilot comparisons include raw tensor deltas.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "per_channel_scale_error_summary".to_string(),
-            scope: "weight_reconstruction".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Summarize per-channel scale/error drift where quantization metadata is available.".to_string(),
-        },
-    ];
-    let model_metrics = vec![
-        RouteMetricStatus {
-            name: "logit_kl".to_string(),
-            scope: "model_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report-only placeholder for model/logit KL when downstream pilot inference captures logits.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "perplexity_delta".to_string(),
-            scope: "model_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report-only placeholder for calibration-data perplexity delta once downstream pilot evaluation exists.".to_string(),
-        },
-        RouteMetricStatus {
-            name: "generation_sanity_summary".to_string(),
-            scope: "model_behavior".to_string(),
-            status: MetricStatus::Unknown,
-            threshold: None,
-            observed: None,
-            detail: "Report-only placeholder for short generation sanity checks when pilot inference is available.".to_string(),
-        },
-    ];
-    let mut summary = Vec::new();
-    summary.extend(router_metrics.iter().cloned());
-    summary.extend(block_metrics.iter().cloned());
-    summary.extend(weight_metrics.iter().cloned());
-    summary.extend(model_metrics.iter().cloned());
-    Ok(RoutePreservationReport {
-        model_family: inv.model_family.clone(),
-        checkpoint_path: inv.checkpoint_path.clone(),
-        baseline: coverage.baseline_profile.clone(),
-        required_validation: coverage.expected.clone(),
-        summary,
-        router_metrics,
-        block_metrics,
-        weight_metrics,
-        model_metrics,
-        notes: vec![
-            "This report defines the required route-preservation surface and thresholds for Grok-1 pilot evidence.".to_string(),
-            "Statuses remain unknown until downstream pilot artifacts supply the observed values.".to_string(),
-        ],
-        schema_version: ROUTE_PRESERVATION_REPORT_SCHEMA_VERSION,
-    })
 }

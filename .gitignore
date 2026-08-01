@@ -16,3 +16,8 @@ ckpt-*/
 *.tar
 *.tar.gz
 *.zip
+
+# Beads / Dolt files (added by bd init)
+# DB ignores for beads live primarily in `.beads/.gitignore`.
+.dolt/
+.beads-credential-key

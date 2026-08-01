@@ -122,8 +122,8 @@ pub fn build_saaq_readiness_report(
         .filter(|candidate| candidate.disposition == SaaqDisposition::Candidate)
         .cloned()
         .collect::<Vec<_>>();
-    if quantization_candidates.is_empty() {
-        if let Some(fallback_index) = scored.iter().position(|candidate| {
+    if quantization_candidates.is_empty()
+        && let Some(fallback_index) = scored.iter().position(|candidate| {
             !matches!(
                 candidate.region_class,
                 SaaqRegionClass::RoutingCritical
@@ -132,14 +132,13 @@ pub fn build_saaq_readiness_report(
                     | SaaqRegionClass::EmbeddingHeavy
                     | SaaqRegionClass::Unknown
             )
-        }) {
-            scored[fallback_index].disposition = SaaqDisposition::Candidate;
-            scored[fallback_index].reasons.push(
-                "promoted as the best available non-routing target in a constrained sample"
-                    .to_string(),
-            );
-            quantization_candidates.push(scored[fallback_index].clone());
-        }
+        })
+    {
+        scored[fallback_index].disposition = SaaqDisposition::Candidate;
+        scored[fallback_index].reasons.push(
+            "promoted as the best available non-routing target in a constrained sample".to_string(),
+        );
+        quantization_candidates.push(scored[fallback_index].clone());
     }
     for (index, candidate) in quantization_candidates.iter_mut().enumerate() {
         candidate.rank = (index + 1) as u32;

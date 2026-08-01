@@ -97,10 +97,10 @@ pub fn resolve_checkpoint_slug(
 
     let mut parts = slug_parts(checkpoint_path);
 
-    if parts.is_empty() {
-        if let Ok(canonical) = checkpoint_path.canonicalize() {
-            parts = slug_parts(&canonical);
-        }
+    if parts.is_empty()
+        && let Ok(canonical) = checkpoint_path.canonicalize()
+    {
+        parts = slug_parts(&canonical);
     }
 
     if parts.is_empty() {
