@@ -132,21 +132,28 @@ while true; do
     -f owner=rmems -f repo=xai-dissect -F pr="$PR" "${AFTER_ARG[@]}") \
     || { echo "gh api graphql failed for reviewThreads page" >&2; exit 1; }
 
+  # Reject GraphQL error payloads / missing data before emitting.
+  echo "$PAGE" | jq -e '
+    (.errors | not) and
+    (.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage | type == "boolean")
+  ' >/dev/null \
+    || { echo "invalid GraphQL payload for reviewThreads page" >&2; exit 1; }
+
   # Emit only resolved threads for the gh-30 audit table.
   echo "$PAGE" | jq -c \
     '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == true)'
 
   # Paginate comments when a resolved thread has more than 100 comments.
+  # Start at page 2 (seed C_AFTER from first-page endCursor to avoid duplicating page 1).
   echo "$PAGE" | jq -r \
     '.data.repository.pullRequest.reviewThreads.nodes[]
      | select(.isResolved == true and .comments.pageInfo.hasNextPage == true)
-     | .id' | while read -r THREAD_ID; do
-    C_AFTER=""
+     | [.id, .comments.pageInfo.endCursor] | @tsv' \
+    | while IFS=$'\t' read -r THREAD_ID C_AFTER; do
     while true; do
-      if [ -n "$C_AFTER" ]; then C_ARG=(-f after="$C_AFTER"); else C_ARG=(); fi
       C_PAGE=$(gh api graphql \
         -f query='
-          query($id:ID!,$after:String) {
+          query($id:ID!,$after:String!) {
             node(id:$id) {
               ... on PullRequestReviewThread {
                 id
@@ -157,17 +164,22 @@ while true; do
               }
             }
           }' \
-        -f id="$THREAD_ID" "${C_ARG[@]}") \
+        -f id="$THREAD_ID" -f after="$C_AFTER") \
         || { echo "gh api graphql failed for thread comments $THREAD_ID" >&2; exit 1; }
+      echo "$C_PAGE" | jq -e '(.errors | not) and .data.node.comments' >/dev/null \
+        || { echo "invalid GraphQL payload for thread comments $THREAD_ID" >&2; exit 1; }
       echo "$C_PAGE" | jq -c '{threadId: .data.node.id, comments: .data.node.comments.nodes}'
       C_HAS=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.hasNextPage')
+      # hasNextPage is Boolean!; do not use // empty (jq treats false as missing).
       [ "$C_HAS" = "true" ] || break
       C_AFTER=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.endCursor')
     done
   done
 
-  HAS=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage // empty')
-  [ -n "$HAS" ] || { echo "missing hasNextPage in GraphQL response" >&2; exit 1; }
+  # hasNextPage is Boolean! — false is the terminal page (// empty wrongly errors).
+  HAS=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS" = "true" ] || [ "$HAS" = "false" ] \
+    || { echo "missing hasNextPage in GraphQL response" >&2; exit 1; }
   [ "$HAS" = "true" ] || break
   AFTER=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
 done

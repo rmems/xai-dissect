@@ -59,18 +59,20 @@ Issues in Beads are:
 
 Try Beads in your own projects:
 
+**Install (manual — do not pipe unreviewed `main` scripts to bash):**
+
+See https://github.com/gastownhall/beads/releases. Example shape (fill version/arch/sha256 from a release you reviewed):
+
+```text
+curl -fsSL -o bd.tgz "https://github.com/gastownhall/beads/releases/download/vX.Y.Z/bd_…_linux_amd64.tar.gz"
+echo "<published-sha256>  bd.tgz" | sha256sum -c -
+tar -xzf bd.tgz && sudo install -m 755 bd /usr/local/bin/bd
+```
+
+**Then, with `bd` on PATH:**
+
 ```bash
-# Install Beads from a reviewed release (do not pipe main-branch scripts to bash).
-# See https://github.com/gastownhall/beads/releases for current assets.
-# Example (adjust version/arch to match the release you reviewed):
-#   curl -fsSL -o bd.tgz "https://github.com/gastownhall/beads/releases/download/vX.Y.Z/bd_…_linux_amd64.tar.gz"
-#   echo "<published-sha256>  bd.tgz" | sha256sum -c -
-#   tar -xzf bd.tgz && sudo install -m 755 bd /usr/local/bin/bd
-
-# Initialize in your repo
 bd init
-
-# Create your first issue
 bd create "Try out Beads"
 ```
 

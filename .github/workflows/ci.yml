@@ -70,8 +70,6 @@ jobs:
       contents: read
       # Tokenless Codecov upload via OIDC when CODECOV_TOKEN is unset.
       id-token: write
-    env:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,14 +90,26 @@ jobs:
       - name: Generate lcov
         run: cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
 
+      # Detect token without putting it on checkout/test/tool steps.
+      - name: Detect Codecov token
+        id: codecov_token
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -n "${CODECOV_TOKEN}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
           fail_ci_if_error: false
           # Prefer explicit token when set; OIDC only when token is empty.
-          token: ${{ env.CODECOV_TOKEN }}
-          use_oidc: ${{ env.CODECOV_TOKEN == '' }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: ${{ steps.codecov_token.outputs.present != 'true' }}
         continue-on-error: true
 
   qodana:
@@ -131,7 +141,8 @@ jobs:
 
       - name: Qodana Scan
         if: steps.qodana_token.outputs.present == 'true'
-        uses: JetBrains/qodana-action@v2026.1
+        # Pin high-privilege action to full commit SHA (tag v2026.1.3).
+        uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
           # Let qodana.yaml pin the linter image/version; do not override here.
           pr-mode: true

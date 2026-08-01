@@ -71,7 +71,7 @@ bd close <id>         # Complete work
 
 ## Session Completion
 
-**When ending a work session**, complete the checklist below. Steps that mutate shared remotes (push, prune) or discard local state (stash drop) require **explicit user authorization** unless the user already granted push/session-close autonomy for this session.
+**When ending a work session**, complete the checklist below. Steps that mutate shared remotes (push, prune) or discard local state (stash drop) require **explicit user authorization** unless the user already granted autonomy for the relevant operation in this session.
 
 **MANDATORY WORKFLOW:**
 
@@ -79,11 +79,13 @@ bd close <id>         # Complete work
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** (only with user authorization for remote mutation):
+
    ```bash
    git pull --rebase
    git push
    git status  # should show "up to date with origin" after a successful push
    ```
+
 5. **Clean up** (only with user authorization) - Clear stashes, prune remote branches
 6. **Verify** - Intended changes committed; remote updated when push was authorized
 7. **Hand off** - Provide context for next session

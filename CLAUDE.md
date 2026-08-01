@@ -26,7 +26,7 @@ bd close <id>         # Complete work
 
 ## Session Completion
 
-**When ending a work session**, complete the checklist below. Steps that mutate shared remotes (push, prune) or discard local state (stash drop) require **explicit user authorization** unless the user already granted push/session-close autonomy for this session.
+**When ending a work session**, complete the checklist below. Steps that mutate shared remotes (push, prune) or discard local state (stash drop) require **explicit user authorization** unless the user already granted autonomy for the relevant operation in this session.
 
 **MANDATORY WORKFLOW:**
 

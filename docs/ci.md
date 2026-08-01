@@ -10,7 +10,7 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 | **rust-ci** | PR + `main` | **Yes** (branch-protection gate) | `cargo fmt --check`, `cargo test --locked`, `cargo clippy -D warnings`, CLI `--help` smokes |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
 | **qodana** | PR + `main` | Not a required merge gate; job fails only when token is set and scan fails | JetBrains Qodana for Rust (`qodana.yaml`); skips when token unset |
-| **release-observability** | `main` push only | Soft / skip if unconfigured | Optional Sentry release via `scripts/observability/sentry_release.sh` |
+| **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
 
 **Out of scope:** New Relic, Aikido, checkpoint downloads, GPU runners.
 
@@ -58,6 +58,7 @@ cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
 - No tokens, DSNs, or private paths in the tree
 - Workflow default permissions are `contents: read`; Qodana alone gets `checks`/`pull-requests` write
 - `sentry-cli` is installed only when Sentry is configured, from a **version-pinned** GitHub release binary with **SHA-256 verification** (no `curl | bash`)
+- Qodana GitHub Action is pinned to a full commit SHA (`JetBrains/qodana-action@4861e01…` / v2026.1.3), not a floating major tag
 - Secret-backed steps skip when secrets are missing
 - Fork PRs should not receive repository secrets from GitHub
 - Concurrency cancels only PR runs (not in-flight `main` Sentry releases)
