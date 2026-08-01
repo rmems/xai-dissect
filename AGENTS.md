@@ -89,7 +89,7 @@ hand off. Authorization rules:
 **Workflow:**
 
 1. File remaining work as beads issues
-2. If code changed: run quality gates (`cargo fmt --check`, `cargo test --locked`, clippy `-D warnings`)
+2. If code changed: run quality gates (`cargo fmt --check`, `cargo test --locked`, `cargo clippy --all-targets --all-features -- -D warnings`)
 3. Update issue status (close finished, claim still-open)
 4. With push authorization:
 

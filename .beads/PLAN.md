@@ -135,6 +135,7 @@ while true; do
   # Reject GraphQL error payloads / missing data before emitting.
   echo "$PAGE" | jq -e '
     (.errors | not) and
+    (.data.repository.pullRequest.reviewThreads.nodes | type == "array") and
     (.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage | type == "boolean")
   ' >/dev/null \
     || { echo "invalid GraphQL payload for reviewThreads page" >&2; exit 1; }
@@ -166,13 +167,20 @@ while true; do
           }' \
         -f id="$THREAD_ID" -f after="$C_AFTER") \
         || { echo "gh api graphql failed for thread comments $THREAD_ID" >&2; exit 1; }
-      echo "$C_PAGE" | jq -e '(.errors | not) and .data.node.comments' >/dev/null \
+      echo "$C_PAGE" | jq -e '
+        (.errors | not) and
+        (.data.node.comments.nodes | type == "array") and
+        (.data.node.comments.pageInfo.hasNextPage | type == "boolean")
+      ' >/dev/null \
         || { echo "invalid GraphQL payload for thread comments $THREAD_ID" >&2; exit 1; }
       echo "$C_PAGE" | jq -c '{threadId: .data.node.id, comments: .data.node.comments.nodes}'
       C_HAS=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.hasNextPage')
       # hasNextPage is Boolean!; do not use // empty (jq treats false as missing).
+      [ "$C_HAS" = "true" ] || [ "$C_HAS" = "false" ] \
+        || { echo "missing comment hasNextPage for $THREAD_ID" >&2; exit 1; }
       [ "$C_HAS" = "true" ] || break
       C_AFTER=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.endCursor')
+      [ -n "$C_AFTER" ] || { echo "missing endCursor for $THREAD_ID" >&2; exit 1; }
     done
   done
 

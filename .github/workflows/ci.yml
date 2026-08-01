@@ -4,7 +4,8 @@
 # - qodana: static analysis (job fails when QODANA_TOKEN set; skip when unset)
 # - release-observability: optional Sentry on main only
 #
-# Third-party actions pinned to full commit SHAs (immutable releases).
+# Third-party actions pinned to full commit SHAs (immutable revisions:
+# release tags peeled to commit, or branch-tip SHA for dtolnay/rust-toolchain).
 # Out of scope: New Relic, Aikido, checkpoint/weight downloads, GPU jobs.
 
 name: CI
