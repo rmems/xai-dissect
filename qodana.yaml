@@ -1,0 +1,35 @@
+# Qodana configuration for xai-dissect (GH #33)
+# Linter: Qodana for Rust (Ultimate / Cloud token required via QODANA_TOKEN).
+# CI skips the scan when QODANA_TOKEN is unset; when set, failureConditions apply.
+
+version: "1.0"
+
+# Short linter id; CI pins Docker image via --image (Hub: 2026.2-eap | 2026.1-eap | latest).
+linter: qodana-rust
+
+# Starter is lighter than recommended — RustRover project-open is slow on GHA.
+profile:
+  name: qodana.starter
+
+# Do not use bootstrap/cargo fetch here: image CARGO_HOME is often root-owned
+# (Permission denied), and fetch did not fix the project-open timeout.
+
+# Project is pure Rust; skip huge / non-source trees.
+exclude:
+  - name: All
+    paths:
+      - target
+      - out
+      - .beads
+      - .kilo
+      - .claude
+      - .idea
+      - .qodana-cargo
+
+# Soft quality gate: do not block on info noise; fail only on critical when
+# token is present and the action is not continue-on-error.
+failureConditions:
+  severityThresholds:
+    critical: 0
+    high: 25
+    any: 200

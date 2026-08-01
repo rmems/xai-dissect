@@ -403,6 +403,8 @@ impl Command {
 }
 
 fn main() -> Result<()> {
+    // Keep guard alive for the whole process so panics/events flush on drop.
+    let _sentry_guard = observability::init_sentry();
     observability::init_tracing();
     let cli = Cli::parse();
     let command = cli.command.name();
@@ -424,6 +426,9 @@ fn main() -> Result<()> {
     let _enter = span.enter();
 
     tracing::info!(event = "command_start", "command_start");
+    sentry::configure_scope(|scope| {
+        scope.set_tag("command", command);
+    });
 
     let started = Instant::now();
     let result = match cli.command {
@@ -591,6 +596,10 @@ fn main() -> Result<()> {
         error_category,
         "command_finish"
     );
+
+    if let Err(ref error) = result {
+        observability::capture_error(error);
+    }
 
     result
 }
@@ -1119,24 +1128,6 @@ fn print_output_bundle(label: &str, root: &std::path::Path, bundle: &exports::Ou
     );
 }
 
-#[cfg(test)]
-mod tests {
-    use super::validate_complete_inventory_scope;
-
-    #[test]
-    fn quant_plan_rejects_non_default_prefix() {
-        let err =
-            validate_complete_inventory_scope("quant-plan", "tensor-shard", None).unwrap_err();
-        assert!(format!("{err:#}").contains("--prefix tensor-shard"));
-    }
-
-    #[test]
-    fn quant_plan_rejects_limited_inventory() {
-        let err = validate_complete_inventory_scope("quant-plan", "tensor", Some(4)).unwrap_err();
-        assert!(format!("{err:#}").contains("--limit 4"));
-    }
-}
-
 fn print_console_summary(inv: &ModelInventory) {
     eprintln!(
         "checkpoint: {}  shards: {}  tensors: {}",
@@ -1240,5 +1231,23 @@ fn print_saaq_console_summary(report_doc: &SaaqReadinessReport) {
             "top_candidate: {}  readiness: {:.3}  risk: {:.3}",
             top.structural_name, top.readiness_score, top.risk_score,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_complete_inventory_scope;
+
+    #[test]
+    fn quant_plan_rejects_non_default_prefix() {
+        let err =
+            validate_complete_inventory_scope("quant-plan", "tensor-shard", None).unwrap_err();
+        assert!(format!("{err:#}").contains("--prefix tensor-shard"));
+    }
+
+    #[test]
+    fn quant_plan_rejects_limited_inventory() {
+        let err = validate_complete_inventory_scope("quant-plan", "tensor", Some(4)).unwrap_err();
+        assert!(format!("{err:#}").contains("--limit 4"));
     }
 }

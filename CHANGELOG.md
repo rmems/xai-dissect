@@ -2,6 +2,24 @@
 
 All notable changes to `xai-dissect` are documented here.
 
+## Unreleased - 2026-08-01
+
+### Added
+
+- Full GitHub Actions CI: fmt, test, clippy (`-D warnings`), CLI help smoke,
+  llvm-cov → Codecov, Qodana (`qodana.yaml`), optional Sentry release on `main`
+  ([#33](https://github.com/rmems/xai-dissect/issues/33)).
+- Maintainer CI secrets / disable notes in `docs/ci.md`.
+- Opt-in Sentry error capture for real-weight CLI runs (`XAI_DISSECT_SENTRY=1` +
+  `SENTRY_DSN`); default off. `$HOME` redacted from event messages, exception
+  values, stacktrace frame paths, and breadcrumbs (not every event field);
+  `capture_anyhow` for error chains; invalid DSN soft-disables instead of panicking.
+
+### Fixed
+
+- Clippy `items_after_test_module` in `main.rs` and `planning/mod.rs` so
+  `-D warnings` is clean under CI.
+
 ## Unreleased - 2026-05-27
 
 ### Changed

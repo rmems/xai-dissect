@@ -1,5 +1,6 @@
-use std::sync::Once;
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Once, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Error;
@@ -7,6 +8,135 @@ use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
 static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Single process run id shared by Sentry tags and tracing spans.
+static CACHED_RUN_ID: OnceLock<String> = OnceLock::new();
+
+/// Opt-in Sentry for real-weight campaigns.
+///
+/// Enabled only when **both** are set:
+/// - `XAI_DISSECT_SENTRY=1` (or `true` / `yes` / case-insensitive)
+/// - `SENTRY_DSN` non-empty and parseable
+///
+/// Default is off so public CLI clones never phone home.
+///
+/// Init follows the official Rust SDK pattern (`ClientOptions` + keep the
+/// guard alive). Release names prefer `xai-dissect@<AGENTOS_GIT_SHA>` so they
+/// match CI release markers (`scripts/observability/sentry_release.sh`); when
+/// no SHA is set, falls back to `unknown` (not crate version) so events are not
+/// mis-attributed to a deploy that was never created.
+/// Invalid DSNs soft-fail (return `None`) instead of panicking — `sentry::init`
+/// panics on bad DSNs, which would break the CLI for a misconfigured opt-in.
+pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
+    if !env_flag_enabled("XAI_DISSECT_SENTRY") {
+        return None;
+    }
+    let dsn_raw = std::env::var("SENTRY_DSN")
+        .ok()
+        .filter(|value| !value.trim().is_empty())?;
+    // Parse before init: invalid DSNs must not panic the process.
+    let dsn: sentry::types::Dsn = dsn_raw.trim().parse().ok()?;
+
+    let environment = std::env::var("SENTRY_ENVIRONMENT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "local".to_owned());
+
+    // Align with CI: scripts/observability/sentry_release.sh uses git SHA only.
+    let release = format!("xai-dissect@{}", git_sha());
+
+    let guard = sentry::init(sentry::ClientOptions {
+        dsn: Some(dsn),
+        release: Some(Cow::Owned(release)),
+        environment: Some(Cow::Owned(environment)),
+        // Error reporting only for opt-in weight runs (no perf transactions).
+        traces_sample_rate: 0.0,
+        // CLI: never send IPs/headers/PII (docs enable this for HTTP servers only).
+        send_default_pii: false,
+        // Avoid advertising hostname when contexts are compiled in.
+        server_name: Some(Cow::Borrowed("xai-dissect")),
+        before_send: Some(std::sync::Arc::new(|mut event| {
+            scrub_event_paths(&mut event);
+            Some(event)
+        })),
+        ..Default::default()
+    });
+
+    if !guard.is_enabled() {
+        return None;
+    }
+
+    // Same cached run_id as tracing (OnceLock); set before main continues.
+    sentry::configure_scope(|scope| {
+        scope.set_tag("repo", "xai-dissect");
+        scope.set_tag("run_id", run_id());
+    });
+
+    Some(guard)
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    let Ok(raw) = std::env::var(name) else {
+        return false;
+    };
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn scrub_str(value: &str, home: &str) -> String {
+    value.replace(home, "$HOME")
+}
+
+fn scrub_optional(value: &mut Option<String>, home: &str) {
+    if let Some(text) = value.as_mut() {
+        *text = scrub_str(text, home);
+    }
+}
+
+fn scrub_stacktrace(stacktrace: &mut sentry::protocol::Stacktrace, home: &str) {
+    for frame in &mut stacktrace.frames {
+        scrub_optional(&mut frame.abs_path, home);
+        scrub_optional(&mut frame.filename, home);
+    }
+}
+
+/// Redact home-directory prefixes from messages, exceptions, frames, breadcrumbs.
+fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
+    let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) else {
+        return;
+    };
+    let home = home.trim_end_matches('/');
+    if home.is_empty() {
+        return;
+    }
+
+    scrub_optional(&mut event.message, home);
+    for exception in &mut event.exception.values {
+        scrub_optional(&mut exception.value, home);
+        if let Some(stacktrace) = exception.stacktrace.as_mut() {
+            scrub_stacktrace(stacktrace, home);
+        }
+    }
+    if let Some(stacktrace) = event.stacktrace.as_mut() {
+        scrub_stacktrace(stacktrace, home);
+    }
+    for breadcrumb in &mut event.breadcrumbs.values {
+        scrub_optional(&mut breadcrumb.message, home);
+    }
+}
+
+/// Report a top-level command failure (no-op when Sentry is disabled).
+///
+/// Uses `capture_anyhow` so Sentry gets the full error chain (not a flat
+/// message). Path scrubbing is applied in `before_send` only.
+pub fn capture_error(error: &Error) {
+    let category = error_category(Some(error));
+    sentry::configure_scope(|scope| {
+        scope.set_tag("error_category", category);
+    });
+    sentry::integrations::anyhow::capture_anyhow(error);
+}
 
 pub fn init_tracing() {
     INIT.call_once(|| {
@@ -21,19 +151,24 @@ pub fn init_tracing() {
     });
 }
 
+/// Process-stable run id for tracing + Sentry correlation.
 pub fn run_id() -> String {
-    std::env::var("AGENTOS_RUN_ID")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| {
-            let nanos = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_nanos())
-                .unwrap_or(0);
-            let pid = std::process::id();
-            let counter = RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-            format!("xai-dissect-{nanos}-{pid}-{counter}")
+    CACHED_RUN_ID
+        .get_or_init(|| {
+            std::env::var("AGENTOS_RUN_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| {
+                    let nanos = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|duration| duration.as_nanos())
+                        .unwrap_or(0);
+                    let pid = std::process::id();
+                    let counter = RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+                    format!("xai-dissect-{nanos}-{pid}-{counter}")
+                })
         })
+        .clone()
 }
 
 pub fn git_sha() -> String {
