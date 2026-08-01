@@ -4,8 +4,8 @@
 # - qodana: static analysis (job fails when QODANA_TOKEN set; skip when unset)
 # - release-observability: optional Sentry on main only
 #
-# Third-party actions pinned to full commit SHAs (immutable revisions:
-# release tags peeled to commit, or branch-tip SHA for dtolnay/rust-toolchain).
+# Third-party actions pinned to full commit SHAs from each action's history.
+# dtolnay/rust-toolchain: master SHA + explicit `toolchain: stable`.
 # Out of scope: New Relic, Aikido, checkpoint/weight downloads, GPU jobs.
 
 name: CI
@@ -36,8 +36,9 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch tip
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -79,8 +80,9 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch tip
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
+          toolchain: stable
           components: llvm-tools-preview
 
       - name: Cache cargo
@@ -131,16 +133,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Prefer QODANA_TOKEN (JetBrains docs name). Also accept
-      # QODANA_CONFIGURATIONS_TOKEN (GitHub App / older Cloud installs) so a
-      # misnamed secret still reaches the scan instead of silent skip.
+      # Cloud project token only (not QODANA_CONFIGURATIONS_TOKEN uploader tokens).
       - name: Detect Qodana token
         id: qodana_token
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-          QODANA_CONFIGURATIONS_TOKEN: ${{ secrets.QODANA_CONFIGURATIONS_TOKEN }}
         run: |
-          if [ -n "${QODANA_TOKEN}" ] || [ -n "${QODANA_CONFIGURATIONS_TOKEN}" ]; then
+          if [ -n "${QODANA_TOKEN}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -148,30 +147,25 @@ jobs:
 
       - name: Qodana Scan
         if: steps.qodana_token.outputs.present == 'true'
-        # Rust linter is EAP: project-open has timed out at 10m and 45m on GHA.
-        # Soft-fail keeps the job green while still linking/uploading to Cloud when
-        # the scan succeeds; rust-ci remains the required #33 merge gate.
+        # Rust linter is EAP: project-open often exceeds default timeouts on GHA.
+        # Soft-fail keeps the job green; rust-ci remains the required #33 gate.
         continue-on-error: true
         uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
           pr-mode: true
           upload-result: true
-          # 2026.2-eap is the current Rust image on Docker Hub.
-          # Raise config timeout; EAP still may exceed this on cold runners.
+          # Image + config timeout + heap for container (not the action Node process).
           args: >-
             --image jetbrains/qodana-rust:2026.2-eap
             --property qd.rust.configuration.timeout.minutes=90
+            --env _JAVA_OPTIONS=-Xmx6g
         env:
-          # Prefer real Cloud project token; fallback for older App-created names.
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN || secrets.QODANA_CONFIGURATIONS_TOKEN }}
-          # Give RustRover more heap during project open.
-          JAVA_TOOL_OPTIONS: -Xmx6g
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
       - name: Qodana skipped (no token)
         if: steps.qodana_token.outputs.present != 'true'
         run: |
-          echo "No Qodana project token secret found; skipping scan (Rust needs Ultimate/Cloud)."
-          echo "Set repository secret QODANA_TOKEN from https://qodana.cloud/ project card"
-          echo "(or QODANA_CONFIGURATIONS_TOKEN if the GitHub App created that name)."
+          echo "QODANA_TOKEN not set; skipping Qodana for Rust (Ultimate/Cloud required)."
+          echo "Set repository secret QODANA_TOKEN from https://qodana.cloud/ project card."
           echo "See docs/ci.md — Qodana Cloud setup."
 
   release-observability:

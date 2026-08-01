@@ -8,6 +8,8 @@
 ```bash
 # From any clone of this repository root:
 cd "$(git rev-parse --show-toplevel)"
+# Hydrate issue DB from remote Dolt ref when .beads/dolt is empty/stale:
+bd dolt pull 2>/dev/null || true
 bd prime                    # full beads workflow context
 bd ready                    # next unblocked bead
 bd show xai-dissect-iz3     # epic overview
@@ -179,8 +181,12 @@ while true; do
       [ "$C_HAS" = "true" ] || [ "$C_HAS" = "false" ] \
         || { echo "missing comment hasNextPage for $THREAD_ID" >&2; exit 1; }
       [ "$C_HAS" = "true" ] || break
-      C_AFTER=$(echo "$C_PAGE" | jq -r '.data.node.comments.pageInfo.endCursor')
-      [ -n "$C_AFTER" ] || { echo "missing endCursor for $THREAD_ID" >&2; exit 1; }
+      # jq -r prints JSON null as the four-character string "null" — reject it.
+      C_AFTER=$(echo "$C_PAGE" | jq -r '
+        .data.node.comments.pageInfo.endCursor // empty
+        | if type == "string" and length > 0 and . != "null" then . else empty end
+      ')
+      [ -n "$C_AFTER" ] || { echo "missing/invalid endCursor for $THREAD_ID" >&2; exit 1; }
     done
   done
 
@@ -189,7 +195,11 @@ while true; do
   [ "$HAS" = "true" ] || [ "$HAS" = "false" ] \
     || { echo "missing hasNextPage in GraphQL response" >&2; exit 1; }
   [ "$HAS" = "true" ] || break
-  AFTER=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+  AFTER=$(echo "$PAGE" | jq -r '
+    .data.repository.pullRequest.reviewThreads.pageInfo.endCursor // empty
+    | if type == "string" and length > 0 and . != "null" then . else empty end
+  ')
+  [ -n "$AFTER" ] || { echo "missing/invalid reviewThreads endCursor" >&2; exit 1; }
 done
 
 # Per thread with cited SHA:

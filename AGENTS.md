@@ -82,7 +82,8 @@ hand off. Authorization rules:
 
 | Operation | Needs explicit user OK? |
 |-----------|-------------------------|
-| `git push` / `git pull --rebase` to shared remote | Yes, unless user granted **push** autonomy this session |
+| `git push` to shared remote | Yes, unless user granted **push** autonomy this session |
+| `git pull --rebase` from shared remote | Yes, unless user granted **push** (or explicit pull) autonomy this session |
 | `git remote prune` / deleting remote branches | Yes, unless user granted **remote-cleanup** autonomy |
 | `git stash drop` / discarding local stashes | Yes, unless user granted **stash-drop** autonomy |
 
@@ -99,7 +100,7 @@ hand off. Authorization rules:
    git status
    ```
 
-5. With cleanup authorization: clear stashes / prune remotes as needed
+5. With **remote-cleanup** / **stash-drop** authorization only: clear stashes / prune remotes as needed (do not treat push OK as cleanup OK)
 6. Confirm intended commits exist; remote matches only if push was authorized
 7. Hand off context for the next session
 

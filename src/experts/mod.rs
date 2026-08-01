@@ -129,19 +129,19 @@ pub fn build_expert_atlas(inv: &ModelInventory) -> ExpertAtlas {
     let canonical_layout = canonical_layout_signature(&blocks);
 
     for block in &blocks {
-        if let Some(expected) = expected_experts_per_block {
-            if block.expert_count != Some(expected) {
-                anomalies.push(ExpertIssue {
-                    severity: ExpertIssueSeverity::Warning,
-                    category: ExpertIssueCategory::NamingConsistency,
-                    block_index: Some(block.block_index),
-                    tensor: None,
-                    message: format!(
-                        "expert count {:?} does not match checkpoint-wide expectation {}",
-                        block.expert_count, expected
-                    ),
-                });
-            }
+        if let Some(expected) = expected_experts_per_block
+            && block.expert_count != Some(expected)
+        {
+            anomalies.push(ExpertIssue {
+                severity: ExpertIssueSeverity::Warning,
+                category: ExpertIssueCategory::NamingConsistency,
+                block_index: Some(block.block_index),
+                tensor: None,
+                message: format!(
+                    "expert count {:?} does not match checkpoint-wide expectation {}",
+                    block.expert_count, expected
+                ),
+            });
         }
 
         if let Some(expected_layout) = canonical_layout.as_ref() {
@@ -241,10 +241,10 @@ fn infer_expert_projection(
     }
 
     let dims = tensor.shape.dims();
-    if let Some(expected) = expected_experts {
-        if dims[0] != expected {
-            return None;
-        }
+    if let Some(expected) = expected_experts
+        && dims[0] != expected
+    {
+        return None;
     }
 
     if let Some(dm) = d_model {
@@ -383,10 +383,10 @@ fn build_naming_patterns(blocks: &[ExpertBlock]) -> Vec<ExpertNamingPattern> {
         for tensor in &block.tensors {
             let entry = patterns.entry(tensor.family_label.clone()).or_default();
             entry.projection.get_or_insert(tensor.projection);
-            if let Some(slot) = tensor.block_slot {
-                if !entry.block_slots.contains(&slot) {
-                    entry.block_slots.push(slot);
-                }
+            if let Some(slot) = tensor.block_slot
+                && !entry.block_slots.contains(&slot)
+            {
+                entry.block_slots.push(slot);
             }
             if !entry.shapes.contains(&tensor.shape) {
                 entry.shapes.push(tensor.shape.clone());

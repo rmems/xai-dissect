@@ -64,9 +64,9 @@ Try Beads in your own projects:
 See https://github.com/gastownhall/beads/releases. Example shape (fill version/arch/sha256 from a release you reviewed):
 
 ```text
-curl -fsSL -o bd.tgz "https://github.com/gastownhall/beads/releases/download/vX.Y.Z/bd_…_linux_amd64.tar.gz"
-echo "<published-sha256>  bd.tgz" | sha256sum -c -
-tar -xzf bd.tgz && sudo install -m 755 bd /usr/local/bin/bd
+curl -fsSL -o beads.tgz "https://github.com/gastownhall/beads/releases/download/vX.Y.Z/beads_X.Y.Z_linux_amd64.tar.gz"
+echo "<published-sha256>  beads.tgz" | sha256sum -c -
+tar -xzf beads.tgz && sudo install -m 755 bd /usr/local/bin/bd
 ```
 
 **Then, with `bd` on PATH:**

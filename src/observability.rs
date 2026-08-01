@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::sync::Once;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Once, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Error;
@@ -8,18 +8,22 @@ use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
 static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Single process run id shared by Sentry tags and tracing spans.
+static CACHED_RUN_ID: OnceLock<String> = OnceLock::new();
 
 /// Opt-in Sentry for real-weight campaigns.
 ///
 /// Enabled only when **both** are set:
-/// - `XAI_DISSECT_SENTRY=1` (or `true` / `yes`)
+/// - `XAI_DISSECT_SENTRY=1` (or `true` / `yes` / case-insensitive)
 /// - `SENTRY_DSN` non-empty and parseable
 ///
 /// Default is off so public CLI clones never phone home.
 ///
 /// Init follows the official Rust SDK pattern (`ClientOptions` + keep the
-/// guard alive). Release names use `xai-dissect@<git_sha|version>` so they
-/// match CI release markers (`scripts/observability/sentry_release.sh`).
+/// guard alive). Release names prefer `xai-dissect@<AGENTOS_GIT_SHA>` so they
+/// match CI release markers (`scripts/observability/sentry_release.sh`); when
+/// no SHA is set, falls back to `unknown` (not crate version) so events are not
+/// mis-attributed to a deploy that was never created.
 /// Invalid DSNs soft-fail (return `None`) instead of panicking — `sentry::init`
 /// panics on bad DSNs, which would break the CLI for a misconfigured opt-in.
 pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
@@ -37,13 +41,8 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "local".to_owned());
 
-    let release = format!(
-        "xai-dissect@{}",
-        std::env::var("AGENTOS_GIT_SHA")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
-    );
+    // Align with CI: scripts/observability/sentry_release.sh uses git SHA only.
+    let release = format!("xai-dissect@{}", git_sha());
 
     let guard = sentry::init(sentry::ClientOptions {
         dsn: Some(dsn),
@@ -53,6 +52,8 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         traces_sample_rate: 0.0,
         // CLI: never send IPs/headers/PII (docs enable this for HTTP servers only).
         send_default_pii: false,
+        // Avoid advertising hostname when contexts are compiled in.
+        server_name: Some(Cow::Borrowed("xai-dissect")),
         before_send: Some(std::sync::Arc::new(|mut event| {
             scrub_event_paths(&mut event);
             Some(event)
@@ -64,6 +65,7 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         return None;
     }
 
+    // Same cached run_id as tracing (OnceLock); set before main continues.
     sentry::configure_scope(|scope| {
         scope.set_tag("repo", "xai-dissect");
         scope.set_tag("run_id", run_id());
@@ -73,26 +75,60 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
 }
 
 fn env_flag_enabled(name: &str) -> bool {
+    let Ok(raw) = std::env::var(name) else {
+        return false;
+    };
     matches!(
-        std::env::var(name).as_deref().map(str::trim),
-        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES") | Ok("on") | Ok("ON")
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
     )
 }
 
-/// Redact home-directory prefixes so checkpoint paths do not leak layout.
+fn scrub_str(value: &str, home: &str) -> String {
+    value.replace(home, "$HOME")
+}
+
+/// Redact home-directory prefixes from messages, exceptions, frames, breadcrumbs.
 fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
-    if let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) {
-        let home = home.trim_end_matches('/');
-        if home.is_empty() {
-            return;
+    let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) else {
+        return;
+    };
+    let home = home.trim_end_matches('/');
+    if home.is_empty() {
+        return;
+    }
+
+    if let Some(message) = event.message.as_mut() {
+        *message = scrub_str(message, home);
+    }
+    for exception in &mut event.exception.values {
+        if let Some(value) = exception.value.as_mut() {
+            *value = scrub_str(value, home);
         }
-        if let Some(message) = event.message.as_mut() {
-            *message = message.replace(home, "$HOME");
-        }
-        for exception in &mut event.exception.values {
-            if let Some(value) = exception.value.as_mut() {
-                *value = value.replace(home, "$HOME");
+        if let Some(stacktrace) = exception.stacktrace.as_mut() {
+            for frame in &mut stacktrace.frames {
+                if let Some(abs_path) = frame.abs_path.as_mut() {
+                    *abs_path = scrub_str(abs_path, home);
+                }
+                if let Some(filename) = frame.filename.as_mut() {
+                    *filename = scrub_str(filename, home);
+                }
             }
+        }
+    }
+    if let Some(stacktrace) = event.stacktrace.as_mut() {
+        for frame in &mut stacktrace.frames {
+            if let Some(abs_path) = frame.abs_path.as_mut() {
+                *abs_path = scrub_str(abs_path, home);
+            }
+            if let Some(filename) = frame.filename.as_mut() {
+                *filename = scrub_str(filename, home);
+            }
+        }
+    }
+    for breadcrumb in &mut event.breadcrumbs.values {
+        if let Some(message) = breadcrumb.message.as_mut() {
+            *message = scrub_str(message, home);
         }
     }
 }
@@ -122,19 +158,24 @@ pub fn init_tracing() {
     });
 }
 
+/// Process-stable run id for tracing + Sentry correlation.
 pub fn run_id() -> String {
-    std::env::var("AGENTOS_RUN_ID")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| {
-            let nanos = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_nanos())
-                .unwrap_or(0);
-            let pid = std::process::id();
-            let counter = RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-            format!("xai-dissect-{nanos}-{pid}-{counter}")
+    CACHED_RUN_ID
+        .get_or_init(|| {
+            std::env::var("AGENTOS_RUN_ID")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| {
+                    let nanos = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|duration| duration.as_nanos())
+                        .unwrap_or(0);
+                    let pid = std::process::id();
+                    let counter = RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+                    format!("xai-dissect-{nanos}-{pid}-{counter}")
+                })
         })
+        .clone()
 }
 
 pub fn git_sha() -> String {

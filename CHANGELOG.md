@@ -11,8 +11,9 @@ All notable changes to `xai-dissect` are documented here.
   ([#33](https://github.com/rmems/xai-dissect/issues/33)).
 - Maintainer CI secrets / disable notes in `docs/ci.md`.
 - Opt-in Sentry error capture for real-weight CLI runs (`XAI_DISSECT_SENTRY=1` +
-  `SENTRY_DSN`); default off. Home-path scrubbing on events; `capture_anyhow`
-  for error chains; invalid DSN soft-disables instead of panicking.
+  `SENTRY_DSN`); default off. `$HOME` redacted from event messages, exception
+  values, stacktrace frame paths, and breadcrumbs (not every event field);
+  `capture_anyhow` for error chains; invalid DSN soft-disables instead of panicking.
 
 ### Fixed
 

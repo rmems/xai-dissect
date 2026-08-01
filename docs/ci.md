@@ -9,7 +9,7 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 |-----|------|---------------------|--------------|
 | **rust-ci** | PR + `main` | **Yes** (branch-protection gate) | `cargo fmt --check`, `cargo test --locked`, `cargo clippy -D warnings`, CLI `--help` smokes |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
-| **qodana** | PR + `main` | Not a required merge gate; **soft** when token set (`continue-on-error`) because Rust linter is EAP and project-open can time out on GHA | JetBrains Qodana for Rust (`qodana.yaml`); skips when token unset; Cloud still links when scan runs |
+| **qodana** | PR + `main` | Not a required merge gate; scan step uses `continue-on-error` (Rust linter is EAP) | JetBrains Qodana for Rust (`qodana.yaml`); skips when `QODANA_TOKEN` unset |
 | **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
 
 **Out of scope:** New Relic, Aikido, checkpoint downloads, GPU runners.
@@ -21,11 +21,12 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | Secret | Job | Required? |
 |--------|-----|-----------|
 | `CODECOV_TOKEN` | coverage | Optional. When set, used for upload; when empty, OIDC (`use_oidc`) is enabled. Upload still soft-fails. |
-| `QODANA_TOKEN` | qodana | Optional **preferred** name. JetBrains Cloud project token from the [project card](https://qodana.cloud/). When set, the Rust Ultimate scan runs and the job can fail. When unset (and no fallback below), the job **skips**. Does not replace `rust-ci` as the required merge gate unless you add it to branch protection. |
-| `QODANA_CONFIGURATIONS_TOKEN` | qodana | Optional **fallback** name (some JetBrains GitHub App installs). Workflow maps it to `QODANA_TOKEN` for the action if the preferred secret is empty. |
+| `QODANA_TOKEN` | qodana | Optional. JetBrains Cloud **project** token from the [project card](https://qodana.cloud/). When set, the scan runs (soft-fail on EAP timeout). When unset, the job skips. Not a merge gate. |
 | `SENTRY_AUTH_TOKEN` | release-observability | Optional |
 | `SENTRY_ORG` | release-observability | Optional (with token + project) |
 | `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional |
+
+Do **not** use `QODANA_CONFIGURATIONS_TOKEN` as the scan token — that is an uploader/config token, not a Cloud project token.
 
 ### Disable Sentry (CI release markers)
 
@@ -41,20 +42,22 @@ Grok-1 weight campaigns:
 ```bash
 export XAI_DISSECT_SENTRY=1
 export SENTRY_DSN='https://…@….ingest.sentry.io/…'
-# optional:
+# optional — use full SHA so runtime release matches CI markers:
 export SENTRY_ENVIRONMENT=local-weights
-export AGENTOS_GIT_SHA="$(git rev-parse --short HEAD)"
+export AGENTOS_GIT_SHA="$(git rev-parse HEAD)"
+# optional stable correlation id for logs + Sentry:
+export AGENTOS_RUN_ID="weights-$(date -u +%Y%m%d)-1"
 
 ./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
 ```
 
 What is sent:
 
-- Panics (via Sentry panic integration)
-- Top-level command `anyhow` failures via `capture_anyhow` (full error chain;
-  `$HOME` redacted from exception values / messages in `before_send`)
-- Tags: `repo=xai-dissect`, `command`, `error_category`, `run_id`
-- Release name: `xai-dissect@<AGENTOS_GIT_SHA|crate version>` (aligned with CI)
+- Panics (via Sentry panic integration) with tags `repo`, `run_id` (and `command` after CLI parse)
+- Top-level command `anyhow` failures via `capture_anyhow` (full error chain) with
+  the same tags **plus** `error_category` (only on command failures)
+- `$HOME` redacted from messages, exception values, stacktrace frame paths, and breadcrumbs
+- Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (aligned with CI when SHA is set)
 
 What is **not** sent by default:
 
@@ -67,22 +70,20 @@ CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
-### Qodana Cloud setup (why Cloud stays empty)
+## Qodana Cloud setup
 
-`qodana-rust` is **Ultimate-only** — it needs a [Qodana Cloud](https://qodana.cloud/) project token. Without the secret, CI **skips** the scan by design (green job, no Cloud report).
+`qodana-rust` is **Ultimate-only** — it needs a [Qodana Cloud](https://qodana.cloud/) project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
 
 1. Create account / org / team / project on [qodana.cloud](https://qodana.cloud/) for `rmems/xai-dissect`
 2. Copy the **project token** from the project card
 3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
-4. Re-run CI; expect a multi-minute Docker scan and a report in Cloud
+4. Re-run CI; expect a long Docker scan when the EAP linter can open the project
 
-If you only have `QODANA_CONFIGURATIONS_TOKEN` (App-created name), the workflow still uses it as a fallback — but that token is often **not** a valid Cloud project token (scan fails with “QODANA_TOKEN is invalid”). Prefer a real **`QODANA_TOKEN`** from the project card.
-
-Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`. CI passes `--image jetbrains/qodana-rust:2026.2-eap`.
+Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`. CI passes `--image jetbrains/qodana-rust:2026.2-eap`. Scan step uses `continue-on-error` because project-open timeouts are common on GitHub-hosted runners.
 
 ### Disable / soften Qodana
 
-Omit both Qodana secrets. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
+Omit `QODANA_TOKEN`. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
 
 ## Local commands (same as CI)
 
