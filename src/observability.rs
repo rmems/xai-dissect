@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Once;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -7,6 +8,99 @@ use tracing_subscriber::EnvFilter;
 
 static INIT: Once = Once::new();
 static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Opt-in Sentry for real-weight campaigns.
+///
+/// Enabled only when **both** are set:
+/// - `XAI_DISSECT_SENTRY=1` (or `true` / `yes`)
+/// - `SENTRY_DSN` non-empty
+///
+/// Default is off so public CLI clones never phone home.
+pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
+    if !env_flag_enabled("XAI_DISSECT_SENTRY") {
+        return None;
+    }
+    let dsn = std::env::var("SENTRY_DSN")
+        .ok()
+        .filter(|value| !value.trim().is_empty())?;
+
+    let environment = std::env::var("SENTRY_ENVIRONMENT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "local".to_owned());
+
+    let release = format!(
+        "xai-dissect@{}",
+        std::env::var("AGENTOS_GIT_SHA")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
+    );
+
+    let guard = sentry::init((
+        dsn,
+        sentry::ClientOptions {
+            release: Some(Cow::Owned(release)),
+            environment: Some(Cow::Owned(environment)),
+            traces_sample_rate: 0.0,
+            send_default_pii: false,
+            before_send: Some(std::sync::Arc::new(|mut event| {
+                scrub_event_paths(&mut event);
+                Some(event)
+            })),
+            ..Default::default()
+        },
+    ));
+
+    sentry::configure_scope(|scope| {
+        scope.set_tag("repo", "xai-dissect");
+        scope.set_tag("run_id", run_id());
+    });
+
+    Some(guard)
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    matches!(
+        std::env::var(name).as_deref().map(str::trim),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES") | Ok("on") | Ok("ON")
+    )
+}
+
+/// Redact home-directory prefixes so checkpoint paths do not leak layout.
+fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
+    if let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) {
+        let home = home.trim_end_matches('/');
+        if home.is_empty() {
+            return;
+        }
+        if let Some(message) = event.message.as_mut() {
+            *message = message.replace(home, "$HOME");
+        }
+        for exception in &mut event.exception.values {
+            if let Some(value) = exception.value.as_mut() {
+                *value = value.replace(home, "$HOME");
+            }
+        }
+    }
+}
+
+/// Report a top-level command failure (no-op when Sentry is disabled).
+pub fn capture_error(error: &Error) {
+    let category = error_category(Some(error));
+    sentry::configure_scope(|scope| {
+        scope.set_tag("error_category", category);
+    });
+    // Scrub home from the message body only (not weight contents).
+    let mut message = format!("{error:#}");
+    if let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) {
+        let home = home.trim_end_matches('/');
+        if !home.is_empty() {
+            message = message.replace(home, "$HOME");
+        }
+    }
+    sentry::capture_message(&message, sentry::Level::Error);
+}
 
 pub fn init_tracing() {
     INIT.call_once(|| {

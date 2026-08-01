@@ -403,6 +403,8 @@ impl Command {
 }
 
 fn main() -> Result<()> {
+    // Keep guard alive for the whole process so panics/events flush on drop.
+    let _sentry_guard = observability::init_sentry();
     observability::init_tracing();
     let cli = Cli::parse();
     let command = cli.command.name();
@@ -424,6 +426,9 @@ fn main() -> Result<()> {
     let _enter = span.enter();
 
     tracing::info!(event = "command_start", "command_start");
+    sentry::configure_scope(|scope| {
+        scope.set_tag("command", command);
+    });
 
     let started = Instant::now();
     let result = match cli.command {
@@ -591,6 +596,10 @@ fn main() -> Result<()> {
         error_category,
         "command_finish"
     );
+
+    if let Err(ref error) = result {
+        observability::capture_error(error);
+    }
 
     result
 }

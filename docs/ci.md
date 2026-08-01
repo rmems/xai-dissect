@@ -26,9 +26,40 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | `SENTRY_ORG` | release-observability | Optional (with token + project) |
 | `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional |
 
-### Disable Sentry
+### Disable Sentry (CI release markers)
 
 Omit any of the three Sentry secrets. Install and release steps are skipped (no binary download).
+
+## Opt-in Sentry for real-weight CLI runs
+
+Runtime capture is **off by default** (public CLI must not phone home).
+
+Enable only on machines where you intentionally want crash/error reports during
+Grok-1 weight campaigns:
+
+```bash
+export XAI_DISSECT_SENTRY=1
+export SENTRY_DSN='https://…@….ingest.sentry.io/…'
+# optional:
+export SENTRY_ENVIRONMENT=local-weights
+export AGENTOS_GIT_SHA="$(git rev-parse --short HEAD)"
+
+./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
+```
+
+What is sent:
+
+- Panics (via Sentry panic integration)
+- Top-level command `anyhow` failures (scrubbed: `$HOME` redacted from messages)
+- Tags: `repo=xai-dissect`, `command`, `error_category`, `run_id`
+
+What is **not** sent by default:
+
+- Weight tensors / checkpoint bytes
+- Events when `XAI_DISSECT_SENTRY` is unset
+
+CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
+do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 
 ### Disable / soften Qodana
 

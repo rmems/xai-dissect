@@ -2,7 +2,7 @@
 
 All notable changes to `xai-dissect` are documented here.
 
-## Unreleased - 2026-07-31
+## Unreleased - 2026-08-01
 
 ### Added
 
@@ -10,6 +10,8 @@ All notable changes to `xai-dissect` are documented here.
   llvm-cov → Codecov, Qodana (`qodana.yaml`), optional Sentry release on `main`
   ([#33](https://github.com/rmems/xai-dissect/issues/33)).
 - Maintainer CI secrets / disable notes in `docs/ci.md`.
+- Opt-in Sentry error capture for real-weight CLI runs (`XAI_DISSECT_SENTRY=1` +
+  `SENTRY_DSN`); default off. Home-path scrubbing on events.
 
 ### Fixed
 
