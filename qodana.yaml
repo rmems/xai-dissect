@@ -28,6 +28,7 @@ exclude:
       - .kilo
       - .claude
       - .idea
+      - .qodana-cargo
 
 # Soft quality gate: do not block on info noise; fail only on critical when
 # token is present and the action is not continue-on-error.
