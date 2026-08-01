@@ -50,16 +50,21 @@ export AGENTOS_GIT_SHA="$(git rev-parse --short HEAD)"
 What is sent:
 
 - Panics (via Sentry panic integration)
-- Top-level command `anyhow` failures (scrubbed: `$HOME` redacted from messages)
+- Top-level command `anyhow` failures via `capture_anyhow` (full error chain;
+  `$HOME` redacted from exception values / messages in `before_send`)
 - Tags: `repo=xai-dissect`, `command`, `error_category`, `run_id`
+- Release name: `xai-dissect@<AGENTOS_GIT_SHA|crate version>` (aligned with CI)
 
 What is **not** sent by default:
 
 - Weight tensors / checkpoint bytes
-- Events when `XAI_DISSECT_SENTRY` is unset
+- Default PII (`send_default_pii = false`)
+- Performance transactions (`traces_sample_rate = 0`)
+- Events when `XAI_DISSECT_SENTRY` is unset, or when `SENTRY_DSN` is empty/invalid
 
 CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
+Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
 ### Disable / soften Qodana
 

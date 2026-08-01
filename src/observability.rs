@@ -13,16 +13,24 @@ static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 ///
 /// Enabled only when **both** are set:
 /// - `XAI_DISSECT_SENTRY=1` (or `true` / `yes`)
-/// - `SENTRY_DSN` non-empty
+/// - `SENTRY_DSN` non-empty and parseable
 ///
 /// Default is off so public CLI clones never phone home.
+///
+/// Init follows the official Rust SDK pattern (`ClientOptions` + keep the
+/// guard alive). Release names use `xai-dissect@<git_sha|version>` so they
+/// match CI release markers (`scripts/observability/sentry_release.sh`).
+/// Invalid DSNs soft-fail (return `None`) instead of panicking — `sentry::init`
+/// panics on bad DSNs, which would break the CLI for a misconfigured opt-in.
 pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
     if !env_flag_enabled("XAI_DISSECT_SENTRY") {
         return None;
     }
-    let dsn = std::env::var("SENTRY_DSN")
+    let dsn_raw = std::env::var("SENTRY_DSN")
         .ok()
         .filter(|value| !value.trim().is_empty())?;
+    // Parse before init: invalid DSNs must not panic the process.
+    let dsn: sentry::types::Dsn = dsn_raw.trim().parse().ok()?;
 
     let environment = std::env::var("SENTRY_ENVIRONMENT")
         .ok()
@@ -37,20 +45,24 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
             .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
     );
 
-    let guard = sentry::init((
-        dsn,
-        sentry::ClientOptions {
-            release: Some(Cow::Owned(release)),
-            environment: Some(Cow::Owned(environment)),
-            traces_sample_rate: 0.0,
-            send_default_pii: false,
-            before_send: Some(std::sync::Arc::new(|mut event| {
-                scrub_event_paths(&mut event);
-                Some(event)
-            })),
-            ..Default::default()
-        },
-    ));
+    let guard = sentry::init(sentry::ClientOptions {
+        dsn: Some(dsn),
+        release: Some(Cow::Owned(release)),
+        environment: Some(Cow::Owned(environment)),
+        // Error reporting only for opt-in weight runs (no perf transactions).
+        traces_sample_rate: 0.0,
+        // CLI: never send IPs/headers/PII (docs enable this for HTTP servers only).
+        send_default_pii: false,
+        before_send: Some(std::sync::Arc::new(|mut event| {
+            scrub_event_paths(&mut event);
+            Some(event)
+        })),
+        ..Default::default()
+    });
+
+    if !guard.is_enabled() {
+        return None;
+    }
 
     sentry::configure_scope(|scope| {
         scope.set_tag("repo", "xai-dissect");
@@ -86,20 +98,15 @@ fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
 }
 
 /// Report a top-level command failure (no-op when Sentry is disabled).
+///
+/// Uses `capture_anyhow` so Sentry gets the full error chain (not a flat
+/// message). Path scrubbing is applied in `before_send` only.
 pub fn capture_error(error: &Error) {
     let category = error_category(Some(error));
     sentry::configure_scope(|scope| {
         scope.set_tag("error_category", category);
     });
-    // Scrub home from the message body only (not weight contents).
-    let mut message = format!("{error:#}");
-    if let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) {
-        let home = home.trim_end_matches('/');
-        if !home.is_empty() {
-            message = message.replace(home, "$HOME");
-        }
-    }
-    sentry::capture_message(&message, sentry::Level::Error);
+    sentry::integrations::anyhow::capture_anyhow(error);
 }
 
 pub fn init_tracing() {

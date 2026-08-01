@@ -29,7 +29,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 # Opt-in crash/error reporting for real-weight campaigns (see docs/ci.md).
 # Pinned below 0.49 (requires rustc 1.88); crate MSRV 1.81 fits rust-version 1.85.
-sentry = { version = "0.46", default-features = true }
+# `anyhow` feature: capture_anyhow for error chains (not flat capture_message).
+sentry = { version = "0.46", default-features = true, features = ["anyhow"] }
 
 [profile.release]
 lto = "thin"
