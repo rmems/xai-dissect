@@ -151,9 +151,11 @@ jobs:
         uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
           pr-mode: true
-          # Docker Hub only publishes …-eap tags for qodana-rust (not plain 2026.1).
-          # CLI prefers --image over embedding the registry path in linter:.
-          args: --image jetbrains/qodana-rust:2026.2-eap
+          # 2026.1-eap matches action CLI 2026.1.x; plain 2026.1 is not on Docker Hub.
+          # Rust project open often exceeds the default 10m config timeout on GH runners.
+          args: >-
+            --image jetbrains/qodana-rust:2026.1-eap
+            --property qd.rust.configuration.timeout.minutes=45
         env:
           # Prefer real Cloud project token; fallback for older App-created names.
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN || secrets.QODANA_CONFIGURATIONS_TOKEN }}

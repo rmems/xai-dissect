@@ -4,13 +4,19 @@
 
 version: "1.0"
 
-# Docker Hub tags for jetbrains/qodana-rust: latest | 2026.2-eap | 2026.1-eap
-# (plain "2026.1" does not exist — pull fails with manifest unknown).
-# Prefer short linter id; CLI resolves the image. Pin EAP tag via image if needed.
+# Short linter id; CI pins Docker image via --image (Hub: 2026.2-eap | 2026.1-eap | latest).
 linter: qodana-rust
 
 profile:
   name: qodana.recommended
+
+# Warm Cargo deps before RustRover project open (avoids dumb-mode stalls).
+bootstrap: |
+  set -eu
+  if command -v rustup >/dev/null 2>&1; then
+    rustup show active-toolchain || rustup toolchain install 1.85
+  fi
+  cargo fetch --locked
 
 # Project is pure Rust; skip huge / non-source trees.
 exclude:
