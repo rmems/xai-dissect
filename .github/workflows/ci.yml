@@ -131,13 +131,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Detect token without putting it on every step env.
+      # Prefer QODANA_TOKEN (JetBrains docs name). Also accept
+      # QODANA_CONFIGURATIONS_TOKEN (GitHub App / older Cloud installs) so a
+      # misnamed secret still reaches the scan instead of silent skip.
       - name: Detect Qodana token
         id: qodana_token
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          QODANA_CONFIGURATIONS_TOKEN: ${{ secrets.QODANA_CONFIGURATIONS_TOKEN }}
         run: |
-          if [ -n "${QODANA_TOKEN}" ]; then
+          if [ -n "${QODANA_TOKEN}" ] || [ -n "${QODANA_CONFIGURATIONS_TOKEN}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -150,13 +153,16 @@ jobs:
           # Let qodana.yaml pin the linter image/version; do not override here.
           pr-mode: true
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          # Action expects QODANA_TOKEN; coalesce alternate secret names.
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN || secrets.QODANA_CONFIGURATIONS_TOKEN }}
 
       - name: Qodana skipped (no token)
         if: steps.qodana_token.outputs.present != 'true'
         run: |
-          echo "QODANA_TOKEN not set; skipping Qodana for Rust (Ultimate/Cloud required)."
-          echo "Configure the secret to enforce qodana.yaml failureConditions."
+          echo "No Qodana project token secret found; skipping scan (Rust needs Ultimate/Cloud)."
+          echo "Set repository secret QODANA_TOKEN from https://qodana.cloud/ project card"
+          echo "(or QODANA_CONFIGURATIONS_TOKEN if the GitHub App created that name)."
+          echo "See docs/ci.md — Qodana Cloud setup."
 
   release-observability:
     name: Release observability (Sentry)

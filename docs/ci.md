@@ -21,7 +21,8 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | Secret | Job | Required? |
 |--------|-----|-----------|
 | `CODECOV_TOKEN` | coverage | Optional. When set, used for upload; when empty, OIDC (`use_oidc`) is enabled. Upload still soft-fails. |
-| `QODANA_TOKEN` | qodana | Optional. When **set**, scan runs and the **job** can fail. When **unset**, job skips. Does not replace `rust-ci` as the required merge check unless you add it to branch protection. |
+| `QODANA_TOKEN` | qodana | Optional **preferred** name. JetBrains Cloud project token from the [project card](https://qodana.cloud/). When set, the Rust Ultimate scan runs and the job can fail. When unset (and no fallback below), the job **skips**. Does not replace `rust-ci` as the required merge gate unless you add it to branch protection. |
+| `QODANA_CONFIGURATIONS_TOKEN` | qodana | Optional **fallback** name (some JetBrains GitHub App installs). Workflow maps it to `QODANA_TOKEN` for the action if the preferred secret is empty. |
 | `SENTRY_AUTH_TOKEN` | release-observability | Optional |
 | `SENTRY_ORG` | release-observability | Optional (with token + project) |
 | `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional |
@@ -66,9 +67,20 @@ CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
+### Qodana Cloud setup (why Cloud stays empty)
+
+`qodana-rust` is **Ultimate-only** — it needs a [Qodana Cloud](https://qodana.cloud/) project token. Without the secret, CI **skips** the scan by design (green job, no Cloud report).
+
+1. Create account / org / team / project on [qodana.cloud](https://qodana.cloud/) for `rmems/xai-dissect`
+2. Copy the **project token** from the project card
+3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
+4. Re-run CI; expect a multi-minute Docker scan and a report in Cloud
+
+If you only have `QODANA_CONFIGURATIONS_TOKEN` (App-created name), the workflow still uses it as a fallback. Prefer renaming/copying to `QODANA_TOKEN` to match JetBrains docs.
+
 ### Disable / soften Qodana
 
-Omit `QODANA_TOKEN`. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
+Omit both Qodana secrets. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
 
 ## Local commands (same as CI)
 
