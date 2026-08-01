@@ -10,12 +10,12 @@ linter: qodana-rust
 profile:
   name: qodana.recommended
 
-# Warm Cargo deps before RustRover project open (avoids dumb-mode stalls).
+# Warm Cargo deps before RustRover open. Image CARGO_HOME is root-owned;
+# use a project-local cache so bootstrap is not Permission denied.
 bootstrap: |
   set -eu
-  if command -v rustup >/dev/null 2>&1; then
-    rustup show active-toolchain || rustup toolchain install 1.85
-  fi
+  export CARGO_HOME="/data/project/.qodana-cargo"
+  mkdir -p "${CARGO_HOME}"
   cargo fetch --locked
 
 # Project is pure Rust; skip huge / non-source trees.
