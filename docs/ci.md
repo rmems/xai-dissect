@@ -76,7 +76,9 @@ Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
 4. Re-run CI; expect a multi-minute Docker scan and a report in Cloud
 
-If you only have `QODANA_CONFIGURATIONS_TOKEN` (App-created name), the workflow still uses it as a fallback. Prefer renaming/copying to `QODANA_TOKEN` to match JetBrains docs.
+If you only have `QODANA_CONFIGURATIONS_TOKEN` (App-created name), the workflow still uses it as a fallback — but that token is often **not** a valid Cloud project token (scan fails with “QODANA_TOKEN is invalid”). Prefer a real **`QODANA_TOKEN`** from the project card.
+
+Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`. CI passes `--image jetbrains/qodana-rust:2026.2-eap`.
 
 ### Disable / soften Qodana
 

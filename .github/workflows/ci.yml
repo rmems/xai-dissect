@@ -150,10 +150,12 @@ jobs:
         if: steps.qodana_token.outputs.present == 'true'
         uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
-          # Let qodana.yaml pin the linter image/version; do not override here.
           pr-mode: true
+          # Docker Hub only publishes …-eap tags for qodana-rust (not plain 2026.1).
+          # CLI prefers --image over embedding the registry path in linter:.
+          args: --image jetbrains/qodana-rust:2026.2-eap
         env:
-          # Action expects QODANA_TOKEN; coalesce alternate secret names.
+          # Prefer real Cloud project token; fallback for older App-created names.
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN || secrets.QODANA_CONFIGURATIONS_TOKEN }}
 
       - name: Qodana skipped (no token)

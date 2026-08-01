@@ -4,9 +4,10 @@
 
 version: "1.0"
 
-# Pin to 2026.1 — matches JetBrains/qodana-action@v2026.1.3 CLI.
-# 2026.2-eap triggers: "non-compatible Qodana linter … with current CLI".
-linter: jetbrains/qodana-rust:2026.1
+# Docker Hub tags for jetbrains/qodana-rust: latest | 2026.2-eap | 2026.1-eap
+# (plain "2026.1" does not exist — pull fails with manifest unknown).
+# Prefer short linter id; CLI resolves the image. Pin EAP tag via image if needed.
+linter: qodana-rust
 
 profile:
   name: qodana.recommended
