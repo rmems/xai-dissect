@@ -7,16 +7,12 @@ version: "1.0"
 # Short linter id; CI pins Docker image via --image (Hub: 2026.2-eap | 2026.1-eap | latest).
 linter: qodana-rust
 
+# Starter is lighter than recommended — RustRover project-open is slow on GHA.
 profile:
-  name: qodana.recommended
+  name: qodana.starter
 
-# Warm Cargo deps before RustRover open. Image CARGO_HOME is root-owned;
-# use a project-local cache so bootstrap is not Permission denied.
-bootstrap: |
-  set -eu
-  export CARGO_HOME="/data/project/.qodana-cargo"
-  mkdir -p "${CARGO_HOME}"
-  cargo fetch --locked
+# Do not use bootstrap/cargo fetch here: image CARGO_HOME is often root-owned
+# (Permission denied), and fetch did not fix the project-open timeout.
 
 # Project is pure Rust; skip huge / non-source trees.
 exclude:

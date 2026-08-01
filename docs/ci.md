@@ -9,7 +9,7 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 |-----|------|---------------------|--------------|
 | **rust-ci** | PR + `main` | **Yes** (branch-protection gate) | `cargo fmt --check`, `cargo test --locked`, `cargo clippy -D warnings`, CLI `--help` smokes |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
-| **qodana** | PR + `main` | Not a required merge gate; job fails only when token is set and scan fails | JetBrains Qodana for Rust (`qodana.yaml`); skips when token unset |
+| **qodana** | PR + `main` | Not a required merge gate; **soft** when token set (`continue-on-error`) because Rust linter is EAP and project-open can time out on GHA | JetBrains Qodana for Rust (`qodana.yaml`); skips when token unset; Cloud still links when scan runs |
 | **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
 
 **Out of scope:** New Relic, Aikido, checkpoint downloads, GPU runners.
