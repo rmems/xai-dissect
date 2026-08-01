@@ -25,11 +25,14 @@ bd dolt push          # Push beads data to remote
 
 ## Non-Interactive Shell Commands
 
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
+Prefer non-interactive flags for file and package operations so agents do not
+hang on y/n prompts. Escape hatch: if a command must stay interactive, run it
+only with explicit human presence (not unattended agent loops).
 
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
+Shell tools such as `cp`, `mv`, and `rm` may be aliased with `-i` on some hosts.
 
-**Use these forms instead:**
+**Preferred forms:**
+
 ```bash
 # Force overwrite without prompting
 cp -f source dest           # NOT: cp source dest
@@ -42,17 +45,19 @@ cp -rf source dest          # NOT: cp -r source dest
 ```
 
 **Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+
+- `scp` — use `-o BatchMode=yes` for non-interactive
+- `ssh` — use `-o BatchMode=yes` to fail instead of prompting
+- `apt-get` — use `-y` flag
+- `brew` — use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+Canonical agent task tracker is **bd**. Prefer `bd` over ad-hoc markdown TODO
+lists or host-specific todo tools (TodoWrite / TaskCreate).
 
-### Quick Reference
+### Common bd commands
 
 ```bash
 bd ready              # Find available work
@@ -61,37 +66,44 @@ bd update <id> --claim  # Claim work
 bd close <id>         # Complete work
 ```
 
-### Rules
+### Tracking rules
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Route open work through `bd` (create / claim / close)
+- Load workflow detail with `bd prime`
+- Persist cross-session notes with `bd remember` (avoid separate MEMORY.md files)
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+Dolt under `.beads/` is the issue source of truth; sync with `bd dolt push` /
+`bd dolt pull`. Details: https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md
 
 ## Session Completion
 
-**When ending a work session**, complete the checklist below. Steps that mutate shared remotes (push, prune) or discard local state (stash drop) require **explicit user authorization** unless the user already granted autonomy for the relevant operation in this session.
+After a coding session, run this checklist when the agent is about to stop or
+hand off. Authorization rules:
 
-**MANDATORY WORKFLOW:**
+| Operation | Needs explicit user OK? |
+|-----------|-------------------------|
+| `git push` / `git pull --rebase` to shared remote | Yes, unless user granted **push** autonomy this session |
+| `git remote prune` / deleting remote branches | Yes, unless user granted **remote-cleanup** autonomy |
+| `git stash drop` / discarding local stashes | Yes, unless user granted **stash-drop** autonomy |
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** (only with user authorization for remote mutation):
+**Workflow:**
+
+1. File remaining work as beads issues
+2. If code changed: run quality gates (`cargo fmt --check`, `cargo test --locked`, clippy `-D warnings`)
+3. Update issue status (close finished, claim still-open)
+4. With push authorization:
 
    ```bash
    git pull --rebase
    git push
-   git status  # should show "up to date with origin" after a successful push
+   git status
    ```
 
-5. **Clean up** (only with user authorization) - Clear stashes, prune remote branches
-6. **Verify** - Intended changes committed; remote updated when push was authorized
-7. **Hand off** - Provide context for next session
+5. With cleanup authorization: clear stashes / prune remotes as needed
+6. Confirm intended commits exist; remote matches only if push was authorized
+7. Hand off context for the next session
 
-**CRITICAL RULES:**
-- Do not leave unfinished local work without handoff notes
-- Do not push, force-push, or prune shared remotes without authorization
-- If authorized push fails, resolve and retry until it succeeds (or report the blocker)
+**Defaults:** leave a handoff note if work remains; do not push or prune shared
+remotes without authorization; if an authorized push fails, fix or report the
+blocker.
 <!-- END BEADS INTEGRATION -->

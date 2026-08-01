@@ -58,7 +58,7 @@ cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
 - No tokens, DSNs, or private paths in the tree
 - Workflow default permissions are `contents: read`; Qodana alone gets `checks`/`pull-requests` write
 - `sentry-cli` is installed only when Sentry is configured, from a **version-pinned** GitHub release binary with **SHA-256 verification** (no `curl | bash`)
-- Qodana GitHub Action is pinned to a full commit SHA (`JetBrains/qodana-action@4861e01…` / v2026.1.3), not a floating major tag
+- Third-party Actions are pinned to full commit SHAs (checkout, rust-toolchain, rust-cache, install-action, codecov, qodana), not floating major tags
 - Secret-backed steps skip when secrets are missing
 - Fork PRs should not receive repository secrets from GitHub
 - Concurrency cancels only PR runs (not in-flight `main` Sentry releases)
