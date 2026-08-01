@@ -25,13 +25,13 @@ bd dolt push          # Push beads data to remote
 
 ## Non-Interactive Shell Commands
 
-Prefer non-interactive flags for file and package operations so agents do not
-hang on y/n prompts. Escape hatch: if a command must stay interactive, run it
-only with explicit human presence (not unattended agent loops).
+For unattended agent runs, non-interactive flags reduce hangs on y/n prompts.
+When a human is at the keyboard, interactive tools are fine.
 
 Shell tools such as `cp`, `mv`, and `rm` may be aliased with `-i` on some hosts.
 
-**Preferred forms:**
+**Usual forms for unattended agents:**
+
 
 ```bash
 # Force overwrite without prompting
