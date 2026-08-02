@@ -216,8 +216,19 @@ pub fn error_category(error: Option<&Error>) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::error_category;
+    use super::{
+        env_flag_enabled, error_category, git_sha, init_sentry, scrub_event_paths, scrub_str,
+    };
     use anyhow::Error;
+    use sentry::protocol::{Event, Exception, LogEntry, Values};
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn classify(message: &str) -> &'static str {
         let error = Error::msg(message.to_owned());
@@ -268,5 +279,129 @@ mod tests {
         // Guards the narrowed `"stat "` predicate against false positives
         // such as "statistics" or the `stats` subcommand name.
         assert_eq!(classify("stats subcommand misconfigured"), "unknown_error");
+    }
+
+    #[test]
+    fn scrub_str_replaces_home_prefix() {
+        assert_eq!(
+            scrub_str("/home/dev/ckpt/tensor00000_000", "/home/dev"),
+            "$HOME/ckpt/tensor00000_000"
+        );
+        assert_eq!(scrub_str("no home here", "/home/dev"), "no home here");
+    }
+
+    #[test]
+    fn scrub_event_paths_redacts_message_and_exception() {
+        let _lock = env_lock();
+        // SAFETY: serialized by env_lock; restored below.
+        unsafe {
+            std::env::set_var("HOME", "/home/scrub-test-user");
+        }
+        let mut event = Event {
+            message: Some("/home/scrub-test-user/weights/ckpt".into()),
+            exception: Values {
+                values: vec![Exception {
+                    value: Some("stat /home/scrub-test-user/missing".into()),
+                    ..Default::default()
+                }],
+            },
+            logentry: Some(LogEntry {
+                message: "ok".into(),
+                params: vec![],
+            }),
+            ..Default::default()
+        };
+        scrub_event_paths(&mut event);
+        assert_eq!(event.message.as_deref(), Some("$HOME/weights/ckpt"));
+        assert_eq!(
+            event.exception.values[0].value.as_deref(),
+            Some("stat $HOME/missing")
+        );
+        unsafe {
+            std::env::remove_var("HOME");
+        }
+    }
+
+    #[test]
+    fn env_flag_accepts_common_truthy_values() {
+        let _lock = env_lock();
+        let key = "XAI_DISSECT_TEST_FLAG_TRUTHY";
+        for truthy in ["1", "true", "YES", "On", " true "] {
+            unsafe {
+                std::env::set_var(key, truthy);
+            }
+            assert!(env_flag_enabled(key), "expected truthy for {truthy:?}");
+        }
+        for falsy in ["0", "false", "no", ""] {
+            unsafe {
+                std::env::set_var(key, falsy);
+            }
+            assert!(!env_flag_enabled(key), "expected false for {falsy:?}");
+        }
+        unsafe {
+            std::env::remove_var(key);
+        }
+        assert!(!env_flag_enabled(key));
+    }
+
+    #[test]
+    fn git_sha_prefers_env_then_unknown() {
+        let _lock = env_lock();
+        unsafe {
+            std::env::set_var("AGENTOS_GIT_SHA", "abc1234");
+        }
+        assert_eq!(git_sha(), "abc1234");
+        unsafe {
+            std::env::remove_var("AGENTOS_GIT_SHA");
+        }
+        assert_eq!(git_sha(), "unknown");
+        unsafe {
+            std::env::set_var("AGENTOS_GIT_SHA", "   ");
+        }
+        assert_eq!(git_sha(), "unknown");
+        unsafe {
+            std::env::remove_var("AGENTOS_GIT_SHA");
+        }
+    }
+
+    #[test]
+    fn init_sentry_off_when_flag_unset() {
+        let _lock = env_lock();
+        unsafe {
+            std::env::remove_var("XAI_DISSECT_SENTRY");
+            std::env::set_var("SENTRY_DSN", "https://public@o0.ingest.sentry.io/0");
+        }
+        assert!(init_sentry().is_none());
+        unsafe {
+            std::env::remove_var("SENTRY_DSN");
+        }
+    }
+
+    #[test]
+    fn init_sentry_off_when_dsn_invalid() {
+        let _lock = env_lock();
+        unsafe {
+            std::env::set_var("XAI_DISSECT_SENTRY", "1");
+            std::env::set_var("SENTRY_DSN", "not-a-dsn");
+        }
+        assert!(init_sentry().is_none());
+        unsafe {
+            std::env::remove_var("XAI_DISSECT_SENTRY");
+            std::env::remove_var("SENTRY_DSN");
+        }
+    }
+
+    #[test]
+    fn init_sentry_off_when_dsn_empty() {
+        let _lock = env_lock();
+        unsafe {
+            std::env::set_var("XAI_DISSECT_SENTRY", "1");
+            std::env::set_var("SENTRY_DSN", "   ");
+        }
+        assert!(init_sentry().is_none());
+        unsafe {
+            std::env::remove_var("XAI_DISSECT_SENTRY");
+            std::env::remove_var("SENTRY_DSN");
+        }
     }
 }

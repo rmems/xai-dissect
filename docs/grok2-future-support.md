@@ -3,14 +3,21 @@
 This document exists to keep future Grok-2 work bounded. It is a planning
 checklist, not a commitment.
 
+**Status (2026-08):** public Grok-2 weights are available, but **xai-dissect
+has no Grok-2 family support yet**. Near-term priority stays **Grok-1**
+slice-by-slice / pilot quantization readiness (conversion-manifest, quant-plan,
+route preservation → grok-ozempic). Do not start Grok-2 implementation until
+the Grok-1 pilot loop is proven and a local Grok-2 checkpoint is in hand.
+
 ## Preconditions
 
 Work should not start until all of the following are true:
 
-- public Grok-2 weights are actually available
-- the weight license is compatible with this repo's lawful-analysis scope
+- public Grok-2 weights are available under a license compatible with this
+  repo's lawful-analysis scope
 - at least one checkpoint layout can be inspected locally
-
+- Grok-1 pilot / slice-quant handoff is stable enough that a second family
+  will not derail that path
 ## First Questions To Answer
 
 - Is the shard/container format still compatible with the current parser?

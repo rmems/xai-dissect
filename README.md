@@ -7,11 +7,17 @@ files, builds a normalized tensor inventory, and emits structural reports for
 experts, routing, and future SAAQ-oriented profiling. It does not run the
 model, mutate weights, or act as an inference runtime.
 
-Current release target:
+Current focus:
 
-- **Grok-1**: supported now
-- **Grok-2**: not supported yet; tracked as a future follow-on only if public
-  weights are released under a compatible license
+- **Grok-1**: **supported now** — full inventory, experts, routing, stats,
+  SAAQ readiness, conversion-manifest, quant-plan, pilot-plan, and
+  route-preservation. This is the path that matters for **slice-by-slice /
+  pilot quantization** (block/expert/attention policies, routers+norms
+  protected). Downstream packing/runtime lives in sibling `grok-ozempic`.
+- **Grok-2**: public weights exist, but **this CLI does not support Grok-2
+  yet**. No parser/family profile, no inventory guarantees. Tracked as a
+  separate follow-on only after Grok-1 pilot quant is proven; see
+  [docs/grok2-future-support.md](docs/grok2-future-support.md).
 
 Only open/public weights are in scope. This repo analyzes weights you already
 have lawful access to and does not redistribute them.
@@ -176,14 +182,17 @@ Pull requests and `main` run fmt, tests, clippy (`-D warnings`), and CLI help
 smokes. Optional Codecov, Qodana, and Sentry hooks are documented in
 [docs/ci.md](docs/ci.md).
 
-## Future Grok-2 Support
+## Grok-2 (available weights; not in this CLI yet)
 
-Grok-2 is not yet in scope for implementation, but the repo now includes a
-future-support checklist and issue template to keep that work bounded when the
-time comes:
+Grok-2 open weights are out in the world, but **xai-dissect still only
+implements Grok-1 layouts**. Do not assume Grok-2 shards parse or classify.
 
-- [docs/grok2-future-support.md](docs/grok2-future-support.md)
-- [.github/ISSUE_TEMPLATE/grok2-support.md](.github/ISSUE_TEMPLATE/grok2-support.md)
+Priority for this project remains **Grok-1 cartography → conversion-manifest
+→ pilot quant in grok-ozempic** (slice-by-slice / mode-limited pilots with
+route preservation). Grok-2 is a bounded follow-on after that loop is solid:
+
+- Checklist: [docs/grok2-future-support.md](docs/grok2-future-support.md)
+- Issue template: [.github/ISSUE_TEMPLATE/grok2-support.md](.github/ISSUE_TEMPLATE/grok2-support.md)
 
 ## Relationship To Sibling Repos
 
