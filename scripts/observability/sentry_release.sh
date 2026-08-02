@@ -8,7 +8,9 @@
 #
 # Optional:
 #   SENTRY_ENVIRONMENT  (default: local)
-#   AGENTOS_GIT_SHA     (default: short git HEAD)
+#   AGENTOS_GIT_SHA     (must match runtime when correlating events;
+#                       when unset, falls back to `unknown` like git_sha() in
+#                       src/observability.rs — not short HEAD)
 #
 # Note: sentry-cli 2.46+ rejects global `--org` / `--project` before the
 # subcommand. Prefer env vars (SENTRY_ORG / SENTRY_PROJECT), which work on
@@ -19,7 +21,11 @@ repo="xai-dissect"
 org="${SENTRY_ORG:-}"
 project="${SENTRY_PROJECT_XAI_DISSECT:-${SENTRY_PROJECT:-}}"
 environment="${SENTRY_ENVIRONMENT:-local}"
-git_sha="${AGENTOS_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || printf 'unknown')}"
+# Match runtime: xai-dissect@<AGENTOS_GIT_SHA|unknown> (see observability::git_sha).
+git_sha="${AGENTOS_GIT_SHA:-unknown}"
+if [[ -z "${git_sha// }" ]]; then
+  git_sha="unknown"
+fi
 release="${repo}@${git_sha}"
 
 if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
@@ -40,8 +46,27 @@ fi
 export SENTRY_ORG="${org}"
 export SENTRY_PROJECT="${project}"
 
-if ! sentry-cli releases info "${release}" >/dev/null 2>&1; then
-  sentry-cli releases new "${release}"
+# Only create when the release is confirmed missing. Auth/network/project
+# errors from `releases info` must surface, not be treated as "not found".
+info_err="$(mktemp)"
+set +e
+sentry-cli releases info "${release}" >/dev/null 2>"${info_err}"
+info_status=$?
+set -e
+if [[ "${info_status}" -ne 0 ]]; then
+  info_msg="$(cat "${info_err}" 2>/dev/null || true)"
+  rm -f "${info_err}"
+  # sentry-cli typically says "could not find release" / "Release not found"
+  # for a missing version; anything else is a hard failure.
+  if printf '%s' "${info_msg}" | grep -qiE 'not found|could not find release|404'; then
+    sentry-cli releases new "${release}"
+  else
+    printf 'sentry-cli releases info failed (status=%s):\n%s\n' \
+      "${info_status}" "${info_msg}" >&2
+    exit "${info_status}"
+  fi
+else
+  rm -f "${info_err}"
 fi
 
 sentry-cli releases set-commits "${release}" --auto --ignore-missing

@@ -57,26 +57,36 @@ Local DSN helper (gitignored machine config, never commit):
 ```bash
 # after creating the project key in Sentry UI/API:
 #   ~/.config/xai-dissect/sentry_dsn.env  → SENTRY_DSN=...
-set -a && source ~/.config/xai-dissect/sentry_dsn.env && set +a
+# Always clear allexport even if source fails (missing/invalid file).
+set -a
+source ~/.config/xai-dissect/sentry_dsn.env
+src_status=$?
+set +a
+if [ "$src_status" -ne 0 ]; then
+  printf 'failed to source sentry_dsn.env (status=%s)\n' "$src_status" >&2
+  return "$src_status" 2>/dev/null || exit "$src_status"
+fi
 ```
 
 What is sent:
 
 - Panics (via Sentry panic integration) with tags `repo`, `run_id` (and `command` after CLI parse)
 - Top-level command `anyhow` failures via `capture_anyhow` (full error chain) with
-  the same tags **plus** `error_category` (only on command failures)
-- `$HOME` redacted from messages, exception values, stacktrace frame paths, and breadcrumbs
-- Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (aligned with CI when SHA is set)
+  the same tags **plus** `error_category` (only on command failures). The full
+  error chain is application-controlled text; `before_send` redacts `$HOME`
+  prefixes from messages / exception values / stack paths / breadcrumbs, but
+  does **not** strip arbitrary error content
+- Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (same fallback as
+  `scripts/observability/sentry_release.sh` and `observability::git_sha`)
 - With the `contexts` feature: device/OS/rustc metadata (not weight data). `server_name` is fixed to
   `xai-dissect` (machine hostname is not advertised)
 
-What is **not** sent by default:
+SDK defaults that stay off (does **not** claim application error strings are scrubbed):
 
 - Weight tensors / checkpoint bytes
-- Default PII (`send_default_pii = false`)
+- Default SDK PII only (`send_default_pii = false` — IPs/headers via HTTP integrations)
 - Performance transactions (traces strategy remains **Disabled**; no sample rate configured)
 - Events when `XAI_DISSECT_SENTRY` is unset, or when `SENTRY_DSN` is empty/invalid
-
 CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 Invalid DSNs soft-disable Sentry instead of panicking the CLI.

@@ -26,6 +26,14 @@ static CACHED_RUN_ID: OnceLock<String> = OnceLock::new();
 /// mis-attributed to a deploy that was never created.
 /// Invalid DSNs soft-fail (return `None`) instead of panicking — `sentry::init`
 /// panics on bad DSNs, which would break the CLI for a misconfigured opt-in.
+///
+/// # What leaves the machine (when enabled)
+///
+/// `capture_error` / `capture_anyhow` send the **full application error chain**.
+/// `before_send` only redacts `$HOME` prefixes from messages, exception values,
+/// stack frame paths, and breadcrumbs — it does **not** strip arbitrary error
+/// text. `send_default_pii(false)` only disables SDK default PII (IPs/headers
+/// via HTTP integrations), not app-provided error content.
 pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
     if !env_flag_enabled("XAI_DISSECT_SENTRY") {
         return None;
@@ -41,7 +49,7 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "local".to_owned());
 
-    // Align with CI: scripts/observability/sentry_release.sh uses git SHA only.
+    // Align with scripts/observability/sentry_release.sh: same git_sha fallback.
     let release = format!("xai-dissect@{}", git_sha());
 
     // sentry 0.49+: ClientOptions is non_exhaustive — use builder methods.
@@ -55,11 +63,11 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         // Avoid advertising hostname when contexts are compiled in.
         .server_name("xai-dissect")
         .before_send(|mut event| {
+            // Path scrub only; error chain text from capture_anyhow still ships.
             scrub_event_paths(&mut event);
             Some(event)
         });
     options.dsn = Some(dsn);
-
     let guard = sentry::init(options);
 
     if !guard.is_enabled() {
