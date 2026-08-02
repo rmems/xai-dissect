@@ -56,12 +56,14 @@ set -e
 if [[ "${info_status}" -ne 0 ]]; then
   info_msg="$(cat "${info_err}" 2>/dev/null || true)"
   rm -f "${info_err}"
-  # sentry-cli typically says "could not find release" / "Release not found"
-  # for a missing version; anything else is a hard failure.
-  if printf '%s' "${info_msg}" | grep -qiE 'not found|could not find release|404'; then
+  # Only treat a *version-specific* missing-release response as create-eligible.
+  # Generic "not found" / bare 404 can mean bad org, project, or token — fail closed.
+  # Typical missing-release text includes the version string and "release".
+  if printf '%s' "${info_msg}" | grep -qiF "${release}" \
+    && printf '%s' "${info_msg}" | grep -qiE 'could not find release|release not found|no such release'; then
     sentry-cli releases new "${release}"
   else
-    printf 'sentry-cli releases info failed (status=%s):\n%s\n' \
+    printf 'sentry-cli releases info failed (status=%s); not creating release:\n%s\n' \
       "${info_status}" "${info_msg}" >&2
     exit "${info_status}"
   fi
