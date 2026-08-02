@@ -23,8 +23,8 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | `CODECOV_TOKEN` | coverage | Optional. When set, used for upload; when empty, OIDC (`use_oidc`) is enabled. Upload still soft-fails. |
 | `QODANA_TOKEN` | qodana | Optional. JetBrains Cloud **project** token from the [project card](https://qodana.cloud/). When set, the scan runs (soft-fail on EAP timeout). When unset, the job skips. Not a merge gate. |
 | `SENTRY_AUTH_TOKEN` | release-observability | Optional |
-| `SENTRY_ORG` | release-observability | Optional (with token + project) |
-| `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional |
+| `SENTRY_ORG` | release-observability | Optional (with token + project); org slug is **`limen-neural`** |
+| `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional; project slug **`xai-dissect`** (dedicated Rust project) |
 
 Do **not** use `QODANA_CONFIGURATIONS_TOKEN` as the scan token — that is an uploader/config token, not a Cloud project token.
 
@@ -41,7 +41,8 @@ Grok-1 weight campaigns:
 
 ```bash
 export XAI_DISSECT_SENTRY=1
-export SENTRY_DSN='https://…@….ingest.sentry.io/…'
+# DSN for limen-neural / xai-dissect (not the shared liquidcortex/rust projects):
+export SENTRY_DSN='https://…@….ingest.us.sentry.io/…'
 # optional — use full SHA so runtime release matches CI markers:
 export SENTRY_ENVIRONMENT=local-weights
 export AGENTOS_GIT_SHA="$(git rev-parse HEAD)"
@@ -49,6 +50,14 @@ export AGENTOS_GIT_SHA="$(git rev-parse HEAD)"
 export AGENTOS_RUN_ID="weights-$(date -u +%Y%m%d)-1"
 
 ./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
+```
+
+Local DSN helper (gitignored machine config, never commit):
+
+```bash
+# after creating the project key in Sentry UI/API:
+#   ~/.config/xai-dissect/sentry_dsn.env  → SENTRY_DSN=...
+set -a && source ~/.config/xai-dissect/sentry_dsn.env && set +a
 ```
 
 What is sent:

@@ -44,22 +44,23 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
     // Align with CI: scripts/observability/sentry_release.sh uses git SHA only.
     let release = format!("xai-dissect@{}", git_sha());
 
-    let guard = sentry::init(sentry::ClientOptions {
-        dsn: Some(dsn),
-        release: Some(Cow::Owned(release)),
-        environment: Some(Cow::Owned(environment)),
-        // Error reporting only for opt-in weight runs (no perf transactions).
-        traces_sample_rate: 0.0,
-        // CLI: never send IPs/headers/PII (docs enable this for HTTP servers only).
-        send_default_pii: false,
+    // sentry 0.49+: ClientOptions is non_exhaustive — use builder methods.
+    // Default traces strategy is Disabled (errors only; no performance product).
+    // Soft-parsed Dsn is assigned after builders (builder `.dsn(&str)` panics on bad input).
+    let mut options = sentry::ClientOptions::new()
+        .release(Cow::Owned(release))
+        .environment(Cow::Owned(environment))
+        // CLI: never send IPs/headers/PII (HTTP-server docs enable true).
+        .send_default_pii(false)
         // Avoid advertising hostname when contexts are compiled in.
-        server_name: Some(Cow::Borrowed("xai-dissect")),
-        before_send: Some(std::sync::Arc::new(|mut event| {
+        .server_name("xai-dissect")
+        .before_send(|mut event| {
             scrub_event_paths(&mut event);
             Some(event)
-        })),
-        ..Default::default()
-    });
+        });
+    options.dsn = Some(dsn);
+
+    let guard = sentry::init(options);
 
     if !guard.is_enabled() {
         return None;

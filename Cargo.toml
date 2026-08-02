@@ -29,13 +29,13 @@ serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 # Opt-in crash/error reporting for real-weight campaigns (see docs/ci.md).
-# Pinned below 0.49 (requires rustc 1.88). Slim defaults: panic+backtrace+transport
-# only — skip contexts/logs/metrics/debug-images on a public CLI binary.
-# `anyhow`: capture_anyhow for error chains.
+# MSRV is 1.88 → sentry 0.49+ is fine. Slim feature set for a public CLI:
+# panic + backtrace + transport + anyhow; skip logs/metrics/debug-images
+# (release strips symbols; we do not want Sentry performance product on by default).
 sentry = {
-  version = "0.46",
+  version = "0.49",
   default-features = false,
-  features = ["backtrace", "panic", "transport", "anyhow"],
+  features = ["backtrace", "contexts", "panic", "transport", "anyhow"],
 }
 
 [profile.release]
