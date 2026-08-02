@@ -8,7 +8,7 @@
 |-------|----------|----------|
 | Path | `~/rmems/grok-result/xai-dissect/grok1_run2_after_fixes_20260525T002904Z` | `~/rmems/grok-result/xai-dissect/grok1_run3_20260802T023050Z` |
 | Generated | 2026-05-25T00:29:04Z | 2026-08-02T02:30:50Z → 02:51:47Z (~21 min) |
-| Checkpoint | `.../Downloads/SNN_Quantization/grok-1-official/ckpt-0` (historical) | `/home/raulmc/.models/xai-grok-1/ckpt-0` |
+| Checkpoint | `.../Downloads/SNN_Quantization/grok-1-official/ckpt-0` (historical) | `~/.models/xai-grok-1/ckpt-0` |
 | Slug | `grok-1-official__ckpt-0` | `xai-grok-1-ckpt-0` |
 | Tooling baseline | pre planning-surface PRs | main after #32/#34/#36/#37/#48 |
 

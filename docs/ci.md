@@ -67,12 +67,14 @@ What is sent:
   the same tags **plus** `error_category` (only on command failures)
 - `$HOME` redacted from messages, exception values, stacktrace frame paths, and breadcrumbs
 - Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (aligned with CI when SHA is set)
+- With the `contexts` feature: device/OS/rustc metadata (not weight data). `server_name` is fixed to
+  `xai-dissect` (machine hostname is not advertised)
 
 What is **not** sent by default:
 
 - Weight tensors / checkpoint bytes
 - Default PII (`send_default_pii = false`)
-- Performance transactions (`traces_sample_rate = 0`)
+- Performance transactions (traces strategy remains **Disabled**; no sample rate configured)
 - Events when `XAI_DISSECT_SENTRY` is unset, or when `SENTRY_DSN` is empty/invalid
 
 CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
