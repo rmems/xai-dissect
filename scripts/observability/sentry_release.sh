@@ -46,27 +46,33 @@ fi
 export SENTRY_ORG="${org}"
 export SENTRY_PROJECT="${project}"
 
-# Only create when the release is confirmed missing. Auth/network/project
-# errors from `releases info` must surface, not be treated as "not found".
+# Preflight auth/org/project. sentry-cli 2.46+/3.x often returns empty stderr on a
+# missing release (HTTP 404) with no version string, so we cannot parse "not found"
+# text reliably. After list succeeds, a failed `releases info` means the version
+# is absent — create it. If list fails, surface that error (token/org/project).
+list_err="$(mktemp)"
+set +e
+sentry-cli releases list >/dev/null 2>"${list_err}"
+list_status=$?
+set -e
+if [[ "${list_status}" -ne 0 ]]; then
+  printf 'sentry-cli releases list failed (status=%s); check token/org/project:\n%s\n' \
+    "${list_status}" "$(cat "${list_err}" 2>/dev/null || true)" >&2
+  rm -f "${list_err}"
+  exit "${list_status}"
+fi
+rm -f "${list_err}"
+
 info_err="$(mktemp)"
 set +e
 sentry-cli releases info "${release}" >/dev/null 2>"${info_err}"
 info_status=$?
 set -e
 if [[ "${info_status}" -ne 0 ]]; then
-  info_msg="$(cat "${info_err}" 2>/dev/null || true)"
+  # Auth/project already validated via list; treat info failure as missing release.
+  # (sentry-cli may print nothing at default log level on 404.)
   rm -f "${info_err}"
-  # Only treat a *version-specific* missing-release response as create-eligible.
-  # Generic "not found" / bare 404 can mean bad org, project, or token — fail closed.
-  # Typical missing-release text includes the version string and "release".
-  if printf '%s' "${info_msg}" | grep -qiF "${release}" \
-    && printf '%s' "${info_msg}" | grep -qiE 'could not find release|release not found|no such release'; then
-    sentry-cli releases new "${release}"
-  else
-    printf 'sentry-cli releases info failed (status=%s); not creating release:\n%s\n' \
-      "${info_status}" "${info_msg}" >&2
-    exit "${info_status}"
-  fi
+  sentry-cli releases new "${release}"
 else
   rm -f "${info_err}"
 fi

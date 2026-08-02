@@ -58,9 +58,14 @@ Local DSN helper (gitignored machine config, never commit):
 # after creating the project key in Sentry UI/API:
 #   ~/.config/xai-dissect/sentry_dsn.env  → SENTRY_DSN=...
 # Always clear allexport even if source fails (missing/invalid file).
+# Under `set -e`, bare `source` would abort before `src_status`/`set +a`;
+# `if source` is exempt from errexit so we can always restore allexport.
 set -a
-source ~/.config/xai-dissect/sentry_dsn.env
-src_status=$?
+if source ~/.config/xai-dissect/sentry_dsn.env; then
+  src_status=0
+else
+  src_status=$?
+fi
 set +a
 if [ "$src_status" -ne 0 ]; then
   printf 'failed to source sentry_dsn.env (status=%s)\n' "$src_status" >&2
