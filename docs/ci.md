@@ -98,14 +98,22 @@ Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
 ## Qodana Cloud setup
 
-`qodana-rust` is **Ultimate-only** — it needs a [Qodana Cloud](https://qodana.cloud/) project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
+There **is** a Qodana for Rust product — CI uses **`jetbrains/qodana-rust:2026.2-eap`**
+(`qodana.yaml` sets `linter: qodana-rust`). It is **not** free Community edition:
+Rust support is **Ultimate / Cloud** and needs a [Qodana Cloud](https://qodana.cloud/)
+project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
 
 1. Create account / org / team / project on [qodana.cloud](https://qodana.cloud/) for `rmems/xai-dissect`
 2. Copy the **project token** from the project card
 3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
 4. Re-run CI; expect a long Docker scan when the EAP linter can open the project
 
-Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`. CI passes `--image jetbrains/qodana-rust:2026.2-eap`. Scan step uses `continue-on-error` because project-open timeouts are common on GitHub-hosted runners.
+Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`.
+CI passes `--image jetbrains/qodana-rust:2026.2-eap` and
+`qd.rust.configuration.timeout.minutes=90`. Scans on GHA commonly take
+**~1.5 hours** (not stuck — slow project-open + EAP). The scan step uses
+`continue-on-error: true` so timeouts do not block merge; **Rust** remains
+the required quality gate.
 
 ### Disable / soften Qodana
 

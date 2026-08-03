@@ -21,13 +21,11 @@ repo="xai-dissect"
 org="${SENTRY_ORG:-}"
 project="${SENTRY_PROJECT_XAI_DISSECT:-${SENTRY_PROJECT:-}}"
 environment="${SENTRY_ENVIRONMENT:-local}"
-# Match runtime: xai-dissect@<AGENTOS_GIT_SHA|unknown> (see observability::git_sha).
-git_sha="${AGENTOS_GIT_SHA:-unknown}"
-# Trim leading/trailing whitespace to match runtime git_sha_from_value (str::trim).
-git_sha="$(printf '%s' "${git_sha}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+# Match runtime: xai-dissect@<AGENTOS_GIT_SHA|unknown> (see observability::git_sha /
+# git_sha_from_value: trim then empty → unknown).
+git_sha="$(printf '%s' "${AGENTOS_GIT_SHA:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 if [[ -z "${git_sha}" ]]; then
   git_sha="unknown"
-fi
 fi
 release="${repo}@${git_sha}"
 
@@ -72,9 +70,16 @@ sentry-cli releases info "${release}" >/dev/null 2>"${info_err}"
 info_status=$?
 set -e
 if [[ "${info_status}" -ne 0 ]]; then
-  # Auth/project already validated via list; treat info failure as missing release.
-  # (sentry-cli may print nothing at default log level on 404.)
+  info_msg="$(cat "${info_err}" 2>/dev/null || true)"
   rm -f "${info_err}"
+  # list already validated token/org/project. Still fail closed if info stderr
+  # looks like auth/permission (not the usual empty-404 missing release).
+  if printf '%s' "${info_msg}" | grep -qiE 'unauthorized|forbidden|invalid.?token|403|authentication|access denied'; then
+    printf 'sentry-cli releases info failed after list OK (status=%s):\n%s\n' \
+      "${info_status}" "${info_msg}" >&2
+    exit "${info_status}"
+  fi
+  # Missing release: often empty stderr at default log level (HTTP 404).
   sentry-cli releases new "${release}"
 else
   rm -f "${info_err}"
