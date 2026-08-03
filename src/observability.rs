@@ -26,40 +26,47 @@ static CACHED_RUN_ID: OnceLock<String> = OnceLock::new();
 /// mis-attributed to a deploy that was never created.
 /// Invalid DSNs soft-fail (return `None`) instead of panicking — `sentry::init`
 /// panics on bad DSNs, which would break the CLI for a misconfigured opt-in.
+///
+/// # What leaves the machine (when enabled)
+///
+/// `capture_error` / `capture_anyhow` send the **full application error chain**.
+/// `before_send` only redacts `$HOME` prefixes from messages, exception values,
+/// stack frame paths, and breadcrumbs — it does **not** strip arbitrary error
+/// text. `send_default_pii(false)` only disables SDK default PII (IPs/headers
+/// via HTTP integrations), not app-provided error content.
 pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
-    if !env_flag_enabled("XAI_DISSECT_SENTRY") {
+    let flag = std::env::var("XAI_DISSECT_SENTRY").ok();
+    let dsn_raw = std::env::var("SENTRY_DSN").ok();
+    // Parse before init: invalid DSNs must not panic the process.
+    if !sentry_opt_in_ready(flag.as_deref(), dsn_raw.as_deref()) {
         return None;
     }
-    let dsn_raw = std::env::var("SENTRY_DSN")
-        .ok()
-        .filter(|value| !value.trim().is_empty())?;
-    // Parse before init: invalid DSNs must not panic the process.
-    let dsn: sentry::types::Dsn = dsn_raw.trim().parse().ok()?;
+    let dsn = parse_optional_dsn(dsn_raw.as_deref())?;
 
     let environment = std::env::var("SENTRY_ENVIRONMENT")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "local".to_owned());
 
-    // Align with CI: scripts/observability/sentry_release.sh uses git SHA only.
+    // Align with scripts/observability/sentry_release.sh: same git_sha fallback.
     let release = format!("xai-dissect@{}", git_sha());
-
-    let guard = sentry::init(sentry::ClientOptions {
-        dsn: Some(dsn),
-        release: Some(Cow::Owned(release)),
-        environment: Some(Cow::Owned(environment)),
-        // Error reporting only for opt-in weight runs (no perf transactions).
-        traces_sample_rate: 0.0,
-        // CLI: never send IPs/headers/PII (docs enable this for HTTP servers only).
-        send_default_pii: false,
+    // sentry 0.49+: ClientOptions is non_exhaustive — use builder methods.
+    // Default traces strategy is Disabled (errors only; no performance product).
+    // Soft-parsed Dsn is assigned after builders (builder `.dsn(&str)` panics on bad input).
+    let mut options = sentry::ClientOptions::new()
+        .release(Cow::Owned(release))
+        .environment(Cow::Owned(environment))
+        // CLI: never send IPs/headers/PII (HTTP-server docs enable true).
+        .send_default_pii(false)
         // Avoid advertising hostname when contexts are compiled in.
-        server_name: Some(Cow::Borrowed("xai-dissect")),
-        before_send: Some(std::sync::Arc::new(|mut event| {
+        .server_name("xai-dissect")
+        .before_send(|mut event| {
+            // Path scrub only; error chain text from capture_anyhow still ships.
             scrub_event_paths(&mut event);
             Some(event)
-        })),
-        ..Default::default()
-    });
+        });
+    options.dsn = Some(dsn);
+    let guard = sentry::init(options);
 
     if !guard.is_enabled() {
         return None;
@@ -74,13 +81,13 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
     Some(guard)
 }
 
-fn env_flag_enabled(name: &str) -> bool {
-    let Ok(raw) = std::env::var(name) else {
-        return false;
-    };
+/// Pure form of the dual-gate truthy check (env value already loaded).
+fn env_flag_from_value(raw: Option<&str>) -> bool {
     matches!(
-        raw.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
+        raw.map(str::trim)
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
     )
 }
 
@@ -101,11 +108,10 @@ fn scrub_stacktrace(stacktrace: &mut sentry::protocol::Stacktrace, home: &str) {
     }
 }
 
-/// Redact home-directory prefixes from messages, exceptions, frames, breadcrumbs.
-fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
-    let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) else {
-        return;
-    };
+/// Redact `home` prefixes from messages, exceptions, frames, breadcrumbs.
+///
+/// Pure/testable core; production `scrub_event_paths` loads `$HOME` and calls this.
+fn scrub_event_paths_with_home(event: &mut sentry::protocol::Event<'_>, home: &str) {
     let home = home.trim_end_matches('/');
     if home.is_empty() {
         return;
@@ -126,6 +132,32 @@ fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
     }
 }
 
+/// Redact home-directory prefixes from messages, exceptions, frames, breadcrumbs.
+fn scrub_event_paths(event: &mut sentry::protocol::Event<'_>) {
+    let Some(home) = std::env::var_os("HOME").and_then(|h| h.into_string().ok()) else {
+        return;
+    };
+    scrub_event_paths_with_home(event, &home);
+}
+
+/// Parse a non-empty DSN string; empty/whitespace/invalid → `None` (soft-fail).
+fn parse_optional_dsn(raw: Option<&str>) -> Option<sentry::types::Dsn> {
+    let s = raw.map(str::trim).filter(|v| !v.is_empty())?;
+    s.parse().ok()
+}
+
+/// Dual-gate readiness without contacting Sentry: flag truthy **and** parseable DSN.
+fn sentry_opt_in_ready(flag_raw: Option<&str>, dsn_raw: Option<&str>) -> bool {
+    env_flag_from_value(flag_raw) && parse_optional_dsn(dsn_raw).is_some()
+}
+
+/// Release suffix from env: non-empty `AGENTOS_GIT_SHA` or `"unknown"`.
+fn git_sha_from_value(raw: Option<&str>) -> String {
+    raw.map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|s| s.to_owned())
+        .unwrap_or_else(|| "unknown".to_owned())
+}
 /// Report a top-level command failure (no-op when Sentry is disabled).
 ///
 /// Uses `capture_anyhow` so Sentry gets the full error chain (not a flat
@@ -172,10 +204,7 @@ pub fn run_id() -> String {
 }
 
 pub fn git_sha() -> String {
-    std::env::var("AGENTOS_GIT_SHA")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "unknown".to_owned())
+    git_sha_from_value(std::env::var("AGENTOS_GIT_SHA").ok().as_deref())
 }
 
 pub fn error_category(error: Option<&Error>) -> &'static str {
@@ -207,8 +236,12 @@ pub fn error_category(error: Option<&Error>) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::error_category;
+    use super::{
+        env_flag_from_value, error_category, git_sha_from_value, parse_optional_dsn,
+        scrub_event_paths_with_home, scrub_str, sentry_opt_in_ready,
+    };
     use anyhow::Error;
+    use sentry::protocol::{Event, Exception, Values};
 
     fn classify(message: &str) -> &'static str {
         let error = Error::msg(message.to_owned());
@@ -259,5 +292,87 @@ mod tests {
         // Guards the narrowed `"stat "` predicate against false positives
         // such as "statistics" or the `stats` subcommand name.
         assert_eq!(classify("stats subcommand misconfigured"), "unknown_error");
+    }
+
+    #[test]
+    fn scrub_str_replaces_home_prefix() {
+        assert_eq!(
+            scrub_str("/home/dev/ckpt/tensor00000_000", "/home/dev"),
+            "$HOME/ckpt/tensor00000_000"
+        );
+        assert_eq!(scrub_str("no home here", "/home/dev"), "no home here");
+    }
+
+    #[test]
+    fn scrub_event_paths_with_home_redacts_message_and_exception() {
+        let mut event = Event {
+            message: Some("/home/scrub-test-user/weights/ckpt".into()),
+            exception: Values {
+                values: vec![Exception {
+                    value: Some("stat /home/scrub-test-user/missing".into()),
+                    ..Default::default()
+                }],
+            },
+            ..Default::default()
+        };
+        scrub_event_paths_with_home(&mut event, "/home/scrub-test-user");
+        assert_eq!(event.message.as_deref(), Some("$HOME/weights/ckpt"));
+        assert_eq!(
+            event.exception.values[0].value.as_deref(),
+            Some("stat $HOME/missing")
+        );
+    }
+
+    #[test]
+    fn scrub_event_paths_with_home_noops_on_empty_home() {
+        let mut event = Event {
+            message: Some("/tmp/x".into()),
+            ..Default::default()
+        };
+        scrub_event_paths_with_home(&mut event, "");
+        scrub_event_paths_with_home(&mut event, "///");
+        assert_eq!(event.message.as_deref(), Some("/tmp/x"));
+    }
+
+    #[test]
+    fn env_flag_from_value_accepts_common_truthy_values() {
+        for truthy in ["1", "true", "YES", "On", " true "] {
+            assert!(
+                env_flag_from_value(Some(truthy)),
+                "expected truthy for {truthy:?}"
+            );
+        }
+        for falsy in [None, Some("0"), Some("false"), Some("no"), Some("")] {
+            assert!(!env_flag_from_value(falsy), "expected false for {falsy:?}");
+        }
+    }
+
+    #[test]
+    fn git_sha_from_value_prefers_nonempty_then_unknown() {
+        assert_eq!(git_sha_from_value(Some("abc1234")), "abc1234");
+        assert_eq!(git_sha_from_value(None), "unknown");
+        assert_eq!(git_sha_from_value(Some("   ")), "unknown");
+        assert_eq!(git_sha_from_value(Some("")), "unknown");
+    }
+
+    #[test]
+    fn parse_optional_dsn_rejects_empty_and_invalid() {
+        assert!(parse_optional_dsn(None).is_none());
+        assert!(parse_optional_dsn(Some("")).is_none());
+        assert!(parse_optional_dsn(Some("   ")).is_none());
+        assert!(parse_optional_dsn(Some("not-a-dsn")).is_none());
+        assert!(parse_optional_dsn(Some("https://publickey@o0.ingest.sentry.io/1")).is_some());
+    }
+
+    #[test]
+    fn sentry_opt_in_ready_requires_flag_and_valid_dsn() {
+        let good = "https://publickey@o0.ingest.sentry.io/1";
+        assert!(!sentry_opt_in_ready(None, Some(good)));
+        assert!(!sentry_opt_in_ready(Some("0"), Some(good)));
+        assert!(!sentry_opt_in_ready(Some("1"), None));
+        assert!(!sentry_opt_in_ready(Some("1"), Some("bad")));
+        assert!(!sentry_opt_in_ready(Some("1"), Some("")));
+        assert!(sentry_opt_in_ready(Some("1"), Some(good)));
+        assert!(sentry_opt_in_ready(Some("yes"), Some(good)));
     }
 }

@@ -1,12 +1,38 @@
 #!/usr/bin/env bash
+# Create/finalize a Sentry release + deploy for xai-dissect (main CI only).
+#
+# Required env:
+#   SENTRY_AUTH_TOKEN
+#   SENTRY_ORG
+#   SENTRY_PROJECT_XAI_DISSECT  (or SENTRY_PROJECT)
+#
+# Optional:
+#   SENTRY_ENVIRONMENT  (default: local)
+#   AGENTOS_GIT_SHA     (must match runtime when correlating events;
+#                       when unset, falls back to `unknown` like git_sha() in
+#                       src/observability.rs — not short HEAD)
+#
+# Note: sentry-cli 2.46+ rejects global `--org` / `--project` before the
+# subcommand. Prefer env vars (SENTRY_ORG / SENTRY_PROJECT), which work on
+# both 2.x and 3.x.
 set -euo pipefail
 
 repo="xai-dissect"
 org="${SENTRY_ORG:-}"
-project="${SENTRY_PROJECT_XAI_DISSECT:-}"
+project="${SENTRY_PROJECT_XAI_DISSECT:-${SENTRY_PROJECT:-}}"
 environment="${SENTRY_ENVIRONMENT:-local}"
-git_sha="${AGENTOS_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || printf 'unknown')}"
+# Match runtime: xai-dissect@<AGENTOS_GIT_SHA|unknown> (see observability::git_sha /
+# git_sha_from_value: trim then empty → unknown).
+git_sha="$(printf '%s' "${AGENTOS_GIT_SHA:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [[ -z "${git_sha}" ]]; then
+  git_sha="unknown"
+fi
 release="${repo}@${git_sha}"
+
+if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
+  printf 'SENTRY_AUTH_TOKEN is required\n' >&2
+  exit 2
+fi
 
 if [[ -z "${org}" ]]; then
   printf 'SENTRY_ORG is required\n' >&2
@@ -14,20 +40,53 @@ if [[ -z "${org}" ]]; then
 fi
 
 if [[ -z "${project}" ]]; then
-  printf 'SENTRY_PROJECT_XAI_DISSECT is required\n' >&2
+  printf 'SENTRY_PROJECT_XAI_DISSECT (or SENTRY_PROJECT) is required\n' >&2
   exit 2
 fi
 
-sentry_cmd() {
-  sentry-cli --org "${org}" --project "${project}" "$@"
-}
+export SENTRY_ORG="${org}"
+export SENTRY_PROJECT="${project}"
 
-if ! sentry_cmd releases info "${release}" >/dev/null 2>&1; then
-  sentry_cmd releases new "${release}"
+# Preflight auth/org/project. sentry-cli 2.46+/3.x often returns empty stderr on a
+# missing release (HTTP 404) with no version string, so we cannot parse "not found"
+# text reliably. After list succeeds, a failed `releases info` means the version
+# is absent — create it. If list fails, surface that error (token/org/project).
+list_err="$(mktemp)"
+set +e
+sentry-cli releases list >/dev/null 2>"${list_err}"
+list_status=$?
+set -e
+if [[ "${list_status}" -ne 0 ]]; then
+  printf 'sentry-cli releases list failed (status=%s); check token/org/project:\n%s\n' \
+    "${list_status}" "$(cat "${list_err}" 2>/dev/null || true)" >&2
+  rm -f "${list_err}"
+  exit "${list_status}"
+fi
+rm -f "${list_err}"
+
+info_err="$(mktemp)"
+set +e
+sentry-cli releases info "${release}" >/dev/null 2>"${info_err}"
+info_status=$?
+set -e
+if [[ "${info_status}" -ne 0 ]]; then
+  info_msg="$(cat "${info_err}" 2>/dev/null || true)"
+  rm -f "${info_err}"
+  # list already validated token/org/project. Still fail closed if info stderr
+  # looks like auth/permission (not the usual empty-404 missing release).
+  if printf '%s' "${info_msg}" | grep -qiE 'unauthorized|forbidden|invalid.?token|403|authentication|access denied'; then
+    printf 'sentry-cli releases info failed after list OK (status=%s):\n%s\n' \
+      "${info_status}" "${info_msg}" >&2
+    exit "${info_status}"
+  fi
+  # Missing release: often empty stderr at default log level (HTTP 404).
+  sentry-cli releases new "${release}"
+else
+  rm -f "${info_err}"
 fi
 
-sentry_cmd releases set-commits "${release}" --auto --ignore-missing
-sentry_cmd releases finalize "${release}"
-sentry_cmd deploys new --release "${release}" -e "${environment}"
+sentry-cli releases set-commits "${release}" --auto --ignore-missing
+sentry-cli releases finalize "${release}"
+sentry-cli deploys new --release "${release}" -e "${environment}"
 
 printf '%s\n' "${release}"

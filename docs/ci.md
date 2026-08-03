@@ -23,8 +23,8 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | `CODECOV_TOKEN` | coverage | Optional. When set, used for upload; when empty, OIDC (`use_oidc`) is enabled. Upload still soft-fails. |
 | `QODANA_TOKEN` | qodana | Optional. JetBrains Cloud **project** token from the [project card](https://qodana.cloud/). When set, the scan runs (soft-fail on EAP timeout). When unset, the job skips. Not a merge gate. |
 | `SENTRY_AUTH_TOKEN` | release-observability | Optional |
-| `SENTRY_ORG` | release-observability | Optional (with token + project) |
-| `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional |
+| `SENTRY_ORG` | release-observability | Optional (with token + project); org slug is **`limen-neural`** |
+| `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional; project slug **`xai-dissect`** (dedicated Rust project) |
 
 Do **not** use `QODANA_CONFIGURATIONS_TOKEN` as the scan token — that is an uploader/config token, not a Cloud project token.
 
@@ -41,7 +41,8 @@ Grok-1 weight campaigns:
 
 ```bash
 export XAI_DISSECT_SENTRY=1
-export SENTRY_DSN='https://…@….ingest.sentry.io/…'
+# DSN for limen-neural / xai-dissect (not the shared liquidcortex/rust projects):
+export SENTRY_DSN='https://…@….ingest.us.sentry.io/…'
 # optional — use full SHA so runtime release matches CI markers:
 export SENTRY_ENVIRONMENT=local-weights
 export AGENTOS_GIT_SHA="$(git rev-parse HEAD)"
@@ -51,35 +52,68 @@ export AGENTOS_RUN_ID="weights-$(date -u +%Y%m%d)-1"
 ./target/release/xai-dissect inventory /path/to/grok-1/ckpt-0
 ```
 
+Local DSN helper (gitignored machine config, never commit):
+
+```bash
+# after creating the project key in Sentry UI/API:
+#   ~/.config/xai-dissect/sentry_dsn.env  → SENTRY_DSN=...
+# Always clear allexport even if source fails (missing/invalid file).
+# Under `set -e`, bare `source` would abort before `src_status`/`set +a`;
+# `if source` is exempt from errexit so we can always restore allexport.
+set -a
+if source ~/.config/xai-dissect/sentry_dsn.env; then
+  src_status=0
+else
+  src_status=$?
+fi
+set +a
+if [ "$src_status" -ne 0 ]; then
+  printf 'failed to source sentry_dsn.env (status=%s)\n' "$src_status" >&2
+  return "$src_status" 2>/dev/null || exit "$src_status"
+fi
+```
+
 What is sent:
 
 - Panics (via Sentry panic integration) with tags `repo`, `run_id` (and `command` after CLI parse)
 - Top-level command `anyhow` failures via `capture_anyhow` (full error chain) with
-  the same tags **plus** `error_category` (only on command failures)
-- `$HOME` redacted from messages, exception values, stacktrace frame paths, and breadcrumbs
-- Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (aligned with CI when SHA is set)
+  the same tags **plus** `error_category` (only on command failures). The full
+  error chain is application-controlled text; `before_send` redacts `$HOME`
+  prefixes from messages / exception values / stack paths / breadcrumbs, but
+  does **not** strip arbitrary error content
+- Release name: `xai-dissect@<AGENTOS_GIT_SHA|unknown>` (same fallback as
+  `scripts/observability/sentry_release.sh` and `observability::git_sha`)
+- With the `contexts` feature: device/OS/rustc metadata (not weight data). `server_name` is fixed to
+  `xai-dissect` (machine hostname is not advertised)
 
-What is **not** sent by default:
+SDK defaults that stay off (does **not** claim application error strings are scrubbed):
 
 - Weight tensors / checkpoint bytes
-- Default PII (`send_default_pii = false`)
-- Performance transactions (`traces_sample_rate = 0`)
+- Default SDK PII only (`send_default_pii = false` — IPs/headers via HTTP integrations)
+- Performance transactions (traces strategy remains **Disabled**; no sample rate configured)
 - Events when `XAI_DISSECT_SENTRY` is unset, or when `SENTRY_DSN` is empty/invalid
-
 CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
 ## Qodana Cloud setup
 
-`qodana-rust` is **Ultimate-only** — it needs a [Qodana Cloud](https://qodana.cloud/) project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
+There **is** a Qodana for Rust product — CI uses **`jetbrains/qodana-rust:2026.2-eap`**
+(`qodana.yaml` sets `linter: qodana-rust`). It is **not** free Community edition:
+Rust support is **Ultimate / Cloud** and needs a [Qodana Cloud](https://qodana.cloud/)
+project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
 
 1. Create account / org / team / project on [qodana.cloud](https://qodana.cloud/) for `rmems/xai-dissect`
 2. Copy the **project token** from the project card
 3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
 4. Re-run CI; expect a long Docker scan when the EAP linter can open the project
 
-Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`. CI passes `--image jetbrains/qodana-rust:2026.2-eap`. Scan step uses `continue-on-error` because project-open timeouts are common on GitHub-hosted runners.
+Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`.
+CI passes `--image jetbrains/qodana-rust:2026.2-eap` and
+`qd.rust.configuration.timeout.minutes=90`. Scans on GHA commonly take
+**~1.5 hours** (not stuck — slow project-open + EAP). The scan step uses
+`continue-on-error: true` so timeouts do not block merge; **Rust** remains
+the required quality gate.
 
 ### Disable / soften Qodana
 

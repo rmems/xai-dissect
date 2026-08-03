@@ -2,7 +2,9 @@
 .codex/
 .idea/
 Cargo.lock.bak
+# Campaign artifacts (local dir or symlink to ~/rmems/grok-result/xai-dissect)
 out/
+/out
 run_*.sh
 ckpt-*/
 *.ckpt
