@@ -23,8 +23,11 @@ project="${SENTRY_PROJECT_XAI_DISSECT:-${SENTRY_PROJECT:-}}"
 environment="${SENTRY_ENVIRONMENT:-local}"
 # Match runtime: xai-dissect@<AGENTOS_GIT_SHA|unknown> (see observability::git_sha).
 git_sha="${AGENTOS_GIT_SHA:-unknown}"
-if [[ -z "${git_sha// }" ]]; then
+# Trim leading/trailing whitespace to match runtime git_sha_from_value (str::trim).
+git_sha="$(printf '%s' "${git_sha}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [[ -z "${git_sha}" ]]; then
   git_sha="unknown"
+fi
 fi
 release="${repo}@${git_sha}"
 
