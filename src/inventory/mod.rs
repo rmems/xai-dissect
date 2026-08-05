@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Inventory layer: walks a checkpoint directory, drives the parser,
 //! applies shape-based semantic classification, and groups tensors into

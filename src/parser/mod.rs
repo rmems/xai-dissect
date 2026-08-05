@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Pickle Protocol 4 byte-grammar scanner for Grok-1 JAX shards.
 //!

@@ -124,7 +124,8 @@ xai-dissect/
   Cargo.toml
   README.md
   CHANGELOG.md
-  LICENSE
+  LICENSE-APACHE
+  LICENSE-MIT
   src/
     main.rs                  # CLI entry
     lib.rs                   # library entry + module exports

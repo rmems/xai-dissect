@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // xai-dissect: static structural analysis of Grok-family open weights.
 // Copyright (C) 2026 xai-dissect contributors.

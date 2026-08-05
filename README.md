@@ -1,5 +1,7 @@
 # xai-dissect
 
+[![License: Apache 2.0 OR MIT](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
+
 Static structural analysis of Grok-family open-weight checkpoints.
 
 `xai-dissect` is a read-only checkpoint dissector. It parses raw xAI shard
@@ -257,7 +259,14 @@ See:
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE).
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  http://opensource.org/licenses/MIT)
+
+at your option.
 
 Grok model weights remain the property of their respective rights holders and
 are not covered by this repository's license.
