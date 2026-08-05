@@ -1,6 +1,6 @@
 # xai-dissect
 
-[![License: Apache 2.0 OR MIT](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
+[![License: Apache 2.0 OR MIT](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](#license)
 
 Static structural analysis of Grok-family open-weight checkpoints.
 
