@@ -2,12 +2,12 @@
 
 [package]
 name = "xai-dissect"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 # 1.88+: transitive `time` 0.3.47 (CVE fix) requires it; CI uses floating stable.
 rust-version = "1.88"
 description = "Zero-copy dissector for Grok-1 raw JAX/Pickle tensor shards"
-license = "GPL-3.0-only"
+license = "Apache-2.0 OR MIT"
 repository = "https://github.com/rmems/xai-dissect"
 
 [lib]

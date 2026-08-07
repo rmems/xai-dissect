@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Offline tensor-payload profiling for SAAQ-readiness scouting.
 //!

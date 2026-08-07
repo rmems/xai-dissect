@@ -4,6 +4,11 @@ All notable changes to `xai-dissect` are documented here.
 
 ## Unreleased - 2026-08-01
 
+### Changed
+
+- Relicense from GPL-3.0-only to dual **Apache-2.0 OR MIT** (`LICENSE-APACHE`,
+  `LICENSE-MIT`; Cargo `license = "Apache-2.0 OR MIT"`).
+
 ### Added
 
 - Full GitHub Actions CI: fmt, test, clippy (`-D warnings`), CLI help smoke,

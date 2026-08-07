@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Static planning artifacts that bridge validated Grok-1 structure into
 //! downstream conversion and quantization repos without executing or mutating
