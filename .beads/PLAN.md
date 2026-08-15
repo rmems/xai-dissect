@@ -67,14 +67,18 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 ## Per-bead acceptance criteria
 
 ### iz3.1 — Setup
+
 - Document repeatable commands in `docs/contributing-bot-reviews.md` and a gh-30 comment
 - Confirm GitHub MCP `get_review_comments` returns resolved threads for PR #37 as smoke test (34 resolved / 0 unresolved on 2026-08-14)
 
 ### iz3.2–iz3.8 — Per-PR audit (same pattern)
-- List all `isResolved=true` inline threads from: macroscopeapp, codacy-production, chatgpt-codex-connector
-- Skip kilo-code-bot if informational-only (no inline suggestion)
+
+Same author/skip policy as `docs/contributing-bot-reviews.md`:
+
+- In-scope first authors: `macroscopeapp`, `chatgpt-codex-connector`, `codacy-production`, `devin-ai-integration`
+- Skip unless they left an inline thread with a concrete suggestion: `kilo-code-bot`, `codeant-ai` conversation summaries, `gemini-code-assist`, `copilot-pull-request-reviewer` with no inline comments, `coderabbitai` conversation-only / rate-limit notes
 - Each thread status: **verified** | **fixed-now** | **deferred-with-rationale**
-- Evidence: `git merge-base --is-ancestor <sha> main` + `git show <sha> -- <file>` + `git show main:<file>`
+- Evidence: `git show main:<file>` is required. After a squash merge, `git merge-base --is-ancestor <reply-sha> main` is expected to fail; do not treat that as a missing fix. Keep **fixed-now** unresolved until the follow-up lands on `main`.
 
 ### iz3.9 — Audit table
 - Single markdown table on gh-30: PR | thread_id | file | bot | status | evidence
@@ -108,9 +112,12 @@ PR=N
 # Prefer: github__pull_request_read method=get owner=rmems repo=xai-dissect pullNumber=$PR
 gh pr view "$PR" --json mergedAt,mergeCommit,title,state
 
-# Resolved threads only (GraphQL). Fail the loop on API errors (no silent truncate).
+# GraphQL fallback. Fail the loop on API errors (no silent truncate).
 # Paginate reviewThreads via $after; each node includes id for the audit table.
+# Count resolved and unresolved so smoke can assert unresolved==0.
 AFTER=""
+RESOLVED_N=0
+UNRESOLVED_N=0
 while true; do
   if [ -n "$AFTER" ]; then AFTER_ARG=(-f after="$AFTER"); else AFTER_ARG=(); fi
   PAGE=$(gh api graphql \
@@ -144,6 +151,13 @@ while true; do
     (.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage | type == "boolean")
   ' >/dev/null \
     || { echo "invalid GraphQL payload for reviewThreads page" >&2; exit 1; }
+
+  # Count both states so the smoke result can assert unresolved==0.
+  PAGE_RES=$(echo "$PAGE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == true)] | length')
+  PAGE_UNRES=$(echo "$PAGE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+  RESOLVED_N=$((RESOLVED_N + PAGE_RES))
+  UNRESOLVED_N=$((UNRESOLVED_N + PAGE_UNRES))
+  echo "page resolved=${PAGE_RES} unresolved=${PAGE_UNRES}" >&2
 
   # Emit only resolved threads for the gh-30 audit table.
   echo "$PAGE" | jq -c \
@@ -205,9 +219,11 @@ while true; do
   [ -n "$AFTER" ] || { echo "missing/invalid reviewThreads endCursor" >&2; exit 1; }
 done
 
-# Per thread with cited SHA:
-git merge-base --is-ancestor <sha> main
-git show <sha> -- <file>
+echo "totals resolved=${RESOLVED_N} unresolved=${UNRESOLVED_N}" >&2
+# Smoke (PR #37): require unresolved==0 before recording 34/0.
+[ "$UNRESOLVED_N" = "0" ] || { echo "unresolved threads remain: ${UNRESOLVED_N}" >&2; exit 1; }
+
+# Per thread: proof target is main (squash-merge reply SHAs are not ancestors).
 git show main:<file>
 ```
 
