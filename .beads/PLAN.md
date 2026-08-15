@@ -1,7 +1,7 @@
 # xai-dissect Beads Plan — Bot Review Backfill Audit (gh-30)
 
 > **Handoff doc for agent/model switches.** Read this + run `bd ready` before starting work.
-> Last updated: 2026-07-31 (gh-33: Codecov + Qodana + optional Sentry; Aikido and New Relic excluded from CI scope)
+> Last updated: 2026-08-14 (iz3.1: GitHub MCP enumeration + `docs/contributing-bot-reviews.md`; CI #33 landed in PR #48 / RM-148 Done)
 
 ## Quick start (any agent)
 
@@ -66,9 +66,9 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 
 ## Per-bead acceptance criteria
 
-### iz3.1 — Setup (CURRENT)
-- Document repeatable commands (below) in gh-30 comment or `docs/contributing-bot-reviews.md` stub
-- Confirm GraphQL query returns resolved threads for PR #37 as smoke test
+### iz3.1 — Setup
+- Document repeatable commands in `docs/contributing-bot-reviews.md` and a gh-30 comment
+- Confirm GitHub MCP `get_review_comments` returns resolved threads for PR #37 as smoke test (34 resolved / 0 unresolved on 2026-08-14)
 
 ### iz3.2–iz3.8 — Per-PR audit (same pattern)
 - List all `isResolved=true` inline threads from: macroscopeapp, codacy-production, chatgpt-codex-connector
@@ -97,12 +97,15 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 
 ---
 
-## Verification commands (copy-paste)
+## Verification commands
+
+**Prefer GitHub MCP** (`github__pull_request_read` method `get` + `get_review_comments`, `perPage=50`, paginate `after` until `hasNextPage` is false). GraphQL below is fallback only when MCP is unavailable.
 
 ```bash
-# Per PR N:
+# Per PR N (fallback):
 set -euo pipefail
 PR=N
+# Prefer: github__pull_request_read method=get owner=rmems repo=xai-dissect pullNumber=$PR
 gh pr view "$PR" --json mergedAt,mergeCommit,title,state
 
 # Resolved threads only (GraphQL). Fail the loop on API errors (no silent truncate).
@@ -223,7 +226,7 @@ git show main:<file>
 
 | Issue | Title |
 |-------|-------|
-| #33 | ~~CI~~ — **started 2026-07-31** (user priority; not blocked by iz3). Full scope: Codecov + Qodana + optional Sentry; **no Aikido/NR**. |
+| #33 | ~~CI~~ — **done** (PR #48 merged 2026-08-01; Linear RM-148 Done). Codecov + Qodana + optional Sentry; **no Aikido/NR**. |
 | #41 | docs/codebase-map.md |
 | #42 | model-family extension design |
 | #43 | split report/mod.rs |
