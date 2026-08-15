@@ -220,8 +220,18 @@ while true; do
 done
 
 echo "totals resolved=${RESOLVED_N} unresolved=${UNRESOLVED_N}" >&2
-# Smoke (PR #37): require unresolved==0 before recording 34/0.
-[ "$UNRESOLVED_N" = "0" ] || { echo "unresolved threads remain: ${UNRESOLVED_N}" >&2; exit 1; }
+# Smoke (PR #37): require the documented 34/0 result.
+# Other PRs may have valid unresolved threads (fixed-now).
+if [ "$PR" = "37" ]; then
+  [ "$RESOLVED_N" = "34" ] || {
+    echo "expected 34 resolved threads, got ${RESOLVED_N}" >&2
+    exit 1
+  }
+  [ "$UNRESOLVED_N" = "0" ] || {
+    echo "expected 0 unresolved threads, got ${UNRESOLVED_N}" >&2
+    exit 1
+  }
+fi
 
 # Per thread: proof target is main (squash-merge reply SHAs are not ancestors).
 git show main:<file>
