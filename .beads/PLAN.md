@@ -1,7 +1,7 @@
 # xai-dissect Beads Plan — Bot Review Backfill Audit (gh-30)
 
 > **Handoff doc for agent/model switches.** Read this + run `bd ready` before starting work.
-> Last updated: 2026-07-31 (gh-33: Codecov + Qodana + optional Sentry; Aikido and New Relic excluded from CI scope)
+> Last updated: 2026-08-14 (iz3.1: GitHub MCP enumeration + `docs/contributing-bot-reviews.md`; CI #33 landed in PR #48 / RM-148 Done)
 
 ## Quick start (any agent)
 
@@ -66,15 +66,19 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 
 ## Per-bead acceptance criteria
 
-### iz3.1 — Setup (CURRENT)
-- Document repeatable commands (below) in gh-30 comment or `docs/contributing-bot-reviews.md` stub
-- Confirm GraphQL query returns resolved threads for PR #37 as smoke test
+### iz3.1 — Setup
+
+- Document repeatable commands in `docs/contributing-bot-reviews.md` and a gh-30 comment
+- Confirm GitHub MCP `get_review_comments` returns resolved threads for PR #37 as smoke test (34 resolved / 0 unresolved on 2026-08-14)
 
 ### iz3.2–iz3.8 — Per-PR audit (same pattern)
-- List all `isResolved=true` inline threads from: macroscopeapp, codacy-production, chatgpt-codex-connector
-- Skip kilo-code-bot if informational-only (no inline suggestion)
+
+Same author/skip policy as `docs/contributing-bot-reviews.md`:
+
+- In-scope first authors: `macroscopeapp`, `chatgpt-codex-connector`, `codacy-production`, `devin-ai-integration`
+- Skip unless they left an inline thread with a concrete suggestion: `kilo-code-bot`, `codeant-ai` conversation summaries, `gemini-code-assist`, `copilot-pull-request-reviewer` with no inline comments, `coderabbitai` conversation-only / rate-limit notes
 - Each thread status: **verified** | **fixed-now** | **deferred-with-rationale**
-- Evidence: `git merge-base --is-ancestor <sha> main` + `git show <sha> -- <file>` + `git show main:<file>`
+- Evidence: `git show main:<file>` is required. After a squash merge, `git merge-base --is-ancestor <reply-sha> main` is expected to fail; do not treat that as a missing fix. Keep **fixed-now** unresolved until the follow-up lands on `main`.
 
 ### iz3.9 — Audit table
 - Single markdown table on gh-30: PR | thread_id | file | bot | status | evidence
@@ -97,17 +101,23 @@ xai-dissect-iz3 [EPIC P0] Bot review backfill audit — all previous PRs (gh-30)
 
 ---
 
-## Verification commands (copy-paste)
+## Verification commands
+
+**Prefer GitHub MCP** (`github__pull_request_read` method `get` + `get_review_comments`, `perPage=50`, paginate `after` until `hasNextPage` is false). GraphQL below is fallback only when MCP is unavailable.
 
 ```bash
-# Per PR N:
+# Per PR N (fallback):
 set -euo pipefail
 PR=N
+# Prefer: github__pull_request_read method=get owner=rmems repo=xai-dissect pullNumber=$PR
 gh pr view "$PR" --json mergedAt,mergeCommit,title,state
 
-# Resolved threads only (GraphQL). Fail the loop on API errors (no silent truncate).
+# GraphQL fallback. Fail the loop on API errors (no silent truncate).
 # Paginate reviewThreads via $after; each node includes id for the audit table.
+# Count resolved and unresolved so smoke can assert unresolved==0.
 AFTER=""
+RESOLVED_N=0
+UNRESOLVED_N=0
 while true; do
   if [ -n "$AFTER" ]; then AFTER_ARG=(-f after="$AFTER"); else AFTER_ARG=(); fi
   PAGE=$(gh api graphql \
@@ -141,6 +151,13 @@ while true; do
     (.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage | type == "boolean")
   ' >/dev/null \
     || { echo "invalid GraphQL payload for reviewThreads page" >&2; exit 1; }
+
+  # Count both states so the smoke result can assert unresolved==0.
+  PAGE_RES=$(echo "$PAGE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == true)] | length')
+  PAGE_UNRES=$(echo "$PAGE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+  RESOLVED_N=$((RESOLVED_N + PAGE_RES))
+  UNRESOLVED_N=$((UNRESOLVED_N + PAGE_UNRES))
+  echo "page resolved=${PAGE_RES} unresolved=${PAGE_UNRES}" >&2
 
   # Emit only resolved threads for the gh-30 audit table.
   echo "$PAGE" | jq -c \
@@ -202,9 +219,21 @@ while true; do
   [ -n "$AFTER" ] || { echo "missing/invalid reviewThreads endCursor" >&2; exit 1; }
 done
 
-# Per thread with cited SHA:
-git merge-base --is-ancestor <sha> main
-git show <sha> -- <file>
+echo "totals resolved=${RESOLVED_N} unresolved=${UNRESOLVED_N}" >&2
+# Smoke (PR #37): require the documented 34/0 result.
+# Other PRs may have valid unresolved threads (fixed-now).
+if [ "$PR" = "37" ]; then
+  [ "$RESOLVED_N" = "34" ] || {
+    echo "expected 34 resolved threads, got ${RESOLVED_N}" >&2
+    exit 1
+  }
+  [ "$UNRESOLVED_N" = "0" ] || {
+    echo "expected 0 unresolved threads, got ${UNRESOLVED_N}" >&2
+    exit 1
+  }
+fi
+
+# Per thread: proof target is main (squash-merge reply SHAs are not ancestors).
 git show main:<file>
 ```
 
@@ -223,7 +252,7 @@ git show main:<file>
 
 | Issue | Title |
 |-------|-------|
-| #33 | ~~CI~~ — **started 2026-07-31** (user priority; not blocked by iz3). Full scope: Codecov + Qodana + optional Sentry; **no Aikido/NR**. |
+| #33 | ~~CI~~ — **done** (PR #48 merged 2026-08-01; Linear RM-148 Done). Codecov + Qodana + optional Sentry; **no Aikido/NR**. |
 | #41 | docs/codebase-map.md |
 | #42 | model-family extension design |
 | #43 | split report/mod.rs |

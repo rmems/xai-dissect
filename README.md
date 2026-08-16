@@ -250,6 +250,7 @@ See:
 - [docs/export-contracts.md](docs/export-contracts.md)
 - [docs/tensor-schema.md](docs/tensor-schema.md)
 - [docs/output-conventions.md](docs/output-conventions.md)
+- [Bot review verification](docs/contributing-bot-reviews.md) — do not resolve review threads without `git show` proof
 
 ## Legal / Ethical Scope
 
