@@ -1,0 +1,49 @@
+docs/quantized-weight-internals.md
+  s_503a43d98ab143::t_b21340157382f6 44-46,51-54,58-67
+.beads/issues.jsonl
+  s_503a43d98ab143::t_af835f25720272 10
+  s_503a43d98ab143::t_e4a1ab81ee4e82 3,5-7,11,13
+  s_b335e3812724a7::t_a2533489705a5d 1-2,4,8-9,15
+  s_b335e3812724a7::t_d73aec6ced2cb2 14
+  s_503a43d98ab143::t_b36076e4f931a0 12
+src/schema/mod.rs
+  s_503a43d98ab143::t_bfabe95f808682 666,672-675,677,695-753
+docs/grok1-coverage-manifest.md
+  s_503a43d98ab143::t_4ea5520b819146 182-191
+docs/export-contracts.md
+  s_503a43d98ab143::t_aed9f52f8b7dc2 139-146
+tests/export_contracts.rs
+  s_503a43d98ab143::t_be76819b72442f 107-160,166
+  s_503a43d98ab143::t_aa7a13d39281ed 161-165
+CHANGELOG.md
+  s_503a43d98ab143::t_427f130c24e662 27-50
+src/inventory/grok1_coverage.rs
+  s_503a43d98ab143::t_e28b38cc12083c 64-73,75-77
+  s_503a43d98ab143::t_1f92ca31d55eb1 644-669
+src/exports/mod.rs
+  s_503a43d98ab143::t_3bb58111849cbb 867-898
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bd1e8d8b6eadca628c40dc692b4cfcb0646c2e57",
+  "prompts": {},
+  "sessions": {
+    "s_503a43d98ab143": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "118636f5-04aa-43df-bfe0-a2d71f45e43a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    },
+    "s_b335e3812724a7": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "489655c4-ef41-4f9d-b9ab-c671fa64917a",
+        "model": "grok-4.6"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
