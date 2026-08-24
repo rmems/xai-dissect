@@ -1,0 +1,21 @@
+.beads/issues.jsonl
+  s_503a43d98ab143::t_540c26a5b9714f 2-7,9-11
+AGENTS.md
+  s_503a43d98ab143::t_5d03b76c4d90c4 84-85,88-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9dc627ee1c69298b3049fcb330015ad9110ffedd",
+  "prompts": {},
+  "sessions": {
+    "s_503a43d98ab143": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "118636f5-04aa-43df-bfe0-a2d71f45e43a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
