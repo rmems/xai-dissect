@@ -1,0 +1,21 @@
+docs/contributing-bot-reviews.md
+  s_503a43d98ab143::t_3f204422c968c1 57-98
+AGENTS.md
+  s_503a43d98ab143::t_e50ecb87003d57 78-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ef47331e00e50c8fb8d2a9e6ec7d13529fc6d7af",
+  "prompts": {},
+  "sessions": {
+    "s_503a43d98ab143": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "118636f5-04aa-43df-bfe0-a2d71f45e43a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
