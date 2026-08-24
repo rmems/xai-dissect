@@ -54,6 +54,48 @@ Status vocabulary:
 | fixed-now | Gap confirmed; fix committed on `audit/bot-followups` (or this follow-up PR) but **not yet on `main`** | **no** — leave open until the follow-up is merged and `git show main:<path>` proves it |
 | deferred-with-rationale | Intentional non-fix; rationale already on the thread or recorded | yes, with the rationale on the thread |
 
+## Worked example (bad vs good)
+
+Bot comment on `src/report/mod.rs:212`:
+
+> This builds the metric label with `format!` inside the per-tensor loop, so it
+> allocates once per tensor. Hoist the label table out of the loop.
+
+### Bad — reply-only resolve
+
+```text
+Addressed in a1b2c3d: hoisted the label table.
+```
+…then mark the thread **Resolved**.
+
+Why this fails the gate: nothing here proves `a1b2c3d` touched
+`src/report/mod.rs`, and nothing proves the change survived the squash merge
+onto `main`. A later agent reads `isResolved=true` and moves on. This is the
+exact failure mode that produced the gh-30 backfill audit.
+
+### Good — proof, then resolve
+
+```bash
+$ git show main:src/report/mod.rs | sed -n '205,215p'
+const METRIC_LABELS: BTreeMap<&'static str, usize> = ...
+    for tensor in tensors {
+        let label = METRIC_LABELS[tensor.kind.as_str()];
+```
+
+The table is now a module-level constant and the loop indexes it — the concern
+is satisfied **on `main`**, not merely in a branch. Reply with that evidence:
+
+```text
+verified — `git show main:src/report/mod.rs` (lines 205-215) shows METRIC_LABELS
+hoisted to a module constant; the loop now indexes it instead of calling format!.
+```
+
+…then mark the thread **Resolved**.
+
+If the same check had shown `format!` still inside the loop, the status is
+`fixed-now` (fix it on the follow-up branch and **leave the thread open** until
+that branch is on `main`) or `deferred-with-rationale` — never `verified`.
+
 ## Anti-patterns
 
 - Reply “Addressed in …” without a commit that touches `<path>`

@@ -75,6 +75,26 @@ bd close <id>         # Complete work
 Dolt under `.beads/` is the issue source of truth; sync with `bd dolt push` /
 `bd dolt pull`. Details: https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md
 
+## PR Review Threads
+
+Do **not** resolve a GitHub review thread on the strength of a reply. A thread is
+resolvable only when the change is provably on `main`:
+
+```bash
+git show main:<path>        # required — content on main must match the bot concern
+git show <sha> -- <path>    # optional — only meaningful if the PR was not squashed
+```
+
+Most PRs here are squash-merged, so the SHA cited in an `Addressed in <sha>` reply
+is usually **not** an ancestor of `main`. That alone is neither proof of a fix nor
+proof of a gap — verify by content.
+
+Full gate, status vocabulary (`verified` / `fixed-now` / `deferred-with-rationale`),
+and the anti-pattern list: [docs/contributing-bot-reviews.md](docs/contributing-bot-reviews.md).
+
+This gate applies to PR babysitting sessions too — the same proof is required when
+closing out threads at the end of a babysit pass as when handling them one at a time.
+
 ## Session Completion
 
 After a coding session, run this checklist when the agent is about to stop or
