@@ -81,9 +81,15 @@ Do **not** resolve a GitHub review thread on the strength of a reply. A thread i
 resolvable only when the change is provably on `main`:
 
 ```bash
-git show main:<path>        # required — content on main must match the bot concern
-git show <sha> -- <path>    # optional — only meaningful if the PR was not squashed
+git show main:<path>        # content on main must match the bot concern
+git show <sha> -- <path>    # only meaningful if the PR was not squashed
 ```
+
+The one exception is a thread you are deliberately **not** fixing: mark it
+`deferred-with-rationale` and resolve it with that rationale on the thread. If a
+gap is real but the fix has not landed on `main` yet, the thread stays open —
+`fixed-now` is not a resolvable state. When you cannot prove the content and
+cannot justify deferring, leave the thread open and say so.
 
 Most PRs here are squash-merged, so the SHA cited in an `Addressed in <sha>` reply
 is usually **not** an ancestor of `main`. That alone is neither proof of a fix nor
