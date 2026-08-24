@@ -136,7 +136,14 @@ Current schema version: **2**.
 ## SAAQ Readiness
 
 - `exports/<slug>/saaq-readiness.json`
-  Contract: `schema::SaaqReadinessReport`
+  Contract: `schema::SaaqReadinessReport` — **`schema_version: 2`**
+
+  v2 renamed the actionable candidate set from `candidate_targets` to
+  `quantization_candidates`. Both keys are emitted with identical content so
+  pre-v2 readers keep working; `candidate_targets` is a mirror, not a second
+  set. Readers should prefer `quantization_candidates` and fall back to
+  `candidate_targets` only when it is absent. `SaaqReadinessReport` accepts
+  either shape on the way in.
 - `reports/<slug>/saaq-readiness.md`
   Contract: `report::render_saaq_readiness_markdown`
 - `exports/<slug>/saaq-readiness-findings.json`

@@ -663,16 +663,18 @@ pub struct OutlierSummary {
 /// This does not apply SAAQ; it identifies where experiments may be
 /// promising or risky.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "SaaqReadinessReportWire")]
 pub struct SaaqReadinessReport {
     pub model_family: String,
     pub checkpoint_path: PathBuf,
     pub shard_count: u32,
     pub inferred: InferredHyperparams,
-    /// Backward-compatible alias for the actionable quantization-candidate set.
-    /// Skips deserialization so the legacy key can be aliased into quantization_candidates.
-    #[serde(default, skip_deserializing)]
+    /// Backward-compatible mirror of `quantization_candidates`, kept on the
+    /// wire for pre-v2 consumers. Always equal to `quantization_candidates`;
+    /// reads go through `SaaqReadinessReportWire`, which reconciles the two.
+    #[serde(default)]
     pub candidate_targets: Vec<SaaqCandidate>,
-    #[serde(default, alias = "candidate_targets")]
+    #[serde(default)]
     pub quantization_candidates: Vec<SaaqCandidate>,
     #[serde(default)]
     pub routing_critical_tensors: Vec<SaaqCandidate>,
@@ -688,6 +690,67 @@ pub struct SaaqReadinessReport {
     pub notes: Vec<String>,
     pub manifest: CandidateTensorManifest,
     pub schema_version: u32,
+}
+
+/// Read-side shim for [`SaaqReadinessReport`].
+///
+/// v1 documents carry only `candidate_targets`; v2 documents emit both it and
+/// `quantization_candidates` with identical content. Routing both live keys
+/// into one field via `serde(alias)` makes serde bind the same field twice and
+/// fail with `duplicate field`, so the two keys are deserialized separately
+/// here and reconciled in the `From` impl.
+#[derive(Deserialize)]
+struct SaaqReadinessReportWire {
+    model_family: String,
+    checkpoint_path: PathBuf,
+    shard_count: u32,
+    inferred: InferredHyperparams,
+    #[serde(default)]
+    candidate_targets: Vec<SaaqCandidate>,
+    #[serde(default)]
+    quantization_candidates: Vec<SaaqCandidate>,
+    #[serde(default)]
+    routing_critical_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    precision_sensitive_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    deferred_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    risky_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    layer_readiness: Vec<SaaqLayerReadiness>,
+    #[serde(default)]
+    notes: Vec<String>,
+    manifest: CandidateTensorManifest,
+    schema_version: u32,
+}
+
+impl From<SaaqReadinessReportWire> for SaaqReadinessReport {
+    fn from(w: SaaqReadinessReportWire) -> Self {
+        // v1 wrote only `candidate_targets`; v2 writes both. Whichever side is
+        // populated wins, and both fields end up holding the same set.
+        let candidates = if w.quantization_candidates.is_empty() {
+            w.candidate_targets
+        } else {
+            w.quantization_candidates
+        };
+        Self {
+            model_family: w.model_family,
+            checkpoint_path: w.checkpoint_path,
+            shard_count: w.shard_count,
+            inferred: w.inferred,
+            candidate_targets: candidates.clone(),
+            quantization_candidates: candidates,
+            routing_critical_tensors: w.routing_critical_tensors,
+            precision_sensitive_tensors: w.precision_sensitive_tensors,
+            deferred_tensors: w.deferred_tensors,
+            risky_tensors: w.risky_tensors,
+            layer_readiness: w.layer_readiness,
+            notes: w.notes,
+            manifest: w.manifest,
+            schema_version: w.schema_version,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -61,11 +61,20 @@ const GROK1_BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
 const GROK1_ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
 
 /// Decide whether an inventory is complete enough to require strict Grok-1
-/// coverage validation before export. This intentionally does not depend on
-/// shard count, because completeness is a tensor/layout property and repacked
-/// checkpoints can preserve all 770 tensors with a different file count.
+/// coverage validation before export.
+///
+/// Strict validation checks per-block slot occupancy, so it is only meaningful
+/// once `assign_block_indices` has actually produced a block mapping. That
+/// mapping requires the canonical shard layout; the `grok1-map-v1-clean`
+/// profile does not cover repacked checkpoints (see
+/// `docs/grok1-coverage-manifest.md`). Gating on `n_blocks` as well as tensor
+/// count means an unmapped (repacked) inventory *skips* strict validation
+/// instead of hard-failing export with one "missing block" error per block and
+/// one "unassigned tensor" error per tensor.
 pub fn should_validate_grok1_coverage(inv: &ModelInventory) -> bool {
-    inv.model_family == "grok-1" && inv.tensors.len() as u64 >= GROK1_EXPECTED_TENSORS
+    inv.model_family == "grok-1"
+        && inv.tensors.len() as u64 >= GROK1_EXPECTED_TENSORS
+        && inv.inferred.n_blocks == Some(GROK1_EXPECTED_BLOCKS)
 }
 
 /// Validate a complete Grok-1 inventory and emit a deterministic coverage
@@ -630,6 +639,32 @@ mod tests {
 
         assert!(should_validate_grok1_coverage(&inv));
         validate_grok1_complete_manifest(&inv).expect("repacked manifest remains complete");
+    }
+
+    /// A repacked checkpoint that `assign_block_indices` could not map is the
+    /// state `build_inventory` actually produces when `(shard_count - 2) % 12
+    /// != 0`: every `block_index` is `None` and `inferred.n_blocks` is `None`.
+    ///
+    /// The test above only rewrites the `shard_count` *field* on a fixture whose
+    /// block indices are hand-populated, which `build_inventory` can never
+    /// emit — so it never covered this path. Strict validation must skip here
+    /// rather than report one missing block per block plus one unassigned
+    /// tensor per tensor.
+    #[test]
+    fn skips_strict_coverage_for_unmapped_repacked_grok1_inventory() {
+        let mut inv = complete_grok1_inventory();
+        inv.shard_count = 42;
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        assert_eq!(inv.tensors.len() as u64, GROK1_EXPECTED_TENSORS);
+        assert!(
+            !should_validate_grok1_coverage(&inv),
+            "an inventory with no block mapping must not be held to strict coverage"
+        );
     }
 
     #[test]

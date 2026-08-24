@@ -179,6 +179,16 @@ handle repacked checkpoints — the consumer should regenerate the
 coverage manifest from the repacked layout and treat the new checksum
 as the baseline for that layout.
 
+Concretely: block indices are assigned only for the canonical shard layout
+(`(shard_count - 2) % 12 == 0` with a norm singleton on each block boundary).
+A repack that breaks that layout leaves every tensor unmapped and
+`inferred.n_blocks` unset, so `should_validate_grok1_coverage` returns false
+and the export **skips** strict coverage rather than failing. The bundle is
+still written; it simply carries no `grok1-coverage.json`. Treat a missing
+coverage manifest as "not validated by this profile", not as "validated and
+clean" — the fail-closed gate for grok-ozempic ingestion is a `"pass"`
+manifest that is present.
+
 ## The grok1-coverage.json from the real Grok-1 run
 
 Complete 22-line file from `out/grok1_run2_after_fixes_20260525T002904Z/`:

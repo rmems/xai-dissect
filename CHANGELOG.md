@@ -24,6 +24,30 @@ All notable changes to `xai-dissect` are documented here.
 
 - Clippy `items_after_test_module` in `main.rs` and `planning/mod.rs` so
   `-D warnings` is clean under CI.
+- `saaq-readiness.json` is now readable by `schema::SaaqReadinessReport`.
+  Emitted v2 documents carry both `candidate_targets` and
+  `quantization_candidates`, and the previous `serde(alias)` routed both into a
+  single field, so every emitted document failed to deserialize with
+  `duplicate field quantization_candidates`. Reads now go through a wire shim
+  that reconciles the two; round-trip and legacy-v1 regression tests added
+  ([#30](https://github.com/rmems/xai-dissect/issues/30)).
+- Strict Grok-1 coverage validation no longer fires on inventories with no
+  block mapping. `should_validate_grok1_coverage` now also requires
+  `n_blocks == Some(64)`, so a repacked 770-tensor checkpoint skips strict
+  validation instead of failing export with one "missing block" error per block
+  plus one "unassigned tensor" error per tensor
+  ([#30](https://github.com/rmems/xai-dissect/issues/30)).
+
+### Documented
+
+- `saaq-readiness.json` is `schema_version: 2` in `docs/export-contracts.md`,
+  with the v1 → v2 `candidate_targets` → `quantization_candidates` rename and
+  the dual-key emission spelled out (the code bump landed in
+  [#32](https://github.com/rmems/xai-dissect/pull/32) without the doc half).
+- Corrected the pickle opcode table in `docs/quantized-weight-internals.md`
+  (`GLOBAL`/`REDUCE`/`BINPUT` carried wrong bytes) and rewrote the scanner
+  description to match `find_dtype_anchors` — the parser locates dtype-tag
+  anchors, it does not count `REDUCE`/`BINPUT` pairs.
 
 ## Unreleased - 2026-05-27
 

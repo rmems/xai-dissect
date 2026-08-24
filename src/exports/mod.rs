@@ -864,6 +864,42 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    /// The test above rewrites only the `shard_count` field, leaving the
+    /// fixture's hand-populated block indices in place — a state
+    /// `build_inventory` cannot produce. A genuinely unmapped repack has no
+    /// block indices and no `n_blocks`, and must still export: strict coverage
+    /// is skipped and no `grok1-coverage.json` is emitted, rather than the
+    /// whole bundle failing.
+    #[test]
+    fn inventory_bundle_skips_coverage_for_unmapped_repacked_grok1() {
+        let root = unique_test_root("inventory_bundle_unmapped_repacked_grok1");
+        let mut inv = complete_grok1_inventory();
+        inv.shard_count = 42;
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        let bundle = write_inventory_bundle(&inv, &root, None)
+            .expect("unmapped repacked inventory must still export");
+
+        assert!(
+            !bundle
+                .written_paths
+                .iter()
+                .any(|path| path.file_name().and_then(|name| name.to_str())
+                    == Some("grok1-coverage.json")),
+            "strict coverage manifest must be skipped for an unmapped layout"
+        );
+        assert!(
+            !root
+                .join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
+                .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn routing_manifest_carries_block_reason() {
         let report_doc = sample_routing_report();

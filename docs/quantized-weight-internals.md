@@ -41,24 +41,30 @@ format is:
 \x2e              STOP opcode
 ```
 
-Each ndarray in the stream is encoded as a `GLOBAL` or `REDUCE` opcode
-followed by metadata and a byte payload. The key opcodes `xai-dissect`
-recognizes are:
+Each ndarray in the stream is pushed via a `STACK_GLOBAL` reference to the
+`numpy` constructors, followed by its dtype tag, shape tuple, and a byte
+payload. The opcodes `xai-dissect` actually declares are:
 
 | Opcode | Value | Meaning |
 |--------|-------|---------|
 | `PROTO` | `\x80` | Version marker — must be `\x80\x04` for Grok-1 shards |
-| `GLOBAL` | `\x71` | Module + name reference (e.g. `numpy.core.multiarray`) |
-| `REDUCE` | `\x72` | Callable + state (the dataclass reducer) |
-| `BINPUT` | `\x61`..`\x80` | Short int marker for small memo indices |
+| `SHORT_BINUNICODE` | `\x8c` | Length-prefixed str — carries the `f4`/`i1` dtype tags and the `QuantizedWeight8bit` class name |
+| `STACK_GLOBAL` | `\x93` | Module + name reference taken off the stack |
+| `BINGET` / `LONG_BINGET` | `\x68` / `\x6a` | Memo lookup, u8 and u32 index forms |
+| `SHORT_BINBYTES` / `BINBYTES` / `BINBYTES8` | `\x43` / `\x42` / `\x8e` | Raw payload, with u8 / u32 / u64 length prefix |
 | `MEMOIZE` | `\x94` | Store top of stack in memo |
 | `STOP` | `\x2e` | End of frame |
 
-`xai-dissect` walks the opcode stream looking for `numpy.ndarray` reduce
-sites. It matches the magic `\x80\x04`, then scans forward through opcodes
-counting `REDUCE` + `BINPUT` pairs (for the `__reduce__` protocol used by
-JAX's pytree flattening). Every `numpy.core.multiarray` reducer it
-encounters produces one raw tensor record.
+`xai-dissect` does **not** interpret the opcode stream sequentially. After
+checking the `\x80\x04` magic it scans the whole shard for **dtype-tag
+anchors** — the byte sequences `\x8c\x02f4` (f32) and `\x8c\x02i1` (int8),
+each a `SHORT_BINUNICODE` of length 2 — and keeps only those followed by the
+postamble an ndarray reduce state emits: an optional `MEMOIZE`, then
+`NEWFALSE NEWTRUE TUPLE3` (`\x89\x88\x87`). Every surviving anchor is handed
+to `extract_tensor`, which reads the shape tuple and payload around it to
+produce one raw tensor record; a malformed anchor is skipped without aborting
+the shard. See `find_dtype_anchors`, `has_dtype_postamble`, and
+`dissect_shard` in `src/parser/mod.rs`.
 
 ## How QuantizedWeight8bit pairing works in xai-dissect
 
