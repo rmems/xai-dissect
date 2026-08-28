@@ -706,9 +706,9 @@ struct SaaqReadinessReportWire {
     shard_count: u32,
     inferred: InferredHyperparams,
     #[serde(default)]
-    candidate_targets: Vec<SaaqCandidate>,
+    candidate_targets: Option<Vec<SaaqCandidate>>,
     #[serde(default)]
-    quantization_candidates: Vec<SaaqCandidate>,
+    quantization_candidates: Option<Vec<SaaqCandidate>>,
     #[serde(default)]
     routing_critical_tensors: Vec<SaaqCandidate>,
     #[serde(default)]
@@ -727,12 +727,13 @@ struct SaaqReadinessReportWire {
 
 impl From<SaaqReadinessReportWire> for SaaqReadinessReport {
     fn from(w: SaaqReadinessReportWire) -> Self {
-        // v1 wrote only `candidate_targets`; v2 writes both. Whichever side is
-        // populated wins, and both fields end up holding the same set.
-        let candidates = if w.quantization_candidates.is_empty() {
-            w.candidate_targets
-        } else {
-            w.quantization_candidates
+        // v1 wrote only `candidate_targets`; v2 writes both with `quantization_candidates`
+        // as the canonical key. If `quantization_candidates` is present (even if empty),
+        // it takes precedence over the deprecated `candidate_targets` mirror.
+        let candidates = match (w.quantization_candidates, w.candidate_targets) {
+            (Some(qc), _) => qc,
+            (None, Some(ct)) => ct,
+            (None, None) => Vec::new(),
         };
         Self {
             model_family: w.model_family,

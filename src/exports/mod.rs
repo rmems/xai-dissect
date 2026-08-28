@@ -161,10 +161,12 @@ pub fn write_inventory_bundle(
     report::write_inventory_snapshot_manifest_json(&snapshot, &manifest_path)?;
     bundle.written_paths.push(manifest_path);
 
+    let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
     if let Some(coverage) = coverage {
-        let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
         report::write_grok1_coverage_manifest_json(&coverage, &coverage_path)?;
         bundle.written_paths.push(coverage_path);
+    } else if coverage_path.exists() {
+        let _ = fs::remove_file(&coverage_path);
     }
 
     Ok(bundle)

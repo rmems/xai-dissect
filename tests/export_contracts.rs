@@ -164,3 +164,54 @@ fn saaq_readiness_reads_legacy_v1_candidate_targets_only() {
         "the legacy mirror must hold the same candidates as the canonical field"
     );
 }
+
+/// An explicitly empty `quantization_candidates: []` array must take precedence
+/// over a populated legacy `candidate_targets` array.
+#[test]
+fn saaq_readiness_prefers_explicitly_empty_canonical_candidates() {
+    let report = sample_saaq_readiness();
+    let mut raw: serde_json::Value =
+        serde_json::to_value(&report).expect("serialize saaq readiness");
+    let obj = raw.as_object_mut().expect("report is a json object");
+    obj.insert(
+        "quantization_candidates".into(),
+        serde_json::Value::Array(Vec::new()),
+    );
+
+    let parsed: xai_dissect::schema::SaaqReadinessReport =
+        serde_json::from_value(raw).expect("deserialization with empty canonical list succeeds");
+
+    assert!(
+        parsed.quantization_candidates.is_empty(),
+        "canonical empty list must be preserved"
+    );
+    assert!(
+        parsed.candidate_targets.is_empty(),
+        "legacy mirror must reflect canonical empty list"
+    );
+}
+
+/// Rewriting an inventory bundle for an unmapped repack must remove any stale
+/// `grok1-coverage.json` left behind from a previous canonical run.
+#[test]
+fn inventory_bundle_removes_stale_coverage_manifest_on_unmapped_repack() {
+    let root = unique_temp_root("inventory-stale-coverage-cleanup");
+    let _ = fs::remove_dir_all(&root);
+
+    let inv = sample_inventory();
+    let slug = sample_checkpoint_slug();
+    let coverage_dir = root.join("manifests").join(slug);
+    fs::create_dir_all(&coverage_dir).expect("create manifests dir");
+    let coverage_path = coverage_dir.join("grok1-coverage.json");
+    fs::write(&coverage_path, b"{\"validation\":\"stale\"}").expect("write dummy stale manifest");
+    assert!(coverage_path.exists(), "stale manifest exists prior to run");
+
+    let _ = exports::write_inventory_bundle(&inv, &root, None)
+        .expect("write inventory bundle skipping coverage");
+    assert!(
+        !coverage_path.exists(),
+        "stale grok1-coverage.json must be removed when coverage is skipped"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
