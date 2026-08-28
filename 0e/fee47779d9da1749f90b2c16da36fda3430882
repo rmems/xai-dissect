@@ -1,11 +1,7 @@
-src/main.rs
-  s_b335e3812724a7::t_c9671547e3530e 33,36,70-73,88-91,106-109,122-127,140-145,161-164,176-179,191-194,250-252,256,258,262,264,267-270,274-280,282,285-288,330,335-337,343,348-350,356,361-363,369,371,375-378,384,386,391-394,401,406-408,414,419-421,427,435-437,531
-  s_b335e3812724a7::t_d549634f79a735 39,247-249,272-273
-src/cli.rs
-  s_b335e3812724a7::t_2979cf4383b9d7 1-123,130-208,212-272,274-360,362-559
-  s_b335e3812724a7::t_41f872d465bdc4 361
-  s_b335e3812724a7::t_d549634f79a735 124-129,209-211
-  s_b335e3812724a7::t_ac9294aaaffa8b 273
+docs/contributing-bot-reviews.md
+  s_503a43d98ab143::t_3f204422c968c1 57-98
+AGENTS.md
+  s_503a43d98ab143::t_e50ecb87003d57 78-97
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -13,11 +9,11 @@ src/cli.rs
   "base_commit_sha": "0efee47779d9da1749f90b2c16da36fda3430882",
   "prompts": {},
   "sessions": {
-    "s_b335e3812724a7": {
+    "s_503a43d98ab143": {
       "agent_id": {
-        "tool": "cursor",
-        "id": "489655c4-ef41-4f9d-b9ab-c671fa64917a",
-        "model": "grok-4.6"
+        "tool": "claude",
+        "id": "118636f5-04aa-43df-bfe0-a2d71f45e43a",
+        "model": "claude-opus-5"
       },
       "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
     }
