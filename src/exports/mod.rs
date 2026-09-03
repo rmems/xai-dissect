@@ -28,6 +28,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -141,6 +142,14 @@ pub fn write_inventory_bundle(
         written_paths: Vec::new(),
     };
 
+    // Drop a leftover pass-manifest before rewriting the rest of the bundle.
+    // Otherwise a skipped-coverage rewrite can publish new inventory artifacts
+    // beside stale validation, or report success when deletion failed.
+    let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
+    if coverage.is_none() {
+        remove_stale_coverage_manifest(&coverage_path)?;
+    }
+
     let json_path = layout.exports_dir.join("inventory.json");
     report::write_json(inv, &json_path)?;
     bundle.written_paths.push(json_path);
@@ -161,15 +170,21 @@ pub fn write_inventory_bundle(
     report::write_inventory_snapshot_manifest_json(&snapshot, &manifest_path)?;
     bundle.written_paths.push(manifest_path);
 
-    let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
     if let Some(coverage) = coverage {
         report::write_grok1_coverage_manifest_json(&coverage, &coverage_path)?;
         bundle.written_paths.push(coverage_path);
-    } else if coverage_path.exists() {
-        let _ = fs::remove_file(&coverage_path);
     }
 
     Ok(bundle)
+}
+
+fn remove_stale_coverage_manifest(coverage_path: &Path) -> Result<()> {
+    match fs::remove_file(coverage_path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err)
+            .with_context(|| format!("remove stale coverage manifest {}", coverage_path.display())),
+    }
 }
 
 pub fn write_expert_bundle(
@@ -898,6 +913,84 @@ mod tests {
             !root
                 .join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
                 .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_fails_closed_for_canonical_770_with_failed_block_inference() {
+        let root = unique_test_root("inventory_bundle_canonical_failed_mapping");
+        let mut inv = complete_grok1_inventory();
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("n_blocks") || msg.contains("missing block"),
+            "canonical 770-shard mapping failure must fail export, got: {msg}"
+        );
+        assert!(!root.join("exports").exists());
+        assert!(
+            !root
+                .join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
+                .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_removes_stale_coverage_before_replacement_writers() {
+        let root = unique_test_root("stale_coverage_before_writers");
+        let inv = sample_inventory();
+        let slug = "grok-1-official__ckpt-0";
+        let coverage_dir = root.join("manifests").join(slug);
+        fs::create_dir_all(&coverage_dir).expect("create manifests dir");
+        let coverage_path = coverage_dir.join("grok1-coverage.json");
+        fs::write(&coverage_path, b"{\"validation\":\"pass\"}").expect("write stale pass manifest");
+
+        // Poison the first replacement writer so the bundle cannot finish.
+        let json_path = root.join("exports").join(slug).join("inventory.json");
+        fs::create_dir_all(&json_path).expect("poison inventory.json as a directory");
+
+        let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
+        assert!(
+            !coverage_path.exists(),
+            "stale coverage must already be gone when a later writer fails: {err:#}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_propagates_stale_coverage_delete_errors() {
+        let root = unique_test_root("stale_coverage_delete_error");
+        let inv = sample_inventory();
+        let slug = "grok-1-official__ckpt-0";
+        let coverage_path = root
+            .join("manifests")
+            .join(slug)
+            .join("grok1-coverage.json");
+        // A directory at the coverage path makes remove_file fail (IsADirectory)
+        // without inventing a production hook.
+        fs::create_dir_all(&coverage_path).expect("create coverage path as directory");
+        fs::write(coverage_path.join("keep"), b"x").expect("keep directory non-empty");
+
+        let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("stale coverage"),
+            "delete failure must propagate with context, got: {msg}"
+        );
+        assert!(
+            !root
+                .join("exports")
+                .join(slug)
+                .join("inventory.json")
+                .is_file(),
+            "replacement artifacts must not be published after a delete failure"
         );
         let _ = fs::remove_dir_all(root);
     }

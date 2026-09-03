@@ -41,9 +41,12 @@ format is:
 \x2e              STOP opcode
 ```
 
-Each ndarray in the stream is pushed via a `STACK_GLOBAL` reference to the
-`numpy` constructors, followed by its dtype tag, shape tuple, and a byte
-payload. The opcodes `xai-dissect` actually declares are:
+A fresh NumPy dtype constructor is pushed via `STACK_GLOBAL`. After that
+constructor is memoized, later ndarray records may look it up with
+`BINGET` or `LONG_BINGET` instead of pushing another `STACK_GLOBAL`.
+`parse_shape_backward` in `src/parser/mod.rs` accepts both forms. Either
+way the constructor (or memo lookup) is followed by the dtype tag, shape
+tuple, and a byte payload. The opcodes `xai-dissect` actually declares are:
 
 | Opcode | Value | Meaning |
 |--------|-------|---------|

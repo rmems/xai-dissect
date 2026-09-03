@@ -32,10 +32,12 @@ All notable changes to `xai-dissect` are documented here.
   that reconciles the two; round-trip and legacy-v1 regression tests added
   ([#30](https://github.com/rmems/xai-dissect/issues/30)).
 - Strict Grok-1 coverage validation no longer fires on inventories with no
-  block mapping. `should_validate_grok1_coverage` now also requires
-  `n_blocks == Some(64)`, so a repacked 770-tensor checkpoint skips strict
-  validation instead of failing export with one "missing block" error per block
-  plus one "unassigned tensor" error per tensor
+  block mapping **and** a non-canonical shard count. The skip is for genuine
+  repacks (`(shard_count - 2)` is not a multiple of 12) that also lack a
+  64-block map. A canonical 770-shard inventory that failed block inference
+  still fails closed. A skipped-coverage rewrite deletes any leftover
+  `grok1-coverage.json` *before* publishing replacement artifacts, and
+  deletion errors other than `NotFound` abort the write
   ([#30](https://github.com/rmems/xai-dissect/issues/30)).
 
 ### Documented
