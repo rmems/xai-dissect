@@ -528,7 +528,53 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::validate_complete_inventory_scope;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use crate::cli::{
+        CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg,
+        validate_complete_inventory_scope,
+    };
+
+    use super::{Command, run_dissect};
+
+    fn dummy_scan() -> CheckpointScanArgs {
+        CheckpointScanArgs {
+            path: PathBuf::from("/tmp/ckpt"),
+            prefix: "tensor".into(),
+            limit: None,
+        }
+    }
+
+    fn dummy_tree() -> OutputTreeArgs {
+        OutputTreeArgs {
+            output_root: None,
+            checkpoint_slug: None,
+        }
+    }
+
+    fn decode_hex_fixture() -> Vec<u8> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/parser/single_f32_tensor.pkl.hex");
+        let hex = fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("read fixture {}: {err}", path.display()));
+        let hex = hex
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect::<String>();
+        let mut out = Vec::with_capacity(hex.len() / 2);
+        let mut i = 0;
+        while i < hex.len() {
+            out.push(u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte"));
+            i += 2;
+        }
+        out
+    }
+
+    #[test]
+    fn complete_inventory_scope_accepts_default_prefix_without_limit() {
+        validate_complete_inventory_scope("quant-plan", "tensor", None).expect("default scope");
+    }
 
     #[test]
     fn quant_plan_rejects_non_default_prefix() {
@@ -541,5 +587,127 @@ mod tests {
     fn quant_plan_rejects_limited_inventory() {
         let err = validate_complete_inventory_scope("quant-plan", "tensor", Some(4)).unwrap_err();
         assert!(format!("{err:#}").contains("--limit 4"));
+    }
+
+    #[test]
+    fn command_name_and_fields_cover_every_variant() {
+        let scan = dummy_scan();
+        let family = ModelFamilyArg {
+            family: "grok-1".into(),
+        };
+        let planning = PlanningFamilyArg {
+            family: "grok-1".into(),
+        };
+        let sample = SampleValuesArg { sample_values: 64 };
+        let tree = dummy_tree();
+        let variants = [
+            Command::Dissect {
+                path: PathBuf::from("/tmp/ckpt"),
+                limit: Some(1),
+                prefix: "tensor".into(),
+            },
+            Command::Inventory {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::Experts {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::RoutingReport {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::Stats {
+                scan: scan.clone(),
+                family: family.clone(),
+                sample: sample.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::SaaqReadiness {
+                scan: scan.clone(),
+                family: family.clone(),
+                sample,
+                json: None,
+                md: None,
+                manifest: None,
+                output_tree: tree.clone(),
+            },
+            Command::PilotPlan {
+                scan: scan.clone(),
+                family: planning.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::RoutePreservation {
+                scan: scan.clone(),
+                family: planning,
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::QuantPlan {
+                scan,
+                family,
+                sample_values: 64,
+                json: None,
+                md: None,
+                conversion_manifest: None,
+                conversion_manifest_md: None,
+                output_tree: tree,
+            },
+        ];
+        let names: Vec<_> = variants.iter().map(Command::name).collect();
+        assert_eq!(
+            names,
+            [
+                "dissect",
+                "inventory",
+                "experts",
+                "routing-report",
+                "stats",
+                "saaq-readiness",
+                "pilot-plan",
+                "route-preservation",
+                "quant-plan",
+            ]
+        );
+        for command in &variants {
+            let fields = command.fields();
+            assert_eq!(fields.prefix.as_deref(), Some("tensor"));
+        }
+    }
+
+    #[test]
+    fn dissect_hex_fixture_prints_tensor_table() {
+        let root = std::env::temp_dir().join(format!(
+            "xai-dissect-dissect-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("create checkpoint dir");
+        fs::write(root.join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
+        fs::write(root.join("tensor0001.pkl"), b"not-a-pickle").expect("write garbage shard");
+        run_dissect(&root, Some(1), "tensor").expect("dissect hex fixture");
+        run_dissect(&root, None, "tensor").expect("dissect includes unreadable shard warn");
+        let empty = run_dissect(&root, Some(0), "missing").unwrap_err();
+        assert!(format!("{empty:#}").contains("no shards found"));
+        let not_dir = run_dissect(&root.join("tensor0000.pkl"), None, "tensor").unwrap_err();
+        assert!(format!("{not_dir:#}").contains("is not a directory"));
+        let _ = fs::remove_dir_all(root);
     }
 }

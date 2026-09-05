@@ -413,3 +413,6 @@ fn write_output_tree(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
