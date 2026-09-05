@@ -218,6 +218,50 @@ pub fn sample_inventory() -> ModelInventory {
     }
 }
 
+/// 770-tensor grok-1 inventory with no block map and a non-canonical shard
+/// count. This is the layout `should_validate_grok1_coverage` treats as a
+/// genuine unmapped repack (skip strict coverage), not a truncated sample.
+pub fn unmapped_repacked_grok1_inventory() -> ModelInventory {
+    const N: usize = 770;
+    let tensors: Vec<TensorInfo> = (0..N)
+        .map(|i| TensorInfo {
+            shard_path: PathBuf::from(format!("/fixtures/grok-1-official/ckpt-0/tensor{i:05}")),
+            shard_ordinal: i as u32,
+            in_shard_index: 0,
+            role: TensorRole::Tensor,
+            dtype: TensorDType::F32,
+            shape: TensorShape::new(vec![4]),
+            offset: 0,
+            nbytes: 16,
+            kind: TensorKind::Unknown {
+                reason: "synthetic unmapped-repack fixture".into(),
+            },
+            block_index: None,
+            block_slot: None,
+        })
+        .collect();
+    ModelInventory {
+        model_family: "grok-1".into(),
+        checkpoint_path: sample_checkpoint_path(),
+        shard_count: 42,
+        inferred: InferredHyperparams {
+            n_blocks: None,
+            ..Default::default()
+        },
+        tensors,
+        blocks: Vec::new(),
+        totals: InventoryTotals {
+            tensors: N as u64,
+            quant_tensors: 0,
+            f32_tensors: N as u64,
+            i8_tensors: 0,
+            total_nbytes: (N as u64) * 16,
+            total_elements: (N as u64) * 4,
+        },
+        schema_version: inventory::SCHEMA_VERSION,
+    }
+}
+
 pub fn sample_expert_atlas() -> ExpertAtlas {
     ExpertAtlas {
         model_family: "grok-1".into(),

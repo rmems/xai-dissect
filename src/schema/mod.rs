@@ -31,6 +31,7 @@
 
 use std::path::PathBuf;
 
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
 pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
@@ -663,16 +664,18 @@ pub struct OutlierSummary {
 /// This does not apply SAAQ; it identifies where experiments may be
 /// promising or risky.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "SaaqReadinessReportWire")]
 pub struct SaaqReadinessReport {
     pub model_family: String,
     pub checkpoint_path: PathBuf,
     pub shard_count: u32,
     pub inferred: InferredHyperparams,
-    /// Backward-compatible alias for the actionable quantization-candidate set.
-    /// Skips deserialization so the legacy key can be aliased into quantization_candidates.
-    #[serde(default, skip_deserializing)]
+    /// Backward-compatible mirror of `quantization_candidates`, kept on the
+    /// wire for pre-v2 consumers. Always equal to `quantization_candidates`;
+    /// reads go through `SaaqReadinessReportWire`, which reconciles the two.
+    #[serde(default)]
     pub candidate_targets: Vec<SaaqCandidate>,
-    #[serde(default, alias = "candidate_targets")]
+    #[serde(default)]
     pub quantization_candidates: Vec<SaaqCandidate>,
     #[serde(default)]
     pub routing_critical_tensors: Vec<SaaqCandidate>,
@@ -688,6 +691,86 @@ pub struct SaaqReadinessReport {
     pub notes: Vec<String>,
     pub manifest: CandidateTensorManifest,
     pub schema_version: u32,
+}
+
+/// Read-side shim for [`SaaqReadinessReport`].
+///
+/// v1 documents carry only `candidate_targets`; v2 documents emit both it and
+/// `quantization_candidates` with identical content. Routing both live keys
+/// into one field via `serde(alias)` makes serde bind the same field twice and
+/// fail with `duplicate field`, so the two keys are deserialized separately
+/// here and reconciled in the `From` impl.
+#[derive(Deserialize)]
+struct SaaqReadinessReportWire {
+    model_family: String,
+    checkpoint_path: PathBuf,
+    shard_count: u32,
+    inferred: InferredHyperparams,
+    #[serde(default, deserialize_with = "deserialize_optional_vec_reject_null")]
+    candidate_targets: Option<Vec<SaaqCandidate>>,
+    #[serde(default, deserialize_with = "deserialize_optional_vec_reject_null")]
+    quantization_candidates: Option<Vec<SaaqCandidate>>,
+    #[serde(default)]
+    routing_critical_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    precision_sensitive_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    deferred_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    risky_tensors: Vec<SaaqCandidate>,
+    #[serde(default)]
+    layer_readiness: Vec<SaaqLayerReadiness>,
+    #[serde(default)]
+    notes: Vec<String>,
+    manifest: CandidateTensorManifest,
+    schema_version: u32,
+}
+
+/// Missing key → `None` (via `#[serde(default)]`). Explicit JSON `null`
+/// is a hard error so a corrupted v2 document cannot silently resurrect
+/// the legacy `candidate_targets` mirror.
+fn deserialize_optional_vec_reject_null<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    match Option::<Vec<T>>::deserialize(deserializer)? {
+        None => Err(de::Error::custom(
+            "explicit null is not allowed; omit the key if the field is absent",
+        )),
+        Some(value) => Ok(Some(value)),
+    }
+}
+
+impl From<SaaqReadinessReportWire> for SaaqReadinessReport {
+    fn from(w: SaaqReadinessReportWire) -> Self {
+        // v1 wrote only `candidate_targets`; v2 writes both with `quantization_candidates`
+        // as the canonical key. If `quantization_candidates` is present (even if empty),
+        // it takes precedence over the deprecated `candidate_targets` mirror.
+        let candidates = match (w.quantization_candidates, w.candidate_targets) {
+            (Some(qc), _) => qc,
+            (None, Some(ct)) => ct,
+            (None, None) => Vec::new(),
+        };
+        Self {
+            model_family: w.model_family,
+            checkpoint_path: w.checkpoint_path,
+            shard_count: w.shard_count,
+            inferred: w.inferred,
+            candidate_targets: candidates.clone(),
+            quantization_candidates: candidates,
+            routing_critical_tensors: w.routing_critical_tensors,
+            precision_sensitive_tensors: w.precision_sensitive_tensors,
+            deferred_tensors: w.deferred_tensors,
+            risky_tensors: w.risky_tensors,
+            layer_readiness: w.layer_readiness,
+            notes: w.notes,
+            manifest: w.manifest,
+            schema_version: w.schema_version,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

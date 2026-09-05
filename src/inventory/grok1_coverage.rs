@@ -61,11 +61,34 @@ const GROK1_BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
 const GROK1_ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
 
 /// Decide whether an inventory is complete enough to require strict Grok-1
-/// coverage validation before export. This intentionally does not depend on
-/// shard count, because completeness is a tensor/layout property and repacked
-/// checkpoints can preserve all 770 tensors with a different file count.
+/// coverage validation before export.
+///
+/// Strict validation checks per-block slot occupancy. The exemption is for
+/// demonstrably non-canonical / repacked shard layouts, not for "block
+/// inference failed". `assign_block_indices` only *attempts* a map when
+/// `(shard_count - 2)` is a multiple of 12 (official ckpt-0 is 770 shards).
+/// A 770-tensor inventory on that canonical-shaped count must stay
+/// fail-closed even when mapping returns `None` (malformed or misclassified
+/// final norm). A genuine repack that breaks the arithmetic skips strict
+/// validation instead of emitting 64 "missing block" + 770 "unassigned
+/// tensor" errors — unless a caller already supplied a full 64-block map.
+/// See `docs/grok1-coverage-manifest.md`.
 pub fn should_validate_grok1_coverage(inv: &ModelInventory) -> bool {
-    inv.model_family == "grok-1" && inv.tensors.len() as u64 >= GROK1_EXPECTED_TENSORS
+    if inv.model_family != "grok-1" {
+        return false;
+    }
+    if (inv.tensors.len() as u64) < GROK1_EXPECTED_TENSORS {
+        return false;
+    }
+    inv.inferred.n_blocks == Some(GROK1_EXPECTED_BLOCKS)
+        || is_canonical_grok1_shard_layout(inv.shard_count)
+}
+
+/// Same arithmetic `assign_block_indices` uses before it even tries a layout.
+/// Official Grok-1 ckpt-0 is 770 = 1 embedding + 1 norm singleton + 64×12.
+fn is_canonical_grok1_shard_layout(shard_count: u32) -> bool {
+    let shard_count = shard_count as usize;
+    shard_count >= 3 && (shard_count - 2).is_multiple_of(GROK1_BLOCK_SLOTS as usize)
 }
 
 /// Validate a complete Grok-1 inventory and emit a deterministic coverage
@@ -630,6 +653,58 @@ mod tests {
 
         assert!(should_validate_grok1_coverage(&inv));
         validate_grok1_complete_manifest(&inv).expect("repacked manifest remains complete");
+    }
+
+    /// A repacked checkpoint that `assign_block_indices` could not map is the
+    /// state `build_inventory` actually produces when `(shard_count - 2) % 12
+    /// != 0`: every `block_index` is `None` and `inferred.n_blocks` is `None`.
+    ///
+    /// The test above only rewrites the `shard_count` *field* on a fixture whose
+    /// block indices are hand-populated, which `build_inventory` can never
+    /// emit — so it never covered this path. Strict validation must skip here
+    /// rather than report one missing block per block plus one unassigned
+    /// tensor per tensor.
+    #[test]
+    fn skips_strict_coverage_for_unmapped_repacked_grok1_inventory() {
+        let mut inv = complete_grok1_inventory();
+        inv.shard_count = 42;
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        assert_eq!(inv.tensors.len() as u64, GROK1_EXPECTED_TENSORS);
+        assert!(
+            !should_validate_grok1_coverage(&inv),
+            "an inventory with no block mapping must not be held to strict coverage"
+        );
+    }
+
+    /// Official 770-shard input that `assign_block_indices` could not map
+    /// (malformed / misclassified final norm) still has a canonical shard
+    /// count. That is not a repack: keep the old fail-closed path.
+    #[test]
+    fn fails_closed_for_canonical_770_tensor_inventory_with_failed_block_inference() {
+        let mut inv = complete_grok1_inventory();
+        assert_eq!(inv.shard_count, 770);
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        assert_eq!(inv.tensors.len() as u64, GROK1_EXPECTED_TENSORS);
+        assert!(
+            should_validate_grok1_coverage(&inv),
+            "canonical 770-shard input that failed mapping must stay fail-closed"
+        );
+        let err = validate_grok1_complete_manifest(&inv).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("inferred n_blocks None != expected 64"),
+            "strict validation must reject on metadata before block walk, got: {msg}"
+        );
     }
 
     #[test]
