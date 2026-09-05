@@ -44,9 +44,11 @@ format is:
 A fresh NumPy dtype constructor is pushed via `STACK_GLOBAL`. After that
 constructor is memoized, later ndarray records may look it up with
 `BINGET` or `LONG_BINGET` instead of pushing another `STACK_GLOBAL`.
-`parse_shape_backward` in `src/parser/mod.rs` accepts both forms. Either
-way the constructor (or memo lookup) is followed by the dtype tag, shape
-tuple, and a byte payload. The opcodes `xai-dissect` actually declares are:
+`parse_shape_backward` in `src/parser/mod.rs` accepts both forms. In the
+byte stream the order is shape tuple → constructor (or memo lookup) →
+dtype tag → postamble → payload: the parser unwinds backward from the
+dtype-tag anchor through the constructor, then decodes the tuple that
+ends just before it. The opcodes `xai-dissect` actually declares are:
 
 | Opcode | Value | Meaning |
 |--------|-------|---------|

@@ -31,6 +31,7 @@
 
 use std::path::PathBuf;
 
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 
 pub const GROK1_BASELINE_PROFILE: &str = "grok1-map-v1-clean";
@@ -705,9 +706,9 @@ struct SaaqReadinessReportWire {
     checkpoint_path: PathBuf,
     shard_count: u32,
     inferred: InferredHyperparams,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_vec_reject_null")]
     candidate_targets: Option<Vec<SaaqCandidate>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_vec_reject_null")]
     quantization_candidates: Option<Vec<SaaqCandidate>>,
     #[serde(default)]
     routing_critical_tensors: Vec<SaaqCandidate>,
@@ -723,6 +724,24 @@ struct SaaqReadinessReportWire {
     notes: Vec<String>,
     manifest: CandidateTensorManifest,
     schema_version: u32,
+}
+
+/// Missing key → `None` (via `#[serde(default)]`). Explicit JSON `null`
+/// is a hard error so a corrupted v2 document cannot silently resurrect
+/// the legacy `candidate_targets` mirror.
+fn deserialize_optional_vec_reject_null<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    match Option::<Vec<T>>::deserialize(deserializer)? {
+        None => Err(de::Error::custom(
+            "explicit null is not allowed; omit the key if the field is absent",
+        )),
+        Some(value) => Ok(Some(value)),
+    }
 }
 
 impl From<SaaqReadinessReportWire> for SaaqReadinessReport {

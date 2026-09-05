@@ -142,8 +142,9 @@ Current schema version: **2**.
   `quantization_candidates`. Both keys are emitted with identical content so
   pre-v2 readers keep working; `candidate_targets` is a mirror, not a second
   set. Readers should prefer `quantization_candidates` and fall back to
-  `candidate_targets` only when it is absent. `SaaqReadinessReport` accepts
-  either shape on the way in.
+  `candidate_targets` only when it is absent (missing key). Explicit JSON
+  `null` on either key is rejected. `SaaqReadinessReport` accepts either
+  shape on the way in.
 - `reports/<slug>/saaq-readiness.md`
   Contract: `report::render_saaq_readiness_markdown`
 - `exports/<slug>/saaq-readiness-findings.json`

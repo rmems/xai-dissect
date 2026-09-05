@@ -8,7 +8,7 @@ use support::{
     assert_snapshot_sections, bundle_sections, sample_checkpoint_slug, sample_conversion_manifest,
     sample_expert_atlas, sample_inventory, sample_pilot_selection_plan, sample_quant_plan,
     sample_route_preservation_report, sample_routing_report, sample_saaq_readiness,
-    sample_stats_profile, unique_temp_root,
+    sample_stats_profile, unique_temp_root, unmapped_repacked_grok1_inventory,
 };
 
 #[test]
@@ -173,6 +173,13 @@ fn saaq_readiness_prefers_explicitly_empty_canonical_candidates() {
     let mut raw: serde_json::Value =
         serde_json::to_value(&report).expect("serialize saaq readiness");
     let obj = raw.as_object_mut().expect("report is a json object");
+    assert!(
+        !obj.get("candidate_targets")
+            .and_then(|value| value.as_array())
+            .expect("legacy mirror")
+            .is_empty(),
+        "fixture candidate_targets must be non-empty so this test actually guards precedence"
+    );
     obj.insert(
         "quantization_candidates".into(),
         serde_json::Value::Array(Vec::new()),
@@ -191,6 +198,28 @@ fn saaq_readiness_prefers_explicitly_empty_canonical_candidates() {
     );
 }
 
+/// Explicit JSON `null` on either candidate key is rejected. Absence is a
+/// missing key, not null — otherwise a corrupted v2 document could fall
+/// back to the legacy mirror.
+#[test]
+fn saaq_readiness_rejects_explicit_null_candidate_keys() {
+    let report = sample_saaq_readiness();
+    for key in ["quantization_candidates", "candidate_targets"] {
+        let mut raw: serde_json::Value =
+            serde_json::to_value(&report).expect("serialize saaq readiness");
+        raw.as_object_mut()
+            .expect("report is a json object")
+            .insert(key.into(), serde_json::Value::Null);
+        let err = serde_json::from_value::<xai_dissect::schema::SaaqReadinessReport>(raw)
+            .expect_err("explicit null must fail closed");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("invalid type: null") || msg.contains("explicit null"),
+            "{key} null must be a hard error, got: {msg}"
+        );
+    }
+}
+
 /// Rewriting an inventory bundle for an unmapped repack must remove any stale
 /// `grok1-coverage.json` left behind from a previous canonical run.
 #[test]
@@ -198,7 +227,7 @@ fn inventory_bundle_removes_stale_coverage_manifest_on_unmapped_repack() {
     let root = unique_temp_root("inventory-stale-coverage-cleanup");
     let _ = fs::remove_dir_all(&root);
 
-    let inv = sample_inventory();
+    let inv = unmapped_repacked_grok1_inventory();
     let slug = sample_checkpoint_slug();
     let coverage_dir = root.join("manifests").join(slug);
     fs::create_dir_all(&coverage_dir).expect("create manifests dir");
@@ -206,11 +235,40 @@ fn inventory_bundle_removes_stale_coverage_manifest_on_unmapped_repack() {
     fs::write(&coverage_path, b"{\"validation\":\"stale\"}").expect("write dummy stale manifest");
     assert!(coverage_path.exists(), "stale manifest exists prior to run");
 
-    let _ = exports::write_inventory_bundle(&inv, &root, None)
+    let bundle = exports::write_inventory_bundle(&inv, &root, None)
         .expect("write inventory bundle skipping coverage");
     assert!(
         !coverage_path.exists(),
         "stale grok1-coverage.json must be removed when coverage is skipped"
+    );
+    assert!(
+        bundle
+            .removed_paths
+            .iter()
+            .any(|path| path == &coverage_path),
+        "OutputBundle must record the stale coverage removal"
+    );
+    assert!(
+        bundle
+            .written_paths
+            .iter()
+            .any(|path| path.file_name().and_then(|name| name.to_str()) == Some("inventory.json")),
+        "skipped-coverage rewrite must still publish inventory artifacts"
+    );
+    assert!(
+        root.join("exports")
+            .join(slug)
+            .join("inventory.json")
+            .is_file(),
+        "exports/<slug>/inventory.json must exist after stale coverage delete"
+    );
+    assert!(
+        !bundle
+            .written_paths
+            .iter()
+            .any(|path| path.file_name().and_then(|name| name.to_str())
+                == Some("grok1-coverage.json")),
+        "unmapped repack must not emit a coverage manifest"
     );
 
     let _ = fs::remove_dir_all(&root);

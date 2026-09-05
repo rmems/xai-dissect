@@ -54,6 +54,9 @@ pub struct OutputLayout {
 pub struct OutputBundle {
     pub checkpoint_slug: String,
     pub written_paths: Vec<PathBuf>,
+    /// Files this write deleted (in-process only; not a GOZ wire field).
+    /// Today this is a stale `grok1-coverage.json` removed before republish.
+    pub removed_paths: Vec<PathBuf>,
 }
 
 pub fn prepare_output_layout(
@@ -140,14 +143,15 @@ pub fn write_inventory_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     // Drop a leftover pass-manifest before rewriting the rest of the bundle.
     // Otherwise a skipped-coverage rewrite can publish new inventory artifacts
     // beside stale validation, or report success when deletion failed.
     let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
-    if coverage.is_none() {
-        remove_stale_coverage_manifest(&coverage_path)?;
+    if coverage.is_none() && remove_stale_coverage_manifest(&coverage_path)? {
+        bundle.removed_paths.push(coverage_path.clone());
     }
 
     let json_path = layout.exports_dir.join("inventory.json");
@@ -178,10 +182,13 @@ pub fn write_inventory_bundle(
     Ok(bundle)
 }
 
-fn remove_stale_coverage_manifest(coverage_path: &Path) -> Result<()> {
+/// Delete a leftover `grok1-coverage.json`. Returns `true` when a file was
+/// actually removed so [`OutputBundle::removed_paths`] can record it.
+/// `NotFound` is success with `false`. Other I/O errors abort the write.
+fn remove_stale_coverage_manifest(coverage_path: &Path) -> Result<bool> {
     match fs::remove_file(coverage_path) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Ok(()) => Ok(true),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(err) => Err(err)
             .with_context(|| format!("remove stale coverage manifest {}", coverage_path.display())),
     }
@@ -196,6 +203,7 @@ pub fn write_expert_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.exports_dir.join("experts.json");
@@ -223,6 +231,7 @@ pub fn write_routing_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.exports_dir.join("routing-report.json");
@@ -255,6 +264,7 @@ pub fn write_stats_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.exports_dir.join("stats.json");
@@ -282,6 +292,7 @@ pub fn write_saaq_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.exports_dir.join("saaq-readiness.json");
@@ -314,6 +325,7 @@ pub fn write_quant_plan_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let conversion_path = layout.manifests_dir.join("conversion-manifest.json");
@@ -340,6 +352,7 @@ pub fn write_pilot_plan_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.manifests_dir.join("pilot-selection-plan.json");
@@ -362,6 +375,7 @@ pub fn write_route_preservation_bundle(
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
+        removed_paths: Vec::new(),
     };
 
     let json_path = layout.manifests_dir.join("route-preservation-report.json");
@@ -914,6 +928,43 @@ mod tests {
                 .join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
                 .exists()
         );
+        assert!(
+            bundle.removed_paths.is_empty(),
+            "no stale coverage existed to record"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_records_stale_coverage_removal_on_unmapped_repack() {
+        let root = unique_test_root("stale_coverage_recorded");
+        let mut inv = complete_grok1_inventory();
+        inv.shard_count = 42;
+        for tensor in &mut inv.tensors {
+            tensor.block_index = None;
+            tensor.block_slot = None;
+        }
+        inv.inferred.n_blocks = None;
+
+        let slug = "grok-1-official__ckpt-0";
+        let coverage_dir = root.join("manifests").join(slug);
+        fs::create_dir_all(&coverage_dir).expect("create manifests dir");
+        let coverage_path = coverage_dir.join("grok1-coverage.json");
+        fs::write(&coverage_path, b"{\"validation\":\"pass\"}").expect("write stale pass manifest");
+
+        let bundle = write_inventory_bundle(&inv, &root, None)
+            .expect("unmapped repacked inventory must still export");
+
+        assert_eq!(bundle.removed_paths, vec![coverage_path.clone()]);
+        assert!(!coverage_path.exists());
+        assert!(
+            bundle
+                .written_paths
+                .iter()
+                .any(|path| path.file_name().and_then(|name| name.to_str())
+                    == Some("inventory.json")),
+            "bundle must still publish inventory artifacts after stale delete"
+        );
         let _ = fs::remove_dir_all(root);
     }
 
@@ -930,8 +981,8 @@ mod tests {
         let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
         let msg = format!("{err:#}");
         assert!(
-            msg.contains("n_blocks") || msg.contains("missing block"),
-            "canonical 770-shard mapping failure must fail export, got: {msg}"
+            msg.contains("inferred n_blocks None != expected 64"),
+            "canonical 770-shard mapping failure must fail export on metadata, got: {msg}"
         );
         assert!(!root.join("exports").exists());
         assert!(

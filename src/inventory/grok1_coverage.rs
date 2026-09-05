@@ -702,8 +702,8 @@ mod tests {
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
         let msg = format!("{err:#}");
         assert!(
-            msg.contains("inferred n_blocks") || msg.contains("missing block"),
-            "strict validation must reject the unmapped canonical inventory, got: {msg}"
+            msg.contains("inferred n_blocks None != expected 64"),
+            "strict validation must reject on metadata before block walk, got: {msg}"
         );
     }
 

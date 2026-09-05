@@ -180,8 +180,9 @@ coverage manifest from the repacked layout and treat the new checksum
 as the baseline for that layout.
 
 Concretely: block indices are assigned only for the canonical shard layout
-(`(shard_count - 2) % 12 == 0` with a norm singleton on each block boundary;
-official ckpt-0 is 770 shards). `should_validate_grok1_coverage` exempts only
+(`(shard_count - 2) % 12 == 0` with a single norm singleton (tail, or
+immediately after the embedding); official ckpt-0 is 770 shards).
+`should_validate_grok1_coverage` exempts only
 a layout that *breaks that arithmetic* (a genuine repack) and has no 64-block
 map. A 770-tensor inventory on a canonical-shaped shard count that failed
 mapping — for example a malformed or misclassified final norm, so

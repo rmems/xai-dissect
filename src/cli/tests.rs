@@ -180,6 +180,7 @@ fn write_output_tree_writes_when_root_set() {
             Ok(OutputBundle {
                 checkpoint_slug: slug.unwrap_or("inferred").to_string(),
                 written_paths: vec![out_root.join("marker")],
+                removed_paths: Vec::new(),
             })
         },
     )

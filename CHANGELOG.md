@@ -30,7 +30,9 @@ All notable changes to `xai-dissect` are documented here.
   single field, so every emitted document failed to deserialize with
   `duplicate field quantization_candidates`. Reads now go through a wire shim
   that reconciles the two; round-trip and legacy-v1 regression tests added
-  ([#30](https://github.com/rmems/xai-dissect/issues/30)).
+  ([#30](https://github.com/rmems/xai-dissect/issues/30)). Explicit JSON
+  `null` on either candidate key is a hard error (omit the key for absence)
+  so a corrupted v2 document cannot silently resurrect the legacy mirror.
 - Strict Grok-1 coverage validation no longer fires on inventories with no
   block mapping **and** a non-canonical shard count. The skip is for genuine
   repacks (`(shard_count - 2)` is not a multiple of 12) that also lack a

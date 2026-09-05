@@ -410,6 +410,9 @@ fn write_output_tree(
             root.display(),
             bundle.checkpoint_slug
         );
+        for path in &bundle.removed_paths {
+            eprintln!("removed {}", path.display());
+        }
     }
     Ok(())
 }
