@@ -553,6 +553,143 @@ mod tests {
         }
     }
 
+    fn command_fixtures() -> (
+        CheckpointScanArgs,
+        ModelFamilyArg,
+        PlanningFamilyArg,
+        SampleValuesArg,
+        OutputTreeArgs,
+    ) {
+        (
+            dummy_scan(),
+            ModelFamilyArg {
+                family: "grok-1".into(),
+            },
+            PlanningFamilyArg {
+                family: "grok-1".into(),
+            },
+            SampleValuesArg { sample_values: 64 },
+            dummy_tree(),
+        )
+    }
+
+    fn inspect_commands(
+        scan: &CheckpointScanArgs,
+        family: &ModelFamilyArg,
+        tree: &OutputTreeArgs,
+    ) -> [Command; 4] {
+        [
+            Command::Dissect {
+                path: PathBuf::from("/tmp/ckpt"),
+                limit: Some(1),
+                prefix: "tensor".into(),
+            },
+            Command::Inventory {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::Experts {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::RoutingReport {
+                scan: scan.clone(),
+                family: family.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+        ]
+    }
+
+    fn profile_commands(
+        scan: &CheckpointScanArgs,
+        family: &ModelFamilyArg,
+        sample: SampleValuesArg,
+        tree: &OutputTreeArgs,
+    ) -> [Command; 2] {
+        [
+            Command::Stats {
+                scan: scan.clone(),
+                family: family.clone(),
+                sample: sample.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::SaaqReadiness {
+                scan: scan.clone(),
+                family: family.clone(),
+                sample,
+                json: None,
+                md: None,
+                manifest: None,
+                output_tree: tree.clone(),
+            },
+        ]
+    }
+
+    fn planning_commands(
+        scan: CheckpointScanArgs,
+        family: ModelFamilyArg,
+        planning: PlanningFamilyArg,
+        tree: OutputTreeArgs,
+    ) -> [Command; 3] {
+        [
+            Command::PilotPlan {
+                scan: scan.clone(),
+                family: planning.clone(),
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::RoutePreservation {
+                scan: scan.clone(),
+                family: planning,
+                json: None,
+                md: None,
+                output_tree: tree.clone(),
+            },
+            Command::QuantPlan {
+                scan,
+                family,
+                sample_values: 64,
+                json: None,
+                md: None,
+                conversion_manifest: None,
+                conversion_manifest_md: None,
+                output_tree: tree,
+            },
+        ]
+    }
+
+    fn assert_every_command_name_and_prefix(variants: &[Command]) {
+        let names: Vec<_> = variants.iter().map(Command::name).collect();
+        assert_eq!(
+            names,
+            [
+                "dissect",
+                "inventory",
+                "experts",
+                "routing-report",
+                "stats",
+                "saaq-readiness",
+                "pilot-plan",
+                "route-preservation",
+                "quant-plan",
+            ]
+        );
+        for command in variants {
+            assert_eq!(command.fields().prefix.as_deref(), Some("tensor"));
+        }
+    }
+
     fn decode_hex_fixture() -> Vec<u8> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/parser/single_f32_tensor.pkl.hex");
@@ -591,123 +728,36 @@ mod tests {
 
     #[test]
     fn command_name_and_fields_cover_every_variant() {
-        let scan = dummy_scan();
-        let family = ModelFamilyArg {
-            family: "grok-1".into(),
-        };
-        let planning = PlanningFamilyArg {
-            family: "grok-1".into(),
-        };
-        let sample = SampleValuesArg { sample_values: 64 };
-        let tree = dummy_tree();
-        let variants = [
-            Command::Dissect {
-                path: PathBuf::from("/tmp/ckpt"),
-                limit: Some(1),
-                prefix: "tensor".into(),
-            },
-            Command::Inventory {
-                scan: scan.clone(),
-                family: family.clone(),
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::Experts {
-                scan: scan.clone(),
-                family: family.clone(),
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::RoutingReport {
-                scan: scan.clone(),
-                family: family.clone(),
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::Stats {
-                scan: scan.clone(),
-                family: family.clone(),
-                sample: sample.clone(),
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::SaaqReadiness {
-                scan: scan.clone(),
-                family: family.clone(),
-                sample,
-                json: None,
-                md: None,
-                manifest: None,
-                output_tree: tree.clone(),
-            },
-            Command::PilotPlan {
-                scan: scan.clone(),
-                family: planning.clone(),
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::RoutePreservation {
-                scan: scan.clone(),
-                family: planning,
-                json: None,
-                md: None,
-                output_tree: tree.clone(),
-            },
-            Command::QuantPlan {
-                scan,
-                family,
-                sample_values: 64,
-                json: None,
-                md: None,
-                conversion_manifest: None,
-                conversion_manifest_md: None,
-                output_tree: tree,
-            },
-        ];
-        let names: Vec<_> = variants.iter().map(Command::name).collect();
-        assert_eq!(
-            names,
-            [
-                "dissect",
-                "inventory",
-                "experts",
-                "routing-report",
-                "stats",
-                "saaq-readiness",
-                "pilot-plan",
-                "route-preservation",
-                "quant-plan",
-            ]
-        );
-        for command in &variants {
-            let fields = command.fields();
-            assert_eq!(fields.prefix.as_deref(), Some("tensor"));
-        }
+        let (scan, family, planning, sample, tree) = command_fixtures();
+        let inspect = inspect_commands(&scan, &family, &tree);
+        let profile = profile_commands(&scan, &family, sample, &tree);
+        let planning = planning_commands(scan, family, planning, tree);
+        let mut variants = Vec::with_capacity(9);
+        variants.extend(inspect);
+        variants.extend(profile);
+        variants.extend(planning);
+        assert_every_command_name_and_prefix(&variants);
+    }
+
+    fn write_dissect_hex_fixture() -> tempfile::TempDir {
+        let root = tempfile::Builder::new()
+            .prefix("xai-dissect-dissect-")
+            .tempdir()
+            .expect("create unique temp dir");
+        fs::write(root.path().join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
+        fs::write(root.path().join("tensor0001.pkl"), b"not-a-pickle")
+            .expect("write garbage shard");
+        root
     }
 
     #[test]
     fn dissect_hex_fixture_prints_tensor_table() {
-        let root = std::env::temp_dir().join(format!(
-            "xai-dissect-dissect-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).expect("create checkpoint dir");
-        fs::write(root.join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
-        fs::write(root.join("tensor0001.pkl"), b"not-a-pickle").expect("write garbage shard");
-        run_dissect(&root, Some(1), "tensor").expect("dissect hex fixture");
-        run_dissect(&root, None, "tensor").expect("dissect includes unreadable shard warn");
-        let empty = run_dissect(&root, Some(0), "missing").unwrap_err();
+        let root = write_dissect_hex_fixture();
+        run_dissect(root.path(), Some(1), "tensor").expect("dissect hex fixture");
+        run_dissect(root.path(), None, "tensor").expect("dissect includes unreadable shard warn");
+        let empty = run_dissect(root.path(), Some(0), "missing").unwrap_err();
         assert!(format!("{empty:#}").contains("no shards found"));
-        let not_dir = run_dissect(&root.join("tensor0000.pkl"), None, "tensor").unwrap_err();
+        let not_dir = run_dissect(&root.path().join("tensor0000.pkl"), None, "tensor").unwrap_err();
         assert!(format!("{not_dir:#}").contains("is not a directory"));
-        let _ = fs::remove_dir_all(root);
     }
 }

@@ -166,11 +166,12 @@ mod tests {
     use xai_dissect::schema::{
         CandidateTensorManifest, ConversionManifest, ExpertAtlas, ExpertIssue, ExpertIssueCategory,
         ExpertIssueSeverity, ExpertNamingCheck, Grok1CoverageCounts, InferredHyperparams,
-        InventoryTotals, MetricStatus, ModelInventory, PilotQuantizationMode, PilotSelectionPlan,
-        QuantPlan, RouteMetricStatus, RoutePreservationReport, RoutingIssue, RoutingIssueCategory,
-        RoutingIssueSeverity, RoutingReport, SaaqCandidate, SaaqDisposition, SaaqReadinessReport,
-        SaaqRegionClass, StatsProfileReport, StatsSamplingConfig, TensorDType, TensorInfo,
-        TensorKind, TensorRole, TensorShape, TensorStats,
+        InventoryTotals, MetricStatus, ModelInventory, NormSummary, OutlierSummary,
+        PilotQuantizationMode, PilotSelectionPlan, QuantPlan, RouteMetricStatus,
+        RoutePreservationReport, RoutingIssue, RoutingIssueCategory, RoutingIssueSeverity,
+        RoutingReport, SaaqCandidate, SaaqDisposition, SaaqReadinessReport, SaaqRegionClass,
+        StatsProfileReport, StatsSamplingConfig, TensorDType, TensorInfo, TensorKind, TensorRole,
+        TensorShape, TensorStats, VarianceSummary,
     };
 
     use super::{
@@ -266,7 +267,66 @@ mod tests {
         }
     }
 
+    fn empty_tensor_stats() -> TensorStats {
+        TensorStats {
+            shard_ordinal: 0,
+            in_shard_index: 0,
+            block_index: None,
+            block_slot: None,
+            structural_name: "embedding.slot_00.token_embedding".into(),
+            role: TensorRole::Tensor,
+            dtype: TensorDType::F32,
+            shape: TensorShape::new(vec![2, 4]),
+            kind_label: "token_embedding".into(),
+            sampled: true,
+            total_values: 8,
+            sample_values: 8,
+            total_nbytes: 32,
+            mean: 0.0,
+            variance: 0.25,
+            stddev: 0.5,
+            min: -1.0,
+            max: 1.0,
+            max_abs: 1.0,
+            l1_norm: 1.0,
+            l2_norm: 1.0,
+            rms: 0.5,
+            zero_fraction: 0.0,
+            near_zero_fraction: 0.0,
+            positive_fraction: 0.5,
+            negative_fraction: 0.5,
+            outlier_fraction: 0.0,
+            peak_to_rms: 2.0,
+            distribution_label: "dense_balanced".into(),
+        }
+    }
+
+    fn empty_stats_summaries() -> (NormSummary, VarianceSummary, OutlierSummary) {
+        (
+            NormSummary {
+                mean_rms: 0.5,
+                max_rms: None,
+                max_l2: None,
+                top_rms: Vec::new(),
+                top_l2: Vec::new(),
+            },
+            VarianceSummary {
+                mean_variance: 0.25,
+                max_variance: None,
+                min_variance: None,
+                top_variance: Vec::new(),
+                lowest_variance: Vec::new(),
+            },
+            OutlierSummary {
+                mean_outlier_fraction: 0.0,
+                most_outlier_heavy: Vec::new(),
+                highest_peak_to_rms: Vec::new(),
+            },
+        )
+    }
+
     fn empty_stats() -> StatsProfileReport {
+        let (norm_summary, variance_summary, outlier_summary) = empty_stats_summaries();
         StatsProfileReport {
             model_family: "grok-1".into(),
             checkpoint_path: ckpt(),
@@ -277,57 +337,11 @@ mod tests {
                 f32_near_zero_abs: 1e-3,
                 i8_near_zero_abs: 1,
             },
-            tensors: vec![TensorStats {
-                shard_ordinal: 0,
-                in_shard_index: 0,
-                block_index: None,
-                block_slot: None,
-                structural_name: "embedding.slot_00.token_embedding".into(),
-                role: TensorRole::Tensor,
-                dtype: TensorDType::F32,
-                shape: TensorShape::new(vec![2, 4]),
-                kind_label: "token_embedding".into(),
-                sampled: true,
-                total_values: 8,
-                sample_values: 8,
-                total_nbytes: 32,
-                mean: 0.0,
-                variance: 0.25,
-                stddev: 0.5,
-                min: -1.0,
-                max: 1.0,
-                max_abs: 1.0,
-                l1_norm: 1.0,
-                l2_norm: 1.0,
-                rms: 0.5,
-                zero_fraction: 0.0,
-                near_zero_fraction: 0.0,
-                positive_fraction: 0.5,
-                negative_fraction: 0.5,
-                outlier_fraction: 0.0,
-                peak_to_rms: 2.0,
-                distribution_label: "dense_balanced".into(),
-            }],
+            tensors: vec![empty_tensor_stats()],
             layers: Vec::new(),
-            norm_summary: xai_dissect::schema::NormSummary {
-                mean_rms: 0.5,
-                max_rms: None,
-                max_l2: None,
-                top_rms: Vec::new(),
-                top_l2: Vec::new(),
-            },
-            variance_summary: xai_dissect::schema::VarianceSummary {
-                mean_variance: 0.25,
-                max_variance: None,
-                min_variance: None,
-                top_variance: Vec::new(),
-                lowest_variance: Vec::new(),
-            },
-            outlier_summary: xai_dissect::schema::OutlierSummary {
-                mean_outlier_fraction: 0.0,
-                most_outlier_heavy: Vec::new(),
-                highest_peak_to_rms: Vec::new(),
-            },
+            norm_summary,
+            variance_summary,
+            outlier_summary,
             schema_version: 1,
         }
     }

@@ -2121,6 +2121,7 @@ dependencies = [
  "sentry",
  "serde",
  "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]

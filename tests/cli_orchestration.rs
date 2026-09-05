@@ -1,7 +1,7 @@
 mod support;
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use support::unique_temp_root;
@@ -27,7 +27,7 @@ fn decode_hex_fixture() -> Vec<u8> {
     out
 }
 
-fn write_hex_checkpoint(prefix: &str) -> std::path::PathBuf {
+fn write_hex_checkpoint(prefix: &str) -> PathBuf {
     let root = unique_temp_root(prefix);
     fs::create_dir_all(&root).expect("create checkpoint dir");
     fs::write(root.join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
@@ -41,128 +41,127 @@ fn run_cli(args: &[&str]) -> std::process::Output {
         .expect("run xai-dissect")
 }
 
-#[test]
-fn analysis_commands_run_against_hex_fixture() {
-    let ckpt = write_hex_checkpoint("cli-orch-ckpt");
-    let out = unique_temp_root("cli-orch-out");
+fn assert_cli_ok(label: &str, args: &[&str]) {
+    let output = run_cli(args);
+    assert!(
+        output.status.success(),
+        "{label} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn assert_cli_fails(label: &str, args: &[&str]) {
+    let output = run_cli(args);
+    assert!(
+        !output.status.success(),
+        "{label} should reject the incomplete hex fixture"
+    );
+}
+
+fn hex_cli_paths(prefix: &str) -> (PathBuf, PathBuf) {
+    let ckpt = write_hex_checkpoint(prefix);
+    let out = unique_temp_root(&format!("{prefix}-out"));
     fs::create_dir_all(&out).expect("create output dir");
-    let ckpt_s = ckpt.to_str().expect("utf8 checkpoint");
+    (ckpt, out)
+}
+
+fn utf8(path: &Path) -> &str {
+    path.to_str().expect("utf8 path")
+}
+
+fn assert_json_md(label: &str, ckpt: &str, json: &Path, md: &Path) {
+    assert_cli_ok(
+        label,
+        &[label, ckpt, "--json", utf8(json), "--md", utf8(md)],
+    );
+}
+
+fn run_inventory_tree(ckpt: &str, out: &Path) {
     let json = out.join("inventory.json");
     let md = out.join("inventory.md");
     let tree = out.join("tree");
-    let experts_json = out.join("experts.json");
-    let experts_md = out.join("experts.md");
-    let stats_json = out.join("stats.json");
-    let stats_md = out.join("stats.md");
-
-    let inventory = run_cli(&[
+    assert_cli_ok(
         "inventory",
-        ckpt_s,
-        "--json",
-        json.to_str().expect("utf8 json"),
-        "--md",
-        md.to_str().expect("utf8 md"),
-        "--output-root",
-        tree.to_str().expect("utf8 tree"),
-        "--checkpoint-slug",
-        "hex-fixture",
-    ]);
-    assert!(
-        inventory.status.success(),
-        "inventory failed: {}",
-        String::from_utf8_lossy(&inventory.stderr)
+        &[
+            "inventory",
+            ckpt,
+            "--json",
+            utf8(&json),
+            "--md",
+            utf8(&md),
+            "--output-root",
+            utf8(&tree),
+            "--checkpoint-slug",
+            "hex-fixture",
+        ],
     );
     assert!(json.is_file());
+}
 
-    let experts = run_cli(&[
+#[test]
+fn inventory_experts_and_stats_succeed_against_hex_fixture() {
+    let (ckpt, out) = hex_cli_paths("cli-orch-inv");
+    let ckpt_s = utf8(&ckpt);
+    run_inventory_tree(ckpt_s, &out);
+    assert_json_md(
         "experts",
         ckpt_s,
-        "--json",
-        experts_json.to_str().expect("utf8 experts json"),
-        "--md",
-        experts_md.to_str().expect("utf8 experts md"),
-    ]);
-    assert!(
-        experts.status.success(),
-        "experts failed: {}",
-        String::from_utf8_lossy(&experts.stderr)
+        &out.join("experts.json"),
+        &out.join("experts.md"),
     );
-
-    let stats = run_cli(&[
+    assert_cli_ok(
         "stats",
-        ckpt_s,
-        "--sample-values",
-        "64",
-        "--json",
-        stats_json.to_str().expect("utf8 stats json"),
-        "--md",
-        stats_md.to_str().expect("utf8 stats md"),
-    ]);
-    assert!(
-        stats.status.success(),
-        "stats failed: {}",
-        String::from_utf8_lossy(&stats.stderr)
+        &[
+            "stats",
+            ckpt_s,
+            "--sample-values",
+            "64",
+            "--json",
+            utf8(&out.join("stats.json")),
+            "--md",
+            utf8(&out.join("stats.md")),
+        ],
     );
-
-    let routing = run_cli(&[
-        "routing-report",
-        ckpt_s,
-        "--json",
-        out.join("routing.json")
-            .to_str()
-            .expect("utf8 routing json"),
-        "--md",
-        out.join("routing.md").to_str().expect("utf8 routing md"),
-    ]);
-    assert!(
-        routing.status.success(),
-        "routing-report failed: {}",
-        String::from_utf8_lossy(&routing.stderr)
-    );
-
-    let saaq = run_cli(&[
-        "saaq-readiness",
-        ckpt_s,
-        "--sample-values",
-        "64",
-        "--json",
-        out.join("saaq.json").to_str().expect("utf8 saaq json"),
-        "--md",
-        out.join("saaq.md").to_str().expect("utf8 saaq md"),
-        "--manifest",
-        out.join("candidates.json")
-            .to_str()
-            .expect("utf8 candidates"),
-    ]);
-    assert!(
-        saaq.status.success(),
-        "saaq-readiness failed: {}",
-        String::from_utf8_lossy(&saaq.stderr)
-    );
-
-    let dissect = run_cli(&["dissect", ckpt_s]);
-    assert!(
-        dissect.status.success(),
-        "dissect failed: {}",
-        String::from_utf8_lossy(&dissect.stderr)
-    );
-
-    let pilot = run_cli(&["pilot-plan", ckpt_s]);
-    assert!(
-        !pilot.status.success(),
-        "pilot-plan should reject the incomplete hex fixture"
-    );
-    let route = run_cli(&["route-preservation", ckpt_s]);
-    assert!(
-        !route.status.success(),
-        "route-preservation should reject the incomplete hex fixture"
-    );
-    let quant = run_cli(&["quant-plan", ckpt_s]);
-    assert!(
-        !quant.status.success(),
-        "quant-plan should reject the incomplete hex fixture"
-    );
-
     let _ = fs::remove_dir_all(ckpt);
     let _ = fs::remove_dir_all(out);
+}
+
+#[test]
+fn routing_saaq_and_dissect_succeed_against_hex_fixture() {
+    let (ckpt, out) = hex_cli_paths("cli-orch-route");
+    let ckpt_s = utf8(&ckpt);
+    assert_json_md(
+        "routing-report",
+        ckpt_s,
+        &out.join("routing.json"),
+        &out.join("routing.md"),
+    );
+    assert_cli_ok(
+        "saaq-readiness",
+        &[
+            "saaq-readiness",
+            ckpt_s,
+            "--sample-values",
+            "64",
+            "--json",
+            utf8(&out.join("saaq.json")),
+            "--md",
+            utf8(&out.join("saaq.md")),
+            "--manifest",
+            utf8(&out.join("candidates.json")),
+        ],
+    );
+    assert_cli_ok("dissect", &["dissect", ckpt_s]);
+    let _ = fs::remove_dir_all(ckpt);
+    let _ = fs::remove_dir_all(out);
+}
+
+#[test]
+fn planning_commands_fail_closed_against_hex_fixture() {
+    let ckpt = write_hex_checkpoint("cli-orch-plan");
+    let ckpt_s = utf8(&ckpt);
+    assert_cli_fails("pilot-plan", &["pilot-plan", ckpt_s]);
+    assert_cli_fails("route-preservation", &["route-preservation", ckpt_s]);
+    assert_cli_fails("quant-plan", &["quant-plan", ckpt_s]);
+    let _ = fs::remove_dir_all(ckpt);
 }
