@@ -4,35 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use support::unique_temp_root;
-
-fn decode_hex_fixture() -> Vec<u8> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/parser/single_f32_tensor.pkl.hex");
-    let hex = fs::read_to_string(&path)
-        .unwrap_or_else(|err| panic!("read fixture {}: {err}", path.display()));
-    let hex = hex
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>();
-    assert_eq!(hex.len() % 2, 0, "fixture must have an even hex length");
-
-    let mut out = Vec::with_capacity(hex.len() / 2);
-    let mut i = 0;
-    while i < hex.len() {
-        let byte = u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte");
-        out.push(byte);
-        i += 2;
-    }
-    out
-}
-
-fn write_hex_checkpoint(prefix: &str) -> PathBuf {
-    let root = unique_temp_root(prefix);
-    fs::create_dir_all(&root).expect("create checkpoint dir");
-    fs::write(root.join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
-    root
-}
+use support::{unique_temp_root, write_hex_checkpoint};
 
 fn run_cli(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_xai-dissect"))
