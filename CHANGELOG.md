@@ -2,7 +2,11 @@
 
 All notable changes to `xai-dissect` are documented here.
 
-## Unreleased - 2026-08-01
+## Unreleased
+
+Nothing has been released since 0.1.0 — the repository carries no tags and the
+crate is not published — so everything below is unreleased. `Cargo.toml` says
+`version = "0.1.1"`; that is a working version, not a shipped one.
 
 ### Fixed
 
@@ -39,6 +43,12 @@ All notable changes to `xai-dissect` are documented here.
 
 - Relicense from GPL-3.0-only to dual **Apache-2.0 OR MIT** (`LICENSE-APACHE`,
   `LICENSE-MIT`; Cargo `license = "Apache-2.0 OR MIT"`).
+- Bump inventory schema to version 2 after adding serialized
+  `quantized_attention_projection` tensor kinds. *(2026-05-27)*
+- Add Grok-1 pilot-selection planning artifacts and route-preservation gate
+  report schemas/documentation. *(2026-05-27)*
+- Add explicit `docs/GO_NO_GO.md` checklist for broader/full Grok-1
+  quantization decisions. *(2026-05-27)*
 
 ### Added
 
@@ -83,15 +93,6 @@ All notable changes to `xai-dissect` are documented here.
   (`GLOBAL`/`REDUCE`/`BINPUT` carried wrong bytes) and rewrote the scanner
   description to match `find_dtype_anchors` — the parser locates dtype-tag
   anchors, it does not count `REDUCE`/`BINPUT` pairs.
-
-## Unreleased - 2026-05-27
-
-### Changed
-
-- Bump inventory schema to version 2 after adding serialized
-  `quantized_attention_projection` tensor kinds.
-- Add Grok-1 pilot-selection planning artifacts and route-preservation gate report schemas/documentation.
-- Add explicit `docs/GO_NO_GO.md` checklist for broader/full Grok-1 quantization decisions.
 
 ## 0.1.0 - 2026-04-23
 
