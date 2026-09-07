@@ -44,15 +44,18 @@ use super::SCHEMA_VERSION;
 
 pub const GROK1_COVERAGE_SCHEMA_VERSION: u32 = 2;
 
-const GROK1_EXPECTED_BLOCKS: u32 = 64;
+// The dimensions below are `pub(super)` so `inventory::test_fixtures` can
+// build the canonical fixture from them instead of restating them as
+// literals. Crate-internal only; nothing here widens the public API.
+pub(super) const GROK1_EXPECTED_BLOCKS: u32 = 64;
 const GROK1_EXPECTED_TENSORS: u64 = 770;
 const GROK1_EXPECTED_ROUTERS: u64 = 64;
 const GROK1_EXPECTED_EXPERT_FAMILIES: u64 = 64 * 3;
-const GROK1_EXPECTED_VOCAB_SIZE: u64 = 131_072;
-const GROK1_D_MODEL: u64 = 6_144;
-const GROK1_D_FF: u64 = 32_768;
-const GROK1_N_EXPERTS: u64 = 8;
-const GROK1_BLOCK_SLOTS: u32 = 12;
+pub(super) const GROK1_EXPECTED_VOCAB_SIZE: u64 = 131_072;
+pub(super) const GROK1_D_MODEL: u64 = 6_144;
+pub(super) const GROK1_D_FF: u64 = 32_768;
+pub(super) const GROK1_N_EXPERTS: u64 = 8;
+pub(super) const GROK1_BLOCK_SLOTS: u32 = 12;
 const GROK1_EXPERT_UP_OR_GATE_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF];
 const GROK1_EXPERT_DOWN_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
 const GROK1_ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, 1_024];
@@ -620,16 +623,14 @@ fn stable_fnv1a64(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use crate::schema::{MoeProjection, TensorShape};
 
-    use crate::schema::{InferredHyperparams, InventoryTotals, MoeProjection, TensorShape};
-
-    use super::super::{compute_totals, summarize_blocks};
+    use super::super::test_fixtures::{canonical_grok1_inventory, refresh_derived_fields};
     use super::*;
 
     #[test]
     fn validates_complete_grok1_coverage_manifest() {
-        let inv = complete_grok1_inventory();
+        let inv = canonical_grok1_inventory();
 
         let manifest = validate_grok1_complete_manifest(&inv).expect("valid manifest");
 
@@ -648,7 +649,7 @@ mod tests {
 
     #[test]
     fn validates_repacked_grok1_inventory_by_tensor_count_not_shard_count() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.shard_count = 42;
 
         assert!(should_validate_grok1_coverage(&inv));
@@ -666,7 +667,7 @@ mod tests {
     /// tensor per tensor.
     #[test]
     fn skips_strict_coverage_for_unmapped_repacked_grok1_inventory() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.shard_count = 42;
         for tensor in &mut inv.tensors {
             tensor.block_index = None;
@@ -686,7 +687,7 @@ mod tests {
     /// count. That is not a repack: keep the old fail-closed path.
     #[test]
     fn fails_closed_for_canonical_770_tensor_inventory_with_failed_block_inference() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         assert_eq!(inv.shard_count, 770);
         for tensor in &mut inv.tensors {
             tensor.block_index = None;
@@ -709,18 +710,18 @@ mod tests {
 
     #[test]
     fn skips_strict_coverage_for_intentionally_truncated_grok1_inventory() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.tensors.pop();
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         assert!(!should_validate_grok1_coverage(&inv));
     }
 
     #[test]
     fn grok1_coverage_fails_on_missing_block() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.tensors.retain(|tensor| tensor.block_index != Some(10));
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -729,10 +730,10 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_missing_tensor() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.tensors
             .retain(|tensor| !(tensor.block_index == Some(7) && tensor.block_slot == Some(4)));
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -741,7 +742,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_duplicate_tensor_key() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let duplicate = inv
             .tensors
             .iter()
@@ -749,7 +750,7 @@ mod tests {
             .expect("source tensor")
             .clone();
         inv.tensors.push(duplicate);
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -759,7 +760,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_unexpected_key_layout() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
@@ -768,7 +769,7 @@ mod tests {
         tensor.kind = TensorKind::Unknown {
             reason: "synthetic unexpected slot layout".to_string(),
         };
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -778,14 +779,14 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_wrong_norm_slot_kind() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
             .find(|tensor| tensor.block_index == Some(5) && tensor.block_slot == Some(7))
             .expect("slot tensor");
         tensor.kind = TensorKind::MoeScales;
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -794,14 +795,14 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_wrong_norm_slot_shape() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
             .find(|tensor| tensor.block_index == Some(5) && tensor.block_slot == Some(9))
             .expect("slot tensor");
         tensor.shape = TensorShape::new(vec![GROK1_D_FF]);
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -810,7 +811,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_unresolved_moe_projection_slot() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
@@ -819,7 +820,7 @@ mod tests {
         tensor.kind = TensorKind::MoeExpertProjection {
             projection: MoeProjection::Unresolved,
         };
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -828,7 +829,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_swapped_moe_projection_slot() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         let tensor = inv
             .tensors
             .iter_mut()
@@ -837,7 +838,7 @@ mod tests {
         tensor.kind = TensorKind::MoeExpertProjection {
             projection: MoeProjection::Gate,
         };
-        refresh_inventory_derived_fields(&mut inv);
+        refresh_derived_fields(&mut inv);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
 
@@ -846,7 +847,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_fails_on_wrong_vocab_size() {
-        let mut inv = complete_grok1_inventory();
+        let mut inv = canonical_grok1_inventory();
         inv.inferred.vocab_size = Some(131_071);
 
         let err = validate_grok1_complete_manifest(&inv).unwrap_err();
@@ -856,7 +857,7 @@ mod tests {
 
     #[test]
     fn grok1_coverage_checksum_is_reproducible() {
-        let inv = complete_grok1_inventory();
+        let inv = canonical_grok1_inventory();
 
         let first = validate_grok1_complete_manifest(&inv)
             .expect("first manifest")
@@ -866,147 +867,5 @@ mod tests {
             .checksum;
 
         assert_eq!(first, second);
-    }
-
-    fn complete_grok1_inventory() -> ModelInventory {
-        let mut tensors = vec![
-            complete_tensor(
-                0,
-                0,
-                None,
-                None,
-                TensorKind::TokenEmbedding,
-                TensorRole::Tensor,
-                TensorDType::F32,
-                vec![GROK1_EXPECTED_VOCAB_SIZE, GROK1_D_MODEL],
-            ),
-            complete_tensor(
-                1,
-                0,
-                None,
-                None,
-                TensorKind::FinalNorm,
-                TensorRole::Tensor,
-                TensorDType::F32,
-                vec![GROK1_D_MODEL],
-            ),
-        ];
-
-        for block in 0..GROK1_EXPECTED_BLOCKS {
-            for slot in 0..GROK1_BLOCK_SLOTS {
-                let shard = 2 + block * GROK1_BLOCK_SLOTS + slot;
-                let (kind, role, dtype, shape) = match slot {
-                    0 | 2 => (
-                        TensorKind::MoeExpertProjection {
-                            projection: if slot == 0 {
-                                MoeProjection::Gate
-                            } else {
-                                MoeProjection::Up
-                            },
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF],
-                    ),
-                    1 => (
-                        TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Down,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL],
-                    ),
-                    3 | 6 => (
-                        TensorKind::QuantizedAttentionProjection {
-                            width: QuantizedAttentionWidth::Narrow,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![GROK1_D_MODEL, 1_024],
-                    ),
-                    4 | 5 => (
-                        TensorKind::QuantizedAttentionProjection {
-                            width: QuantizedAttentionWidth::ModelWidth,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![GROK1_D_MODEL, GROK1_D_MODEL],
-                    ),
-                    7..=10 => (
-                        TensorKind::BlockNorm,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![GROK1_D_MODEL],
-                    ),
-                    11 => (
-                        TensorKind::Router,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![GROK1_D_MODEL, GROK1_N_EXPERTS],
-                    ),
-                    _ => unreachable!(),
-                };
-                tensors.push(complete_tensor(
-                    shard,
-                    0,
-                    Some(block),
-                    Some(slot),
-                    kind,
-                    role,
-                    dtype,
-                    shape,
-                ));
-            }
-        }
-
-        let mut inv = ModelInventory {
-            model_family: "grok-1".to_string(),
-            checkpoint_path: PathBuf::from("/tmp/grok-1/ckpt-0"),
-            shard_count: 770,
-            inferred: InferredHyperparams {
-                vocab_size: Some(GROK1_EXPECTED_VOCAB_SIZE),
-                d_model: Some(GROK1_D_MODEL),
-                n_experts: Some(GROK1_N_EXPERTS),
-                d_ff: Some(GROK1_D_FF),
-                n_blocks: Some(GROK1_EXPECTED_BLOCKS),
-            },
-            tensors,
-            blocks: Vec::new(),
-            totals: InventoryTotals::default(),
-            schema_version: SCHEMA_VERSION,
-        };
-        refresh_inventory_derived_fields(&mut inv);
-        inv
-    }
-
-    fn refresh_inventory_derived_fields(inv: &mut ModelInventory) {
-        inv.blocks = summarize_blocks(&inv.tensors);
-        inv.totals = compute_totals(&inv.tensors);
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn complete_tensor(
-        shard_ordinal: u32,
-        in_shard_index: u32,
-        block_index: Option<u32>,
-        block_slot: Option<u32>,
-        kind: TensorKind,
-        role: TensorRole,
-        dtype: TensorDType,
-        shape: Vec<u64>,
-    ) -> TensorInfo {
-        TensorInfo {
-            shard_path: PathBuf::from(format!("/tmp/grok-1/ckpt-0/tensor{shard_ordinal:05}_000")),
-            shard_ordinal,
-            in_shard_index,
-            role,
-            dtype,
-            shape: TensorShape::new(shape.clone()),
-            offset: 0,
-            nbytes: dtype.itemsize() as u64 * shape.iter().product::<u64>(),
-            kind,
-            block_index,
-            block_slot,
-        }
     }
 }

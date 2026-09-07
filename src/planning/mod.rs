@@ -755,7 +755,7 @@ pub fn build_grok1_route_preservation_report(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use crate::schema::{
         CandidateTensorManifest, ExpertAtlas, ExpertBlock, InferredHyperparams, ModelInventory,
@@ -766,6 +766,9 @@ mod tests {
     };
 
     use crate::inventory::GROK1_BASELINE_PROFILE;
+    use crate::inventory::test_fixtures::{
+        CANONICAL_CHECKPOINT, canonical_grok1_inventory, fixture_tensor,
+    };
 
     use super::{
         QUANT_PLAN_SCHEMA_VERSION, build_grok1_planning_artifacts, tensor_descriptor_hash,
@@ -929,9 +932,9 @@ mod tests {
 
     #[test]
     fn conversion_manifest_warns_on_unresolved_projections() {
-        let unresolved = tensor(
+        let unresolved = fixture_tensor(
+            Path::new(CANONICAL_CHECKPOINT),
             999,
-            0,
             Some(0),
             Some(0),
             TensorKind::MoeExpertProjection {
@@ -958,9 +961,9 @@ mod tests {
 
     #[test]
     fn conversion_manifest_warns_on_unknown_tensors() {
-        let unknown = tensor(
+        let unknown = fixture_tensor(
+            Path::new(CANONICAL_CHECKPOINT),
             999,
-            0,
             None,
             None,
             TensorKind::Unknown {
@@ -989,122 +992,11 @@ mod tests {
         RoutingReport,
         SaaqReadinessReport,
     ) {
-        let inv = complete_inventory();
+        let inv = canonical_grok1_inventory();
         let atlas = complete_expert_atlas();
         let routing = complete_routing_report();
         let readiness = complete_readiness();
         (inv, atlas, routing, readiness)
-    }
-
-    fn complete_inventory() -> ModelInventory {
-        let mut tensors = vec![tensor(
-            0,
-            0,
-            None,
-            None,
-            TensorKind::TokenEmbedding,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            vec![131_072, 6_144],
-        )];
-        tensors.push(tensor(
-            1,
-            0,
-            None,
-            None,
-            TensorKind::FinalNorm,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            vec![6_144],
-        ));
-        for block in 0..64u32 {
-            for slot in 0..12u32 {
-                let shard = 2 + block * 12 + slot;
-                let (kind, role, dtype, shape) = match slot {
-                    0 => (
-                        TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Gate,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![8, 6_144, 32_768],
-                    ),
-                    1 => (
-                        TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Down,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![8, 32_768, 6_144],
-                    ),
-                    2 => (
-                        TensorKind::MoeExpertProjection {
-                            projection: MoeProjection::Up,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![8, 6_144, 32_768],
-                    ),
-                    3 | 6 => (
-                        TensorKind::QuantizedAttentionProjection {
-                            width: crate::schema::QuantizedAttentionWidth::Narrow,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![6_144, 1_024],
-                    ),
-                    4 | 5 => (
-                        TensorKind::QuantizedAttentionProjection {
-                            width: crate::schema::QuantizedAttentionWidth::ModelWidth,
-                        },
-                        TensorRole::QuantWeight,
-                        TensorDType::I8,
-                        vec![6_144, 6_144],
-                    ),
-                    7..=10 => (
-                        TensorKind::BlockNorm,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![6_144],
-                    ),
-                    11 => (
-                        TensorKind::Router,
-                        TensorRole::Tensor,
-                        TensorDType::F32,
-                        vec![6_144, 8],
-                    ),
-                    _ => unreachable!(),
-                };
-                tensors.push(tensor(
-                    shard,
-                    0,
-                    Some(block),
-                    Some(slot),
-                    kind,
-                    role,
-                    dtype,
-                    shape,
-                ));
-            }
-        }
-        let blocks = crate::inventory::summarize_blocks(&tensors);
-        let totals = compute_totals(&tensors);
-        ModelInventory {
-            model_family: "grok-1".into(),
-            checkpoint_path: PathBuf::from("/tmp/grok-1-official/ckpt-0"),
-            shard_count: 770,
-            inferred: InferredHyperparams {
-                vocab_size: Some(131_072),
-                d_model: Some(6_144),
-                n_experts: Some(8),
-                d_ff: Some(32_768),
-                n_blocks: Some(64),
-            },
-            tensors,
-            blocks,
-            totals,
-            schema_version: crate::inventory::SCHEMA_VERSION,
-        }
     }
 
     fn complete_expert_atlas() -> ExpertAtlas {
@@ -1516,53 +1408,5 @@ mod tests {
             risk_score: 1.0 - readiness_score,
             reasons: vec!["synthetic planning fixture".into()],
         }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn tensor(
-        shard_ordinal: u32,
-        in_shard_index: u32,
-        block_index: Option<u32>,
-        block_slot: Option<u32>,
-        kind: TensorKind,
-        role: TensorRole,
-        dtype: TensorDType,
-        shape: Vec<u64>,
-    ) -> TensorInfo {
-        TensorInfo {
-            shard_path: PathBuf::from(format!(
-                "/tmp/grok-1-official/ckpt-0/tensor{shard_ordinal:05}_000"
-            )),
-            shard_ordinal,
-            in_shard_index,
-            role,
-            dtype,
-            shape: TensorShape::new(shape.clone()),
-            offset: 0,
-            nbytes: dtype.itemsize() as u64 * shape.iter().product::<u64>(),
-            kind,
-            block_index,
-            block_slot,
-        }
-    }
-
-    fn compute_totals(tensors: &[TensorInfo]) -> crate::schema::InventoryTotals {
-        let mut totals = crate::schema::InventoryTotals {
-            tensors: tensors.len() as u64,
-            ..Default::default()
-        };
-        for tensor in tensors {
-            totals.total_nbytes += tensor.nbytes;
-            totals.total_elements += tensor.shape.numel();
-            match tensor.dtype {
-                TensorDType::F32 => totals.f32_tensors += 1,
-                TensorDType::I8 => totals.i8_tensors += 1,
-            }
-            match tensor.role {
-                TensorRole::QuantWeight | TensorRole::QuantScales => totals.quant_tensors += 1,
-                TensorRole::Tensor => {}
-            }
-        }
-        totals
     }
 }

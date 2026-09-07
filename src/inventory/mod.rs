@@ -39,6 +39,11 @@ use crate::schema::{
 
 mod grok1_coverage;
 
+/// Shared canonical-Grok-1 fixtures for `exports`, `planning`, and this
+/// module's own tests. Test-only; never compiled into a release binary.
+#[cfg(test)]
+pub(crate) mod test_fixtures;
+
 pub use crate::schema::GROK1_BASELINE_PROFILE;
 pub use grok1_coverage::{should_validate_grok1_coverage, validate_grok1_complete_manifest};
 
