@@ -96,6 +96,18 @@ If the same check had shown `format!` still inside the loop, the status is
 `fixed-now` (fix it on the follow-up branch and **leave the thread open** until
 that branch is on `main`) or `deferred-with-rationale` — never `verified`.
 
+## At PR time
+
+[`.github/pull_request_template.md`](../.github/pull_request_template.md)
+puts the three-state checklist in front of the author while the threads are
+still open, and asks for any `fixed-now` thread to be named in the PR body.
+It is a reminder, not a gate — CI cannot see thread state.
+
+The template exists because PR #56 merged with 11 threads unresolved. Every
+one was, on inspection, already fixed on `main` by content; the code was fine
+and the bookkeeping was not, which is the failure mode this document was
+written to prevent in the other direction.
+
 ## Anti-patterns
 
 - Reply “Addressed in …” without a commit that touches `<path>`
