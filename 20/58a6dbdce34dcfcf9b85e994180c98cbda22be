@@ -1,0 +1,19 @@
+src/inventory/test_fixtures.rs
+  s_6917f3d1b232b6::t_9ebf339f933d1c 63-89,115,118,121-124,129,144-182,186-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2058a6dbdce34dcfcf9b85e994180c98cbda22be",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
