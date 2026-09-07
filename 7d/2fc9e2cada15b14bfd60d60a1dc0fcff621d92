@@ -1,0 +1,20 @@
+CHANGELOG.md
+  s_6917f3d1b232b6::t_659cccf7a6e44f 5-9,46-51
+  s_6917f3d1b232b6::t_ab37328f9101ab 20-32,35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7d2fc9e2cada15b14bfd60d60a1dc0fcff621d92",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
