@@ -1,0 +1,30 @@
+src/inventory/test_fixtures.rs
+  s_6917f3d1b232b6::t_a27fae753592d8 41-42
+  s_6917f3d1b232b6::t_2ed65b5fe41779 1-40,43-227
+src/inventory/mod.rs
+  s_6917f3d1b232b6::t_2ed65b5fe41779 42-46
+src/inventory/grok1_coverage.rs
+  s_6917f3d1b232b6::t_ee03e621950bd8 626,628,633,652,670,690,713,715,722,724,733,736,745,753,763,772,782,789,798,805,814,823,832,841,850,860
+  s_6917f3d1b232b6::t_2ed65b5fe41779 47-50,54-58
+src/planning/mod.rs
+  s_6917f3d1b232b6::t_3b67a1e30a70a5 758,769-771,935-936,964-965,995
+src/exports/mod.rs
+  s_6917f3d1b232b6::t_f0a9475df07ac5 863,878,906,940,973
+  s_6917f3d1b232b6::t_5111651a8e5bd6 802,804-806
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4101ce4b691ca0cf928ec9ad4694a2140b2b334b",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
