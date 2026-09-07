@@ -59,8 +59,18 @@ jobs:
         with:
           tool: cargo-audit
 
-      # `set -euo pipefail` before the tee: without it the pipeline reports
-      # tee's exit status and a failing audit is silently recorded as success.
+      # Two things keep the step's outcome honest, because the run summary
+      # below reports it:
+      #
+      #   `set -euo pipefail` before the tee — without it the pipeline reports
+      #   tee's exit status and a failing audit is recorded as success.
+      #
+      #   `--deny warnings` — by default cargo-audit exits 0 for
+      #   unmaintained/unsound/yanked advisories and only fails on
+      #   vulnerabilities. This repo's lockfile carried two unsoundness
+      #   advisories until the commit before this one, so the default would
+      #   have printed them in the log while the summary said "no advisories".
+      #
       # `continue-on-error` is what makes this advisory — not a masked status.
       - name: Run cargo audit
         id: audit
@@ -68,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo audit --color never 2>&1 | tee cargo-audit.log
+          cargo audit --color never --deny warnings 2>&1 | tee cargo-audit.log
 
       # `if: always()` — the run that finds a vulnerability is exactly the run
       # whose log must survive, and that is the run where the step above failed.
@@ -90,10 +100,13 @@ jobs:
             echo "## cargo audit"
             echo
             if [ "${{ steps.audit.outcome }}" = "success" ]; then
-              echo "No advisories reported against \`Cargo.lock\`."
+              echo "No advisories against \`Cargo.lock\` — including"
+              echo "unmaintained, unsound and yanked."
             else
               echo "Advisories reported — see the log below and the"
               echo "\`cargo-audit-log-${{ github.run_id }}\` artifact."
+              echo
+              echo "This job is advisory; \`rust-ci\` is the merge gate."
             fi
             echo
             echo '```'

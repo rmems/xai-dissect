@@ -137,6 +137,10 @@ honest rather than merely quiet:
 
 - `set -euo pipefail` runs **before** the `tee`. Without it the pipeline
   reports `tee`'s status and a failing audit is recorded as a pass.
+- `--deny warnings` is passed. By default `cargo audit` exits 0 for
+  unmaintained / unsound / yanked advisories and fails only on
+  vulnerabilities, so the step would report success while printing advisories
+  — which is precisely the state this lockfile was in when the job was added.
 - the log upload is `if: always()`, because the run that finds a vulnerability
   is exactly the run where the previous step failed.
 - the run summary states which of the two outcomes occurred, so a soft failure
@@ -146,7 +150,7 @@ Reproduce locally:
 
 ```bash
 cargo install cargo-audit --locked
-cargo audit
+cargo audit --deny warnings   # same strictness as CI
 ```
 
 `.github/dependabot.yml` covers the other half of supply-chain hygiene. Every
