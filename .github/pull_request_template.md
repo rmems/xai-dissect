@@ -18,28 +18,40 @@ Refs:
 - [ ] `cargo test --locked`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 
-If the change touches `Cargo.toml`, `Cargo.lock`, or CI:
+If the change touches **any Rust source**, `Cargo.toml`, `Cargo.lock`, or CI:
 
 - [ ] `cargo +1.88 check --locked --all-targets --all-features` (the declared MSRV)
 
+<!--
+Source counts: a stdlib API or language feature newer than the floor breaks
+the MSRV from inside `src/` without the manifest changing at all.
+-->
+
 ## Review threads
 
-Every bot review thread on this PR is in one of three states before merge.
 `isResolved` is **not** evidence — the proof target is always `main`.
 See [docs/contributing-bot-reviews.md](../docs/contributing-bot-reviews.md).
 
-- [ ] **verified** — `git show main:<path>` matches the concern → resolved
-- [ ] **deferred-with-rationale** — intentional non-fix, rationale on the thread → resolved
-- [ ] **fixed-now** — real gap, fix not yet on `main` → **left open**, and named below
+- [ ] There are no review threads on this PR
+
+Otherwise list **every** thread. One line each, so a reader can check the
+claim instead of taking it:
+
+| Thread (`path:line`, author) | State | Proof / rationale |
+|---|---|---|
+|  |  |  |
 
 <!--
-`fixed-now` is not a resolvable state. If a thread is in it, say which one and
-what lands it, so the next reader does not have to reconstruct that:
+State is one of:
 
-  - <thread/path>: fixed on <branch>, resolves once that is on main
+  verified                 `git show main:<path>` matches the concern -> resolve
+  deferred-with-rationale  intentional non-fix, rationale on the thread -> resolve
+  fixed-now                real gap, fix not yet on `main` -> LEAVE OPEN
+
+`fixed-now` is not a resolvable state. For those, say what lands the fix
+("fixed on <branch>, resolves once that is on main") so the next reader does
+not have to reconstruct it.
 -->
-
-Threads left open, and why:
 
 ## Export contract
 

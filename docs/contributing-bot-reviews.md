@@ -99,9 +99,12 @@ that branch is on `main`) or `deferred-with-rationale` — never `verified`.
 ## At PR time
 
 [`.github/pull_request_template.md`](../.github/pull_request_template.md)
-puts the three-state checklist in front of the author while the threads are
-still open, and asks for any `fixed-now` thread to be named in the PR body.
-It is a reminder, not a gate — CI cannot see thread state.
+puts this in front of the author while the threads are still open. It asks for
+a **row per thread** — path, state, and the proof or rationale — rather than a
+single "all verified" checkbox, because a global checkbox can be ticked
+without anyone having looked at an individual thread, which is the failure
+mode this document exists to prevent. It is a reminder, not a gate: CI cannot
+see thread state.
 
 The template exists because PR #56 merged with 11 threads unresolved. Every
 one was, on inspection, already fixed on `main` by content; the code was fine
