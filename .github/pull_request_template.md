@@ -30,9 +30,13 @@ the MSRV from inside `src/` without the manifest changing at all.
 ## Review threads
 
 `isResolved` is **not** evidence — the proof target is always `main`.
-See [docs/contributing-bot-reviews.md](../docs/contributing-bot-reviews.md).
+See [docs/contributing-bot-reviews.md](https://github.com/rmems/xai-dissect/blob/main/docs/contributing-bot-reviews.md).
 
-- [ ] There are no review threads on this PR
+**Check this immediately before merge, not when opening the PR** — threads
+arrive after review, and a box ticked at open time is exactly the stale claim
+this section exists to prevent.
+
+- [ ] Rechecked after the last review: there are no unresolved threads on this PR
 
 Otherwise list **every** thread. One line each, so a reader can check the
 claim instead of taking it:
@@ -57,7 +61,22 @@ not have to reconstruct it.
 
 <!-- Delete if this PR emits no artifact and changes no schema type. -->
 
-- [ ] No change to an export schema type, **or** `schema_version` bumped and
-      `docs/export-contracts.md` + `CHANGELOG.md` updated
+- [ ] No **incompatible** change to an export schema type, **or** the version
+      of the affected top-level document is bumped and
+      `docs/export-contracts.md` + `CHANGELOG.md` are updated
 - [ ] `tests/fixtures/exports/*.snap` are unchanged, **or** the diff is
       intentional and explained above
+
+<!--
+Two things the wording above is deliberate about:
+
+  Incompatible only. `docs/export-contracts.md` requires a bump for
+  incompatible JSON shape changes. Bumping for a backward-compatible addition
+  (a new optional or defaulted field) advertises an incompatibility that is
+  not there, and consumers keying on the version may reject a fine artifact.
+
+  Which version. `Grok1CoverageManifest` carries `coverage_schema_version`
+  for the coverage sub-structure, independently of the `schema_version` it
+  inherits from `ModelInventory`. A change to the sub-structure bumps that
+  field, not the outer one.
+-->
