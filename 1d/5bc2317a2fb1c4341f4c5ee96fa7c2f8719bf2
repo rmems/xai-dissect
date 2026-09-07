@@ -1,0 +1,23 @@
+src/schema/mod.rs
+  s_6917f3d1b232b6::t_7c4bb7045a174a 26-33
+docs/architecture.md
+  s_6917f3d1b232b6::t_7c4bb7045a174a 112
+docs/non_goals.md
+  s_6917f3d1b232b6::t_7c4bb7045a174a 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1d5bc2317a2fb1c4341f4c5ee96fa7c2f8719bf2",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
