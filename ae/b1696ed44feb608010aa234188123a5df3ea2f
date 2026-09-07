@@ -1,0 +1,21 @@
+docs/ci.md
+  s_6917f3d1b232b6::t_f66777b5f774bc 11,127-134,145-147
+.github/workflows/ci.yml
+  s_6917f3d1b232b6::t_f66777b5f774bc 73,93-98,103-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "aeb1696ed44feb608010aa234188123a5df3ea2f",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
