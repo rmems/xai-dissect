@@ -23,6 +23,14 @@
 //! | `PilotSelectionPlan` | 1 | — |
 //! | `RoutePreservationReport` | 1 | — |
 //! | `RoutingCriticalTensorManifest` | 1 | — |
+//! | `CandidateTensorManifest` | 1 | — |
+//! | `CheckpointInventorySnapshot` | mirrors `ModelInventory` | — |
+//! | `FindingsSummary` | mirrors its source document | — |
+//!
+//! The last two carry a `schema_version` field but do not own a version of
+//! their own: a snapshot is a projection of one `ModelInventory`, and a
+//! findings summary is a projection of whichever document produced it, so
+//! each copies its source's value rather than being bumped independently.
 //!
 //! ## Key constants
 //! `GROK1_BASELINE_PROFILE = "grok1-map-v1-clean"` is the canonical baseline
