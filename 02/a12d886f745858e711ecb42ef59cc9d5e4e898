@@ -1,0 +1,19 @@
+.github/pull_request_template.md
+  s_6917f3d1b232b6::t_e3c26bbe852af1 33,35-39,64-66,69-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "02a12d886f745858e711ecb42ef59cc9d5e4e898",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
