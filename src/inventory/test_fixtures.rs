@@ -51,6 +51,87 @@ const ATTENTION_NARROW_WIDTH: u64 = 1_024;
 /// `exports` derives an output slug from it, so it is load-bearing there.
 pub(crate) const CANONICAL_CHECKPOINT: &str = "/tmp/grok-1-official/ckpt-0";
 
+const EXPERT_UP_OR_GATE_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF];
+const EXPERT_DOWN_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
+const ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, ATTENTION_NARROW_WIDTH];
+const ATTENTION_WIDE_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_D_MODEL];
+const BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
+const ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
+const TOKEN_EMBEDDING_SHAPE: [u64; 2] = [GROK1_EXPECTED_VOCAB_SIZE, GROK1_D_MODEL];
+
+/// The canonical 12-slot block layout, as `(kind, shape)`.
+///
+/// Role and dtype are not stored: they follow from the kind, so
+/// [`role_and_dtype`] states that rule once instead of repeating it on all
+/// fourteen tensors a block and its singletons produce.
+///
+/// The kinds are spelled out in full rather than built by `const fn` helpers.
+/// A `const fn` reachable only from a `static` initializer is const-evaluated
+/// and never runs, so llvm-cov reports it as uncovered — real dead weight in
+/// the patch-coverage number for code that cannot be executed.
+static CANONICAL_BLOCK_SLOTS: [(TensorKind, &[u64]); GROK1_BLOCK_SLOTS as usize] = [
+    (
+        TensorKind::MoeExpertProjection {
+            projection: MoeProjection::Gate,
+        },
+        &EXPERT_UP_OR_GATE_SHAPE,
+    ),
+    (
+        TensorKind::MoeExpertProjection {
+            projection: MoeProjection::Down,
+        },
+        &EXPERT_DOWN_SHAPE,
+    ),
+    (
+        TensorKind::MoeExpertProjection {
+            projection: MoeProjection::Up,
+        },
+        &EXPERT_UP_OR_GATE_SHAPE,
+    ),
+    (
+        TensorKind::QuantizedAttentionProjection {
+            width: QuantizedAttentionWidth::Narrow,
+        },
+        &ATTENTION_NARROW_SHAPE,
+    ),
+    (
+        TensorKind::QuantizedAttentionProjection {
+            width: QuantizedAttentionWidth::ModelWidth,
+        },
+        &ATTENTION_WIDE_SHAPE,
+    ),
+    (
+        TensorKind::QuantizedAttentionProjection {
+            width: QuantizedAttentionWidth::ModelWidth,
+        },
+        &ATTENTION_WIDE_SHAPE,
+    ),
+    (
+        TensorKind::QuantizedAttentionProjection {
+            width: QuantizedAttentionWidth::Narrow,
+        },
+        &ATTENTION_NARROW_SHAPE,
+    ),
+    (TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
+    (TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
+    (TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
+    (TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
+    (TensorKind::Router, &ROUTER_SHAPE),
+];
+
+/// Role and dtype follow from the kind in the canonical layout: every
+/// quantized projection is an `i8` `quant_weight`, and every norm, router and
+/// embedding is a bare `f32` tensor.
+fn role_and_dtype(kind: &TensorKind) -> (TensorRole, TensorDType) {
+    match kind {
+        TensorKind::MoeExpertProjection { .. }
+        | TensorKind::QuantizedAttentionProjection { .. } => {
+            (TensorRole::QuantWeight, TensorDType::I8)
+        }
+        _ => (TensorRole::Tensor, TensorDType::F32),
+    }
+}
+
 /// A complete, canonical Grok-1 ckpt-0 inventory at [`CANONICAL_CHECKPOINT`]:
 /// 1 token embedding + 1 final norm + 64 blocks × 12 slots = 770 tensors.
 pub(crate) fn canonical_grok1_inventory() -> ModelInventory {
@@ -88,45 +169,61 @@ fn canonical_hyperparams() -> InferredHyperparams {
 /// then 64 blocks of the 12-slot layout.
 fn canonical_tensors(checkpoint_path: &Path) -> Vec<TensorInfo> {
     let mut tensors = vec![
-        fixture_tensor(
+        block_tensor(
             checkpoint_path,
             0,
             None,
             None,
             TensorKind::TokenEmbedding,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            vec![GROK1_EXPECTED_VOCAB_SIZE, GROK1_D_MODEL],
+            &TOKEN_EMBEDDING_SHAPE,
         ),
-        fixture_tensor(
+        block_tensor(
             checkpoint_path,
             1,
             None,
             None,
             TensorKind::FinalNorm,
-            TensorRole::Tensor,
-            TensorDType::F32,
-            vec![GROK1_D_MODEL],
+            &BLOCK_NORM_SHAPE,
         ),
     ];
 
     for block in 0..GROK1_EXPECTED_BLOCKS {
         for slot in 0..GROK1_BLOCK_SLOTS {
-            let spec = &CANONICAL_BLOCK_SLOTS[slot as usize];
-            tensors.push(fixture_tensor(
+            let (kind, shape) = &CANONICAL_BLOCK_SLOTS[slot as usize];
+            tensors.push(block_tensor(
                 checkpoint_path,
                 2 + block * GROK1_BLOCK_SLOTS + slot,
                 Some(block),
                 Some(slot),
-                spec.kind.clone(),
-                spec.role,
-                spec.dtype,
-                spec.shape.to_vec(),
+                kind.clone(),
+                shape,
             ));
         }
     }
 
     tensors
+}
+
+/// One canonical tensor, with role and dtype derived from its kind.
+fn block_tensor(
+    checkpoint_path: &Path,
+    shard_ordinal: u32,
+    block_index: Option<u32>,
+    block_slot: Option<u32>,
+    kind: TensorKind,
+    shape: &[u64],
+) -> TensorInfo {
+    let (role, dtype) = role_and_dtype(&kind);
+    fixture_tensor(
+        checkpoint_path,
+        shard_ordinal,
+        block_index,
+        block_slot,
+        kind,
+        role,
+        dtype,
+        shape.to_vec(),
+    )
 }
 
 /// Recompute `blocks` and `totals` after a test has mutated `tensors`.
@@ -140,68 +237,6 @@ pub(crate) fn refresh_derived_fields(inv: &mut ModelInventory) {
     inv.blocks = summarize_blocks(&inv.tensors);
     inv.totals = compute_totals(&inv.tensors);
 }
-
-/// One block slot's canonical signature.
-struct SlotSignature {
-    kind: TensorKind,
-    role: TensorRole,
-    dtype: TensorDType,
-    shape: &'static [u64],
-}
-
-const EXPERT_UP_OR_GATE_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF];
-const EXPERT_DOWN_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
-const ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, ATTENTION_NARROW_WIDTH];
-const ATTENTION_WIDE_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_D_MODEL];
-const BLOCK_NORM_SHAPE: [u64; 1] = [GROK1_D_MODEL];
-const ROUTER_SHAPE: [u64; 2] = [GROK1_D_MODEL, GROK1_N_EXPERTS];
-
-const fn moe_slot(projection: MoeProjection, shape: &'static [u64]) -> SlotSignature {
-    SlotSignature {
-        kind: TensorKind::MoeExpertProjection { projection },
-        role: TensorRole::QuantWeight,
-        dtype: TensorDType::I8,
-        shape,
-    }
-}
-
-const fn attention_slot(width: QuantizedAttentionWidth, shape: &'static [u64]) -> SlotSignature {
-    SlotSignature {
-        kind: TensorKind::QuantizedAttentionProjection { width },
-        role: TensorRole::QuantWeight,
-        dtype: TensorDType::I8,
-        shape,
-    }
-}
-
-const fn f32_slot(kind: TensorKind, shape: &'static [u64]) -> SlotSignature {
-    SlotSignature {
-        kind,
-        role: TensorRole::Tensor,
-        dtype: TensorDType::F32,
-        shape,
-    }
-}
-
-/// The canonical 12-slot block layout.
-///
-/// Written out independently of production's `GROK1_SLOT_SPECS` on purpose —
-/// see the module docs. It is a table there and a table here so the two read
-/// side by side, but they remain two statements of the layout, not one.
-static CANONICAL_BLOCK_SLOTS: [SlotSignature; GROK1_BLOCK_SLOTS as usize] = [
-    moe_slot(MoeProjection::Gate, &EXPERT_UP_OR_GATE_SHAPE),
-    moe_slot(MoeProjection::Down, &EXPERT_DOWN_SHAPE),
-    moe_slot(MoeProjection::Up, &EXPERT_UP_OR_GATE_SHAPE),
-    attention_slot(QuantizedAttentionWidth::Narrow, &ATTENTION_NARROW_SHAPE),
-    attention_slot(QuantizedAttentionWidth::ModelWidth, &ATTENTION_WIDE_SHAPE),
-    attention_slot(QuantizedAttentionWidth::ModelWidth, &ATTENTION_WIDE_SHAPE),
-    attention_slot(QuantizedAttentionWidth::Narrow, &ATTENTION_NARROW_SHAPE),
-    f32_slot(TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
-    f32_slot(TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
-    f32_slot(TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
-    f32_slot(TensorKind::BlockNorm, &BLOCK_NORM_SHAPE),
-    f32_slot(TensorKind::Router, &ROUTER_SHAPE),
-];
 
 /// Build one fixture tensor. `nbytes` is derived from dtype and shape rather
 /// than passed in, so a fixture can never carry a byte count that contradicts
