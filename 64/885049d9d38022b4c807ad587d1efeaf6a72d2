@@ -1,0 +1,21 @@
+.github/pull_request_template.md
+  s_6917f3d1b232b6::t_c9f6008e612bbc 1-51
+docs/contributing-bot-reviews.md
+  s_6917f3d1b232b6::t_95c3f1a2a814d2 99-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "64885049d9d38022b4c807ad587d1efeaf6a72d2",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
