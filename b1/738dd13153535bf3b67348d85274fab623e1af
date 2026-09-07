@@ -1,0 +1,23 @@
+docs/ci.md
+  s_6917f3d1b232b6::t_23087cd8d4e88f 144-153,168-171
+.github/workflows/security.yml
+  s_6917f3d1b232b6::t_61d7790b5547f1 80-88,90-92,100-103,116-136
+.github/dependabot.yml
+  s_6917f3d1b232b6::t_61d7790b5547f1 37-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b1738dd13153535bf3b67348d85274fab623e1af",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
