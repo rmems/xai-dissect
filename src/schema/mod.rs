@@ -32,6 +32,16 @@
 //! findings summary is a projection of whichever document produced it, so
 //! each copies its source's value rather than being bumped independently.
 //!
+//! That means the number on those two is **not a shape identifier** — two
+//! `FindingsSummary` documents with identical shape advertise different
+//! values when they come from different sources. Do not key compatibility on
+//! it. This is tolerable rather than correct: `docs/export-contracts.md`
+//! classifies both as *optional companion artifacts*, with `*-findings.json`
+//! explicitly "human-review and summary outputs only, not machine-ingest
+//! inputs", so neither is part of the `grok-ozempic` ingest contract that
+//! downstream compatibility checks key on. Giving them versions of their own
+//! is tracked separately.
+//!
 //! ## Key constants
 //! `GROK1_BASELINE_PROFILE = "grok1-map-v1-clean"` is the canonical baseline
 //! profile for Grok-1 ckpt-0. Downstream tools should reject bundles whose
