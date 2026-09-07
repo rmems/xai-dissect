@@ -77,8 +77,19 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          # No `-e`: the exit code is the result here, so it is captured rather
+          # than aborted on. cargo-audit distinguishes three states, and the
+          # summary below reports which one occurred:
+          #   0  clean
+          #   1  advisories reported (with --deny warnings, that includes
+          #      unmaintained / unsound / yanked)
+          #   2  the scan itself failed — database unreachable, Cargo.lock
+          #      unparseable — which is *not* a clean result
+          set -uo pipefail
           cargo audit --color never --deny warnings 2>&1 | tee cargo-audit.log
+          code="${PIPESTATUS[0]}"
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit "${code}"
 
       # `if: always()` — the run that finds a vulnerability is exactly the run
       # whose log must survive, and that is the run where the step above failed.
@@ -86,7 +97,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: cargo-audit-log-${{ github.run_id }}
+          # run_attempt too: artifact names are immutable in upload-artifact
+          # v4, and a rerun keeps the same run_id — so without it the second
+          # attempt fails on a name conflict and turns this advisory job red.
+          name: cargo-audit-log-${{ github.run_id }}-${{ github.run_attempt }}
           path: cargo-audit.log
           retention-days: 30
           if-no-files-found: warn
@@ -99,15 +113,27 @@ jobs:
           {
             echo "## cargo audit"
             echo
-            if [ "${{ steps.audit.outcome }}" = "success" ]; then
-              echo "No advisories against \`Cargo.lock\` — including"
-              echo "unmaintained, unsound and yanked."
-            else
-              echo "Advisories reported — see the log below and the"
-              echo "\`cargo-audit-log-${{ github.run_id }}\` artifact."
-              echo
-              echo "This job is advisory; \`rust-ci\` is the merge gate."
-            fi
+            artifact="cargo-audit-log-${{ github.run_id }}-${{ github.run_attempt }}"
+            case "${{ steps.audit.outputs.code }}" in
+              0)
+                echo "No advisories against \`Cargo.lock\` — including"
+                echo "unmaintained, unsound and yanked."
+                ;;
+              1)
+                echo "**Advisories reported.** See the log below and the"
+                echo "\`${artifact}\` artifact."
+                echo
+                echo "This job is advisory; \`rust-ci\` is the merge gate."
+                ;;
+              *)
+                echo "**The audit did not run to completion.** cargo-audit exited"
+                echo "\`${{ steps.audit.outputs.code }}\` — the advisory database could not be"
+                echo "fetched, \`Cargo.lock\` could not be parsed, or the step did not run."
+                echo
+                echo "This is **not** a clean result. Treat it as unknown, and re-run"
+                echo "the workflow; a scheduled run that fails this way has told you nothing."
+                ;;
+            esac
             echo
             echo '```'
             cat cargo-audit.log 2>/dev/null || echo "(no log produced)"

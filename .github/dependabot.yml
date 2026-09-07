@@ -29,10 +29,13 @@ updates:
       interval: monthly
     commit-message:
       prefix: "chore"
-    # Cargo.toml pins `tempfile = "=3.27.0"` deliberately; leave exact pins to
-    # a human and let Dependabot handle the ranges.
     groups:
       cargo-minor-patch:
         update-types:
           - minor
           - patch
+    # `update-types` does not exempt exact requirements — Dependabot rewrites
+    # `=3.27.0` the same as a caret range — so the deliberate pin needs an
+    # explicit ignore rather than a comment asking for one.
+    ignore:
+      - dependency-name: tempfile

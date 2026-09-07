@@ -141,10 +141,16 @@ honest rather than merely quiet:
   unmaintained / unsound / yanked advisories and fails only on
   vulnerabilities, so the step would report success while printing advisories
   — which is precisely the state this lockfile was in when the job was added.
-- the log upload is `if: always()`, because the run that finds a vulnerability
-  is exactly the run where the previous step failed.
-- the run summary states which of the two outcomes occurred, so a soft failure
-  is visible without opening the artifact.
+- the log upload is `if: always()`, and its artifact name carries
+  `run_attempt` as well as `run_id` — v4 artifact names are immutable and a
+  rerun keeps the same `run_id`, so without it the second attempt fails on a
+  name conflict and turns an advisory job red.
+- the run summary distinguishes **three** outcomes, not two, keyed on
+  cargo-audit's exit code: `0` clean, `1` advisories reported, anything else
+  the scan itself failed (database unreachable, `Cargo.lock` unparseable).
+  That third state is reported as *unknown*, never as "no advisories" — a
+  scheduled run that dies fetching the database has told you nothing, and
+  silently reading as clean is the worst thing an advisory job can do.
 
 Reproduce locally:
 
@@ -158,6 +164,11 @@ third-party action here is pinned to a full commit SHA, which never moves on
 its own — including past a security fix. Dependabot rewrites the SHA and its
 trailing `# vX.Y.Z` comment together, monthly and grouped, so the pins stay
 both reproducible and current.
+
+`tempfile` is explicitly ignored there. `Cargo.toml` pins it exactly
+(`= "=3.27.0"`), and Dependabot rewrites exact requirements just as it does
+ranges — restricting the group to `minor`/`patch` does not exempt them, so the
+pin needs a real `ignore` entry rather than a comment asking for one.
 
 ## MSRV
 
