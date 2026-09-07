@@ -2,7 +2,7 @@
 //
 //! Stable schema types for all xai-dissect export artifacts.
 //!
-//! Any type serialized to a JSON / CSV / Markdown export artifact lives
+//! Any type serialized to a JSON or Markdown export artifact lives
 //! here. All such types derive `Serialize` and `Deserialize` and must remain
 //! stable across patch releases. The schema version discipline is:
 //! - `schema_version` bumps on any incompatible JSON shape change

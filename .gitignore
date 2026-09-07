@@ -1,7 +1,14 @@
 /target
-.codex/
 .idea/
 Cargo.lock.bak
+
+# Agent / analysis tool scratch dirs. `.codex` is written as a plain file on
+# some hosts and as a directory on others, so it is matched without a trailing
+# slash; `.kilo/` vendors ~57 MB of node_modules. qodana.yaml already excludes
+# all three from analysis — this is the half that keeps them out of git.
+.codex
+.codacy/
+.kilo/
 # Campaign artifacts (local dir or symlink to ~/rmems/grok-result/xai-dissect)
 out/
 /out
