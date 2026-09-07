@@ -1,0 +1,102 @@
+# Dependency vulnerability scanning for xai-dissect (GH #33 follow-on).
+#
+# Split out of ci.yml on purpose: this workflow carries a daily `schedule`
+# trigger so newly published advisories are caught between PRs, and running
+# the whole of ci.yml on a cron would drag the ~1.5h Qodana scan along with it.
+#
+# Advisory, never a merge gate. A fresh RUSTSEC advisory against a transitive
+# dependency is not a defect in the PR that happens to be open when it lands,
+# so the audit step is `continue-on-error` and `rust-ci` remains the only
+# required check.
+#
+# Third-party actions pinned to full commit SHAs, matching ci.yml.
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Daily at 06:00 UTC — catches advisories published since the last PR.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cargo-audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          key: audit
+
+      # Prebuilt binary from the same pinned installer ci.yml uses for
+      # cargo-llvm-cov. Reproducible, and far cheaper than a source build.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
+        with:
+          tool: cargo-audit
+
+      # `set -euo pipefail` before the tee: without it the pipeline reports
+      # tee's exit status and a failing audit is silently recorded as success.
+      # `continue-on-error` is what makes this advisory — not a masked status.
+      - name: Run cargo audit
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo audit --color never 2>&1 | tee cargo-audit.log
+
+      # `if: always()` — the run that finds a vulnerability is exactly the run
+      # whose log must survive, and that is the run where the step above failed.
+      - name: Upload audit log
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: cargo-audit-log-${{ github.run_id }}
+          path: cargo-audit.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## cargo audit"
+            echo
+            if [ "${{ steps.audit.outcome }}" = "success" ]; then
+              echo "No advisories reported against \`Cargo.lock\`."
+            else
+              echo "Advisories reported — see the log below and the"
+              echo "\`cargo-audit-log-${{ github.run_id }}\` artifact."
+            fi
+            echo
+            echo '```'
+            cat cargo-audit.log 2>/dev/null || echo "(no log produced)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

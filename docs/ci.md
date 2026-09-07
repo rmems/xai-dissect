@@ -1,6 +1,7 @@
 # CI for xai-dissect
 
-GitHub Actions workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).  
+GitHub Actions workflows: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+and [`.github/workflows/security.yml`](../.github/workflows/security.yml).  
 Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear **RM-148**.
 
 ## Jobs
@@ -11,6 +12,7 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 | **msrv** | PR + `main` | Not a required merge gate (recommended) | `cargo check --locked --all-targets --all-features` on the toolchain floor in `Cargo.toml` `rust-version`, plus an assertion that the installed `rustc` matches the manifest |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
 | **qodana** | PR + `main` | Not a required merge gate; scan step uses `continue-on-error` (Rust linter is EAP) | JetBrains Qodana for Rust (`qodana.yaml`); skips when `QODANA_TOKEN` unset |
+| **cargo-audit** (`security.yml`) | PR + `main` + daily 06:00 UTC + manual | No — advisory only | `cargo audit` against `Cargo.lock`; log uploaded as an artifact and rendered into the run summary |
 | **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
 
 **Out of scope:** New Relic, Aikido, checkpoint downloads, GPU runners.
@@ -120,6 +122,39 @@ the required quality gate.
 
 Omit `QODANA_TOKEN`. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
 
+## Dependency vulnerability scanning
+
+`security.yml` runs `cargo audit` against `Cargo.lock`. It lives in its own
+workflow rather than as a job in `ci.yml` for one reason: it carries a daily
+`schedule` trigger so advisories published *between* PRs are still caught, and
+putting a cron on `ci.yml` would drag the ~1.5 h Qodana scan along with it.
+
+The job is **advisory and never a merge gate**. A fresh RUSTSEC advisory
+against a transitive dependency is not a defect in whichever PR happens to be
+open when it lands, so the audit step is `continue-on-error` and **rust-ci**
+remains the only required check. Three details make that advisory posture
+honest rather than merely quiet:
+
+- `set -euo pipefail` runs **before** the `tee`. Without it the pipeline
+  reports `tee`'s status and a failing audit is recorded as a pass.
+- the log upload is `if: always()`, because the run that finds a vulnerability
+  is exactly the run where the previous step failed.
+- the run summary states which of the two outcomes occurred, so a soft failure
+  is visible without opening the artifact.
+
+Reproduce locally:
+
+```bash
+cargo install cargo-audit --locked
+cargo audit
+```
+
+`.github/dependabot.yml` covers the other half of supply-chain hygiene. Every
+third-party action here is pinned to a full commit SHA, which never moves on
+its own — including past a security fix. Dependabot rewrites the SHA and its
+trailing `# vX.Y.Z` comment together, monthly and grouped, so the pins stay
+both reproducible and current.
+
 ## MSRV
 
 `Cargo.toml` declares `rust-version = "1.88"`. Every other job floats on
@@ -173,7 +208,8 @@ cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
 - No tokens, DSNs, or private paths in the tree
 - Workflow default permissions are `contents: read`; Qodana alone gets `checks`/`pull-requests` write
 - `sentry-cli` is installed only when Sentry is configured, from a **version-pinned** GitHub release binary with **SHA-256 verification** (no `curl | bash`)
-- Third-party Actions are pinned to full commit SHAs (checkout, rust-toolchain, rust-cache, install-action, codecov, qodana), not floating major tags
+- Third-party Actions are pinned to full commit SHAs (checkout, rust-toolchain, rust-cache, install-action, codecov, qodana, upload-artifact), not floating major tags — and Dependabot keeps those pins current
+- `Cargo.lock` is audited against the RUSTSEC advisory database on every PR and daily (advisory, not a gate)
 - Secret-backed steps skip when secrets are missing
 - Fork PRs should not receive repository secrets from GitHub
 - Concurrency cancels only PR runs (not in-flight `main` Sentry releases)

@@ -1,0 +1,38 @@
+# Keeps the SHA pins fresh.
+#
+# ci.yml and security.yml pin every third-party action to a full commit SHA,
+# which is the right call for supply-chain safety but means a pin never moves
+# on its own — including past a security fix. Dependabot rewrites the SHA and
+# the trailing `# vX.Y.Z` comment together, so the pins stay both reproducible
+# and current.
+#
+# Monthly, grouped: this repo has one required check and a handful of
+# dependencies. Weekly per-dependency PRs would be noise.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+    # Cargo.toml pins `tempfile = "=3.27.0"` deliberately; leave exact pins to
+    # a human and let Dependabot handle the ranges.
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch

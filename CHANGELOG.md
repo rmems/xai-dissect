@@ -13,8 +13,24 @@ All notable changes to `xai-dissect` are documented here.
   dependency is now a `[dependencies.sentry]` table section; features and
   version are unchanged.
 
+### Security
+
+- `cargo audit` now runs against `Cargo.lock` on every PR, on `main`, and daily
+  at 06:00 UTC (`.github/workflows/security.yml`). Advisory only — `rust-ci`
+  remains the sole required gate. Restores the dependency scanning that PR #35
+  carried and PR #48 did not.
+- Cleared the two advisories the new job reported on its first run, both
+  unsoundness rather than exploitable vulnerabilities:
+  `RUSTSEC-2026-0186` (`memmap2` 0.9.10 → 0.9.11, unchecked pointer offset —
+  this crate mmaps every checkpoint shard through `memmap2`) and
+  `RUSTSEC-2026-0190` (`anyhow` 1.0.102 → 1.0.104, unsound
+  `Error::downcast_mut()`). Lockfile-only; no manifest range changed.
+
 ### Added
 
+- `.github/dependabot.yml`: monthly grouped updates for GitHub Actions and
+  cargo. Actions are pinned to full commit SHAs, which never move on their own
+  — including past a security fix.
 - CI `msrv` job: `cargo check --locked --all-targets --all-features` pinned to
   the `rust-version` floor, plus an assertion that the workflow pin and the
   manifest have not drifted apart. Documented in `docs/ci.md`.
