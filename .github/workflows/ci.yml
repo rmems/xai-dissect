@@ -70,7 +70,7 @@ jobs:
     # Guards `rust-version` in Cargo.toml. Every other job floats on `stable`,
     # so without this the declared MSRV is an unchecked claim — a manifest that
     # does not even parse at 1.88 shipped on main once already.
-    name: MSRV (1.88)
+    name: MSRV
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -90,15 +90,27 @@ jobs:
         with:
           key: msrv
 
-      # Assert the workflow pin still matches the manifest, so bumping one
-      # without the other fails loudly instead of silently checking the wrong
-      # toolchain.
-      - name: Manifest rust-version matches this job
+      # Compare the manifest against the toolchain that is actually installed,
+      # not against a third hard-coded copy of the version. Raising the
+      # `toolchain:` pin above while leaving `rust-version` behind would
+      # otherwise keep this job green while it quietly stopped exercising the
+      # declared floor — the drift this job exists to catch.
+      - name: Installed toolchain matches the declared MSRV
         run: |
           set -euo pipefail
           declared="$(cargo metadata --no-deps --format-version 1 \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["rust_version"])')"
-          test "${declared}" = "1.88"
+          installed="$(rustc --version | cut -d' ' -f2)"
+          # `rust-version` may be "1.88" or "1.88.0"; the floor is a minor
+          # version, so compare on major.minor only.
+          declared_mm="$(cut -d. -f1,2 <<<"${declared}")"
+          installed_mm="$(cut -d. -f1,2 <<<"${installed}")"
+          echo "manifest rust-version=${declared} | installed rustc=${installed}"
+          if [ "${declared_mm}" != "${installed_mm}" ]; then
+            echo "::error::Cargo.toml rust-version (${declared}) and the toolchain" \
+                 "pinned in this job (${installed}) disagree. Bump both together."
+            exit 1
+          fi
 
       # `check`, not `test`: this gate is about the toolchain floor, and
       # rust-ci already runs the suite on stable.
