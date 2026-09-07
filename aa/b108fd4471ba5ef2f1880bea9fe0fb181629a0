@@ -1,0 +1,19 @@
+src/schema/mod.rs
+  s_6917f3d1b232b6::t_874bf244bf942b 35-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "aab108fd4471ba5ef2f1880bea9fe0fb181629a0",
+  "prompts": {},
+  "sessions": {
+    "s_6917f3d1b232b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4667d750-434d-48da-9a89-314631510b63",
+        "model": "claude-opus-5"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
