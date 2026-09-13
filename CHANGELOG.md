@@ -4,6 +4,21 @@ All notable changes to `xai-dissect` are documented here.
 
 ## Unreleased - 2026-08-01
 
+### Fixed
+
+- `Cargo.toml` parses again at the declared MSRV. The `sentry` dependency used
+  a **multi-line inline table**, which TOML 1.0 forbids and cargo 1.88 rejects
+  outright (`error: invalid inline table`), so `rust-version = "1.88"` was
+  unbuildable — every CI job floats on `stable`, so nothing caught it. The
+  dependency is now a `[dependencies.sentry]` table section; features and
+  version are unchanged.
+
+### Added
+
+- CI `msrv` job: `cargo check --locked --all-targets --all-features` pinned to
+  the `rust-version` floor, plus an assertion that the workflow pin and the
+  manifest have not drifted apart. Documented in `docs/ci.md`.
+
 ### Changed
 
 - Relicense from GPL-3.0-only to dual **Apache-2.0 OR MIT** (`LICENSE-APACHE`,

@@ -1,5 +1,6 @@
 # Full CI for xai-dissect (GH #33 / RM-148)
 # - rust-ci: fmt, test, clippy, CLI smoke (required merge gate)
+# - msrv: cargo check on the toolchain floor declared by Cargo.toml rust-version
 # - coverage: llvm-cov → Codecov (upload soft; token preferred, else OIDC)
 # - qodana: static analysis (job fails when QODANA_TOKEN set; skip when unset)
 # - release-observability: optional Sentry on main only
@@ -64,6 +65,57 @@ jobs:
 
       - name: CLI smoke — saaq-readiness help
         run: cargo run --locked -- saaq-readiness --help
+
+  msrv:
+    # Guards `rust-version` in Cargo.toml. Every other job floats on `stable`,
+    # so without this the declared MSRV is an unchecked claim — a manifest that
+    # does not even parse at 1.88 shipped on main once already.
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # Pinned, not floating: this job exists to fail when the crate stops
+      # building on the oldest supported toolchain.
+      - name: Install Rust (MSRV)
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: "1.88"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          key: msrv
+
+      # Compare the manifest against the toolchain that is actually installed,
+      # not against a third hard-coded copy of the version. Raising the
+      # `toolchain:` pin above while leaving `rust-version` behind would
+      # otherwise keep this job green while it quietly stopped exercising the
+      # declared floor — the drift this job exists to catch.
+      - name: Installed toolchain matches the declared MSRV
+        run: |
+          set -euo pipefail
+          declared="$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["rust_version"])')"
+          installed="$(rustc --version | cut -d' ' -f2)"
+          # `rust-version` may be "1.88" or "1.88.0"; the floor is a minor
+          # version, so compare on major.minor only.
+          declared_mm="$(cut -d. -f1,2 <<<"${declared}")"
+          installed_mm="$(cut -d. -f1,2 <<<"${installed}")"
+          echo "manifest rust-version=${declared} | installed rustc=${installed}"
+          if [ "${declared_mm}" != "${installed_mm}" ]; then
+            echo "::error::Cargo.toml rust-version (${declared}) and the toolchain" \
+                 "pinned in this job (${installed}) disagree. Bump both together."
+            exit 1
+          fi
+
+      # `check`, not `test`: this gate is about the toolchain floor, and
+      # rust-ci already runs the suite on stable.
+      - name: Check at MSRV
+        run: cargo check --locked --all-targets --all-features
 
   coverage:
     name: Coverage
