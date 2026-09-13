@@ -1,7 +1,7 @@
 # Project Instructions for AI Agents
 
-This file provides Claude-specific project context. Beads/session protocol lives
-in [AGENTS.md](AGENTS.md) (single source of truth for tracking and handoff).
+This file provides Claude-specific project context. Issue tracking/session protocol
+lives in [AGENTS.md](AGENTS.md) (single source of truth for tracking and handoff).
 
 ## Build & Test
 
@@ -29,6 +29,6 @@ No inference, no weight mutation, no quant runtime (that lives in `grok-ozempic`
 ## Conventions & Patterns
 
 - Prefer CLI + export schema stability over broad in-process API surface
-- Track work with `bd` (Beads); see AGENTS.md
+- Track work with GitHub Issues; see AGENTS.md
 - Quality gate before handoff: fmt, test `--locked`, clippy `-D warnings`
 - Session push/cleanup: follow AGENTS.md authorization table

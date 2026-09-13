@@ -1,27 +1,7 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
-
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+This project tracks work in **GitHub Issues**. Use `gh issue list` / `gh issue view <n>`
+to find and review work; open new issues with `gh issue create`.
 
 ## Non-Interactive Shell Commands
 
@@ -51,29 +31,23 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` — use `-y` flag
 - `brew` — use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
-## Beads Issue Tracker
+## GitHub Issues
 
-Canonical agent task tracker is **bd**. Prefer `bd` over ad-hoc markdown TODO
-lists or host-specific todo tools (TodoWrite / TaskCreate).
+Canonical agent task tracker is **GitHub Issues**. Prefer `gh issue` over ad-hoc
+markdown TODO lists or host-specific todo tools (TodoWrite / TaskCreate).
 
-### Common bd commands
+### Common gh commands
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
+gh issue list                 # Find available work
+gh issue view <n>              # View issue details
+gh issue edit <n> --add-assignee @me  # Claim work
+gh issue close <n>             # Complete work
 ```
 
 ### Tracking rules
 
-- Route open work through `bd` (create / claim / close)
-- Load workflow detail with `bd prime`
-- Persist cross-session notes with `bd remember` (avoid separate MEMORY.md files)
-
-Dolt under `.beads/` is the issue source of truth; sync with `bd dolt push` /
-`bd dolt pull`. Details: https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md
+- Route open work through GitHub Issues (create / assign / close)
 
 ## PR Review Threads
 
@@ -115,7 +89,7 @@ hand off. Authorization rules:
 
 **Workflow:**
 
-1. File remaining work as beads issues
+1. File remaining work as GitHub issues
 2. If code changed: run quality gates (`cargo fmt --check`, `cargo test --locked`, `cargo clippy --all-targets --all-features -- -D warnings`)
 3. Update issue status (close finished, claim still-open)
 4. With push authorization:
@@ -133,4 +107,3 @@ hand off. Authorization rules:
 **Defaults:** leave a handoff note if work remains; do not push or prune shared
 remotes without authorization; if an authorized push fails, fix or report the
 blocker.
-<!-- END BEADS INTEGRATION -->
