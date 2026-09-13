@@ -36,7 +36,7 @@ execution is not.
 ### Plotting and dashboards
 - No interactive UI, no web dashboard, no notebook-first workflows.
 - No embedded plotting stack.
-- Visualization lives in `Surrogate_Viz.jl`, which consumes our exports.
+- Visualization lives in `XAIDissect_Viz.jl`, which consumes our exports.
 
 ### Orchestration / hybrid runtime
 - No multi-process scheduling, no job graph, no runtime glue across repos.

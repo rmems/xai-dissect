@@ -109,7 +109,7 @@ Emits stable, machine-readable artifacts:
   target candidates
 
 Exports are the only supported integration surface for downstream repos
-(`corinth-canal`, `SAAQ-latent`, `Surrogate_Viz.jl`). No in-process API is
+(`corinth-canal`, `SAAQ-latent`, `XAIDissect_Viz.jl`). No in-process API is
 guaranteed across versions; the export schema is.
 
 For Grok-1-specific architecture details — the per-layer MoE composition,
