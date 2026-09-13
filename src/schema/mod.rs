@@ -2,7 +2,7 @@
 //
 //! Stable schema types for all xai-dissect export artifacts.
 //!
-//! Any type serialized to a JSON / CSV / Markdown export artifact lives
+//! Any type serialized to a JSON or Markdown export artifact lives
 //! here. All such types derive `Serialize` and `Deserialize` and must remain
 //! stable across patch releases. The schema version discipline is:
 //! - `schema_version` bumps on any incompatible JSON shape change
@@ -23,6 +23,24 @@
 //! | `PilotSelectionPlan` | 1 | — |
 //! | `RoutePreservationReport` | 1 | — |
 //! | `RoutingCriticalTensorManifest` | 1 | — |
+//! | `CandidateTensorManifest` | 1 | — |
+//! | `CheckpointInventorySnapshot` | mirrors `ModelInventory` | — |
+//! | `FindingsSummary` | mirrors its source document | — |
+//!
+//! The last two carry a `schema_version` field but do not own a version of
+//! their own: a snapshot is a projection of one `ModelInventory`, and a
+//! findings summary is a projection of whichever document produced it, so
+//! each copies its source's value rather than being bumped independently.
+//!
+//! That means the number on those two is **not a shape identifier** — two
+//! `FindingsSummary` documents with identical shape advertise different
+//! values when they come from different sources. Do not key compatibility on
+//! it. This is tolerable rather than correct: `docs/export-contracts.md`
+//! classifies both as *optional companion artifacts*, with `*-findings.json`
+//! explicitly "human-review and summary outputs only, not machine-ingest
+//! inputs", so neither is part of the `grok-ozempic` ingest contract that
+//! downstream compatibility checks key on. Giving them versions of their own
+//! is tracked separately.
 //!
 //! ## Key constants
 //! `GROK1_BASELINE_PROFILE = "grok1-map-v1-clean"` is the canonical baseline
