@@ -181,7 +181,7 @@ Release notes live in [CHANGELOG.md](CHANGELOG.md).
 ## CI
 
 Pull requests and `main` run fmt, tests, clippy (`-D warnings`), and CLI help
-smokes. Optional Codecov, Qodana, and Sentry hooks are documented in
+smokes. Optional Codecov and Sentry hooks are documented in
 [docs/ci.md](docs/ci.md).
 
 ## Grok-2 (available weights; not in this CLI yet)
