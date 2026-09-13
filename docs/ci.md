@@ -9,7 +9,6 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 |-----|------|---------------------|--------------|
 | **rust-ci** | PR + `main` | **Yes** (branch-protection gate) | `cargo fmt --check`, `cargo test --locked`, `cargo clippy -D warnings`, CLI `--help` smokes |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
-| **qodana** | PR + `main` | Not a required merge gate; scan step uses `continue-on-error` (Rust linter is EAP) | JetBrains Qodana for Rust (`qodana.yaml`); skips when `QODANA_TOKEN` unset |
 | **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
 
 **Out of scope:** New Relic, Aikido, checkpoint downloads, GPU runners.
@@ -21,12 +20,9 @@ Set under GitHub → Settings → Secrets and variables → Actions:
 | Secret | Job | Required? |
 |--------|-----|-----------|
 | `CODECOV_TOKEN` | coverage | Optional. When set, used for upload; when empty, OIDC (`use_oidc`) is enabled. Upload still soft-fails. |
-| `QODANA_TOKEN` | qodana | Optional. JetBrains Cloud **project** token from the [project card](https://qodana.cloud/). When set, the scan runs (soft-fail on EAP timeout). When unset, the job skips. Not a merge gate. |
 | `SENTRY_AUTH_TOKEN` | release-observability | Optional |
 | `SENTRY_ORG` | release-observability | Optional (with token + project); org slug is **`limen-neural`** |
 | `SENTRY_PROJECT_XAI_DISSECT` | release-observability | Optional; project slug **`xai-dissect`** (dedicated Rust project) |
-
-Do **not** use `QODANA_CONFIGURATIONS_TOKEN` as the scan token — that is an uploader/config token, not a Cloud project token.
 
 ### Disable Sentry (CI release markers)
 
@@ -96,29 +92,6 @@ CI release markers (main only) use `SENTRY_AUTH_TOKEN` + org/project secrets and
 do not require a DSN. Runtime capture uses `SENTRY_DSN` + the enable flag.
 Invalid DSNs soft-disable Sentry instead of panicking the CLI.
 
-## Qodana Cloud setup
-
-There **is** a Qodana for Rust product — CI uses **`jetbrains/qodana-rust:2026.2-eap`**
-(`qodana.yaml` sets `linter: qodana-rust`). It is **not** free Community edition:
-Rust support is **Ultimate / Cloud** and needs a [Qodana Cloud](https://qodana.cloud/)
-project token. Without `QODANA_TOKEN`, CI **skips** the scan (green job, no Cloud report).
-
-1. Create account / org / team / project on [qodana.cloud](https://qodana.cloud/) for `rmems/xai-dissect`
-2. Copy the **project token** from the project card
-3. GitHub → Settings → Secrets and variables → Actions → add **`QODANA_TOKEN`**
-4. Re-run CI; expect a long Docker scan when the EAP linter can open the project
-
-Rust image tags on Docker Hub (as of 2026-08): `latest`, `2026.2-eap`, `2026.1-eap`.
-CI passes `--image jetbrains/qodana-rust:2026.2-eap` and
-`qd.rust.configuration.timeout.minutes=90`. Scans on GHA commonly take
-**~1.5 hours** (not stuck — slow project-open + EAP). The scan step uses
-`continue-on-error: true` so timeouts do not block merge; **Rust** remains
-the required quality gate.
-
-### Disable / soften Qodana
-
-Omit `QODANA_TOKEN`. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
-
 ## Local commands (same as CI)
 
 ```bash
@@ -141,9 +114,9 @@ cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
 ## Security
 
 - No tokens, DSNs, or private paths in the tree
-- Workflow default permissions are `contents: read`; Qodana alone gets `checks`/`pull-requests` write
+- Workflow default permissions are `contents: read`
 - `sentry-cli` is installed only when Sentry is configured, from a **version-pinned** GitHub release binary with **SHA-256 verification** (no `curl | bash`)
-- Third-party Actions are pinned to full commit SHAs (checkout, rust-toolchain, rust-cache, install-action, codecov, qodana), not floating major tags
+- Third-party Actions are pinned to full commit SHAs (checkout, rust-toolchain, rust-cache, install-action, codecov), not floating major tags
 - Secret-backed steps skip when secrets are missing
 - Fork PRs should not receive repository secrets from GitHub
 - Concurrency cancels only PR runs (not in-flight `main` Sentry releases)
