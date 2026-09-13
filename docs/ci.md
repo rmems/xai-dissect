@@ -8,7 +8,6 @@ Tracked as [issue #33](https://github.com/rmems/xai-dissect/issues/33) / Linear 
 | Job | When | Required for merge? | What it does |
 |-----|------|---------------------|--------------|
 | **rust-ci** | PR + `main` | **Yes** (branch-protection gate) | `cargo fmt --check`, `cargo test --locked`, `cargo clippy -D warnings`, CLI `--help` smokes |
-| **msrv** | PR + `main` | Not a required merge gate (recommended) | `cargo check --locked --all-targets --all-features` on the toolchain floor in `Cargo.toml` `rust-version`, plus an assertion that the installed `rustc` matches the manifest |
 | **coverage** | After rust-ci | Coverage generation yes; upload soft | `cargo llvm-cov` → `lcov.info` → Codecov (`CODECOV_TOKEN` if set, else OIDC) |
 | **qodana** | PR + `main` | Not a required merge gate; scan step uses `continue-on-error` (Rust linter is EAP) | JetBrains Qodana for Rust (`qodana.yaml`); skips when `QODANA_TOKEN` unset |
 | **release-observability** | `main` push only | Not a merge gate; skips if unconfigured; configured failures fail the job | Optional Sentry release via `scripts/observability/sentry_release.sh` |
@@ -120,32 +119,6 @@ the required quality gate.
 
 Omit `QODANA_TOKEN`. The Qodana job skips analysis and stays green. Only **rust-ci** is the required merge gate by default.
 
-## MSRV
-
-`Cargo.toml` declares `rust-version = "1.88"`. Every other job floats on
-`stable`, so the **msrv** job is the only thing that makes that declaration
-true.
-
-It compares the manifest's `rust_version` against the **`rustc` that is
-actually installed**, rather than against a third hard-coded copy of the
-version. That matters in one specific direction: raising the job's
-`toolchain:` pin while leaving `rust-version` behind would keep a
-constant-vs-manifest assertion green while the job quietly stopped exercising
-the declared floor.
-
-Two manifest rules follow from supporting a toolchain this old:
-
-- **No multi-line inline tables.** TOML 1.0 forbids a newline inside
-  `{ ... }`, and cargo 1.88 rejects one outright with `error: invalid inline
-  table`. A dependency that needs several lines gets a
-  `[dependencies.<name>]` table section instead (see `sentry`).
-- Reproduce a suspected MSRV break locally with
-  `cargo +1.88 check --locked --all-targets --all-features`.
-
-Raising the floor is a deliberate change, and there are exactly two places to
-change: `rust-version` in `Cargo.toml` and the `toolchain:` pin in the **msrv**
-job. Changing one without the other fails the job.
-
 ## Local commands (same as CI)
 
 ```bash
@@ -156,9 +129,6 @@ cargo run --locked -- --help
 cargo run --locked -- quant-plan --help
 cargo run --locked -- inventory --help
 cargo run --locked -- saaq-readiness --help
-
-# Toolchain floor (same as the msrv job)
-cargo +1.88 check --locked --all-targets --all-features
 ```
 
 Coverage (optional locally):
