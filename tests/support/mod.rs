@@ -24,6 +24,42 @@ use xai_dissect::schema::{
 pub const SNAPSHOT_ENV: &str = "XAI_DISSECT_WRITE_SNAPSHOTS";
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// The one parser fixture every integration test builds a checkpoint from.
+pub const PARSER_HEX_FIXTURE: &str = "tests/fixtures/parser/single_f32_tensor.pkl.hex";
+
+/// Decode a whitespace-tolerant hex fixture, relative to the crate root.
+pub fn decode_hex_fixture(rel_path: &str) -> Vec<u8> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel_path);
+    let hex = fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("read fixture {}: {err}", path.display()));
+    let hex = hex
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    assert_eq!(hex.len() % 2, 0, "fixture must have an even hex length");
+
+    let mut out = Vec::with_capacity(hex.len() / 2);
+    let mut i = 0;
+    while i < hex.len() {
+        let byte = u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte");
+        out.push(byte);
+        i += 2;
+    }
+    out
+}
+
+/// A fresh single-shard checkpoint directory holding [`PARSER_HEX_FIXTURE`].
+pub fn write_hex_checkpoint(prefix: &str) -> PathBuf {
+    let root = unique_temp_root(prefix);
+    fs::create_dir_all(&root).expect("create checkpoint dir");
+    fs::write(
+        root.join("tensor0000.pkl"),
+        decode_hex_fixture(PARSER_HEX_FIXTURE),
+    )
+    .expect("write shard");
+    root
+}
+
 pub fn sample_checkpoint_path() -> PathBuf {
     PathBuf::from("/fixtures/grok-1-official/ckpt-0")
 }
