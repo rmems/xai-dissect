@@ -1,0 +1,141 @@
+# Dependency vulnerability scanning for xai-dissect (GH #33 follow-on).
+#
+# Split out of ci.yml on purpose: this workflow carries a daily `schedule`
+# trigger so newly published advisories are caught between PRs, and running
+# the whole of ci.yml on a cron would drag the ~1.5h Qodana scan along with it.
+#
+# Advisory, never a merge gate. A fresh RUSTSEC advisory against a transitive
+# dependency is not a defect in the PR that happens to be open when it lands,
+# so the audit step is `continue-on-error` and `rust-ci` remains the only
+# required check.
+#
+# Third-party actions pinned to full commit SHAs, matching ci.yml.
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Daily at 06:00 UTC — catches advisories published since the last PR.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cargo-audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          key: audit
+
+      # Prebuilt binary from the same pinned installer ci.yml uses for
+      # cargo-llvm-cov. Reproducible, and far cheaper than a source build.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
+        with:
+          tool: cargo-audit
+
+      # Two things keep the step's outcome honest, because the run summary
+      # below reports it:
+      #
+      #   `set -euo pipefail` before the tee — without it the pipeline reports
+      #   tee's exit status and a failing audit is recorded as success.
+      #
+      #   `--deny warnings` — by default cargo-audit exits 0 for
+      #   unmaintained/unsound/yanked advisories and only fails on
+      #   vulnerabilities. This repo's lockfile carried two unsoundness
+      #   advisories until the commit before this one, so the default would
+      #   have printed them in the log while the summary said "no advisories".
+      #
+      # `continue-on-error` is what makes this advisory — not a masked status.
+      - name: Run cargo audit
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          # No `-e`: the exit code is the result here, so it is captured rather
+          # than aborted on. cargo-audit distinguishes three states, and the
+          # summary below reports which one occurred:
+          #   0  clean
+          #   1  advisories reported (with --deny warnings, that includes
+          #      unmaintained / unsound / yanked)
+          #   2  the scan itself failed — database unreachable, Cargo.lock
+          #      unparseable — which is *not* a clean result
+          set -uo pipefail
+          cargo audit --color never --deny warnings 2>&1 | tee cargo-audit.log
+          code="${PIPESTATUS[0]}"
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit "${code}"
+
+      # `if: always()` — the run that finds a vulnerability is exactly the run
+      # whose log must survive, and that is the run where the step above failed.
+      - name: Upload audit log
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          # run_attempt too: artifact names are immutable in upload-artifact
+          # v4, and a rerun keeps the same run_id — so without it the second
+          # attempt fails on a name conflict and turns this advisory job red.
+          name: cargo-audit-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cargo-audit.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## cargo audit"
+            echo
+            artifact="cargo-audit-log-${{ github.run_id }}-${{ github.run_attempt }}"
+            case "${{ steps.audit.outputs.code }}" in
+              0)
+                echo "No advisories against \`Cargo.lock\` — including"
+                echo "unmaintained, unsound and yanked."
+                ;;
+              1)
+                echo "**Advisories reported.** See the log below and the"
+                echo "\`${artifact}\` artifact."
+                echo
+                echo "This job is advisory; \`rust-ci\` is the merge gate."
+                ;;
+              *)
+                echo "**The audit did not run to completion.** cargo-audit exited"
+                echo "\`${{ steps.audit.outputs.code }}\` — the advisory database could not be"
+                echo "fetched, \`Cargo.lock\` could not be parsed, or the step did not run."
+                echo
+                echo "This is **not** a clean result. Treat it as unknown, and re-run"
+                echo "the workflow; a scheduled run that fails this way has told you nothing."
+                ;;
+            esac
+            echo
+            echo '```'
+            cat cargo-audit.log 2>/dev/null || echo "(no log produced)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
