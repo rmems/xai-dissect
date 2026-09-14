@@ -36,6 +36,10 @@ use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
 mod cli;
 mod observability;
 
+/// Test helpers shared by this module's tests and `cli::tests`.
+#[cfg(test)]
+mod test_support;
+
 use cli::{CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg};
 use xai_dissect::parser;
 
@@ -529,7 +533,7 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use crate::cli::{
         CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg,
@@ -537,6 +541,7 @@ mod tests {
     };
 
     use super::{Command, run_dissect};
+    use crate::test_support::write_hex_checkpoint;
 
     fn dummy_scan() -> CheckpointScanArgs {
         CheckpointScanArgs {
@@ -690,24 +695,6 @@ mod tests {
         }
     }
 
-    fn decode_hex_fixture() -> Vec<u8> {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/parser/single_f32_tensor.pkl.hex");
-        let hex = fs::read_to_string(&path)
-            .unwrap_or_else(|err| panic!("read fixture {}: {err}", path.display()));
-        let hex = hex
-            .chars()
-            .filter(|ch| !ch.is_whitespace())
-            .collect::<String>();
-        let mut out = Vec::with_capacity(hex.len() / 2);
-        let mut i = 0;
-        while i < hex.len() {
-            out.push(u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte"));
-            i += 2;
-        }
-        out
-    }
-
     #[test]
     fn complete_inventory_scope_accepts_default_prefix_without_limit() {
         validate_complete_inventory_scope("quant-plan", "tensor", None).expect("default scope");
@@ -739,12 +726,10 @@ mod tests {
         assert_every_command_name_and_prefix(&variants);
     }
 
+    /// The shared single-shard checkpoint plus a deliberately unreadable
+    /// second shard, so `run_dissect` exercises its warn-and-continue path.
     fn write_dissect_hex_fixture() -> tempfile::TempDir {
-        let root = tempfile::Builder::new()
-            .prefix("xai-dissect-dissect-")
-            .tempdir()
-            .expect("create unique temp dir");
-        fs::write(root.path().join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
+        let root = write_hex_checkpoint("dissect");
         fs::write(root.path().join("tensor0001.pkl"), b"not-a-pickle")
             .expect("write garbage shard");
         root

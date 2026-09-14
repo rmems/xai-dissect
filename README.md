@@ -181,7 +181,7 @@ Release notes live in [CHANGELOG.md](CHANGELOG.md).
 ## CI
 
 Pull requests and `main` run fmt, tests, clippy (`-D warnings`), and CLI help
-smokes. Optional Codecov, Qodana, and Sentry hooks are documented in
+smokes. Optional Codecov and Sentry hooks are documented in
 [docs/ci.md](docs/ci.md).
 
 ## Grok-2 (available weights; not in this CLI yet)
@@ -235,12 +235,15 @@ The current Grok-1 downstream handoff contract is documented in
 [`docs/export-contracts.md`](docs/export-contracts.md) and intentionally keeps
 the required ingest surface smaller than the full export tree.
 
-### Surrogate_Viz.jl
+### XAIDissect_Viz.jl
 
-`Surrogate_Viz.jl` owns visualization and dashboarding. `xai-dissect` emits
-structured, exportable findings (JSON / CSV / Markdown). It does not render
-plots, does not ship a UI, and does not embed a plotting stack.
-`Surrogate_Viz.jl` is a downstream consumer of `xai-dissect` exports.
+`XAIDissect_Viz.jl` owns visualization and dashboarding — a Julia package
+(`XAIDissectViz`) built on GLMakie, with optional CUDA.jl acceleration.
+`xai-dissect` emits structured, exportable findings (JSON / Markdown). It does
+not render plots, does not ship a UI, and does not embed a plotting stack.
+`XAIDissect_Viz.jl` is a downstream consumer of `xai-dissect` report bundles.
+Absorbing it into this repository as a separate Julia package boundary is
+tracked in [issue #54](https://github.com/rmems/xai-dissect/issues/54).
 
 ## Architecture
 

@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, bail};
-use tempfile::TempDir;
 use xai_dissect::exports::OutputBundle;
 use xai_dissect::report;
+
+use crate::test_support::{unique_temp_dir, write_hex_checkpoint};
 
 use super::{
     CheckpointScanArgs, OutputTreeArgs, run_experts, run_inventory, run_pilot_plan, run_quant_plan,
@@ -15,40 +16,6 @@ use super::{
     validate_complete_inventory_scope, write_json_and_markdown, write_optional_file,
     write_output_tree,
 };
-
-fn unique_temp_root(prefix: &str) -> TempDir {
-    tempfile::Builder::new()
-        .prefix(&format!("xai-dissect-cli-{prefix}-"))
-        .tempdir()
-        .expect("create unique temp dir")
-}
-
-fn decode_hex_fixture() -> Vec<u8> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/parser/single_f32_tensor.pkl.hex");
-    let hex = fs::read_to_string(&path)
-        .unwrap_or_else(|err| panic!("read fixture {}: {err}", path.display()));
-    let hex = hex
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>();
-    assert_eq!(hex.len() % 2, 0, "fixture must have an even hex length");
-
-    let mut out = Vec::with_capacity(hex.len() / 2);
-    let mut i = 0;
-    while i < hex.len() {
-        let byte = u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte");
-        out.push(byte);
-        i += 2;
-    }
-    out
-}
-
-fn write_hex_checkpoint(prefix: &str) -> TempDir {
-    let root = unique_temp_root(prefix);
-    fs::write(root.path().join("tensor0000.pkl"), decode_hex_fixture()).expect("write shard");
-    root
-}
 
 fn scan_for(path: PathBuf) -> CheckpointScanArgs {
     CheckpointScanArgs {
@@ -97,7 +64,7 @@ fn write_optional_file_skips_when_path_unset() {
 
 #[test]
 fn write_optional_file_writes_when_path_set() {
-    let root = unique_temp_root("optional-file");
+    let root = unique_temp_dir("optional-file");
     let path = root.path().join("artifact.txt");
     write_optional_file(Some(&path), "optional", |p| {
         fs::write(p, "payload")?;
@@ -109,7 +76,7 @@ fn write_optional_file_writes_when_path_set() {
 
 #[test]
 fn write_json_and_markdown_writes_both_files() {
-    let root = unique_temp_root("json-md");
+    let root = unique_temp_dir("json-md");
     let json = root.path().join("doc.json");
     let md = root.path().join("doc.md");
     let doc = String::from("body");
@@ -130,7 +97,7 @@ fn write_json_and_markdown_writes_both_files() {
 
 #[test]
 fn write_json_and_markdown_prints_when_md_unset() {
-    let root = unique_temp_root("json-stdout");
+    let root = unique_temp_dir("json-stdout");
     let json = root.path().join("doc.json");
     let doc = String::from("body");
     write_json_and_markdown(
@@ -163,7 +130,7 @@ fn write_output_tree_skips_when_root_unset() {
 
 #[test]
 fn write_output_tree_writes_when_root_set() {
-    let root = unique_temp_root("output-tree");
+    let root = unique_temp_dir("output-tree");
     let root_path = root.path().to_path_buf();
     let called = AtomicBool::new(false);
     write_output_tree(
@@ -191,7 +158,7 @@ fn write_output_tree_writes_when_root_set() {
 #[test]
 fn run_inventory_writes_json_markdown_and_output_tree() {
     let ckpt = write_hex_checkpoint("run-inventory");
-    let out = unique_temp_root("run-inventory-out");
+    let out = unique_temp_dir("run-inventory-out");
     let json = out.path().join("inventory.json");
     let md = out.path().join("inventory.md");
     let tree = out.path().join("tree");
@@ -233,7 +200,7 @@ fn run_inventory_prints_markdown_when_md_unset() {
 #[test]
 fn run_experts_writes_json_and_markdown() {
     let ckpt = write_hex_checkpoint("run-experts");
-    let out = unique_temp_root("run-experts-out");
+    let out = unique_temp_dir("run-experts-out");
     let json = out.path().join("experts.json");
     let md = out.path().join("experts.md");
     let tree = out.path().join("tree");
@@ -256,7 +223,7 @@ fn run_experts_writes_json_and_markdown() {
 #[test]
 fn run_stats_and_saaq_readiness_against_hex_fixture() {
     let ckpt = write_hex_checkpoint("run-stats");
-    let out = unique_temp_root("run-stats-out");
+    let out = unique_temp_dir("run-stats-out");
     let scan = scan_for(ckpt.path().to_path_buf());
     let tree = OutputTreeArgs {
         output_root: Some(out.path().join("tree")),
@@ -299,7 +266,7 @@ fn run_stats_and_saaq_readiness_against_hex_fixture() {
 #[test]
 fn run_routing_report_against_hex_fixture() {
     let ckpt = write_hex_checkpoint("run-routing");
-    let out = unique_temp_root("run-routing-out");
+    let out = unique_temp_dir("run-routing-out");
     run_routing_report(
         &scan_for(ckpt.path().to_path_buf()),
         "grok-1",
@@ -364,7 +331,7 @@ fn write_json_and_markdown_uses_real_inventory_renderers() {
         },
     )
     .expect("build inventory");
-    let out = unique_temp_root("inventory-renderers-out");
+    let out = unique_temp_dir("inventory-renderers-out");
     write_json_and_markdown(
         &inv,
         Some(&out.path().join("inv.json")),
