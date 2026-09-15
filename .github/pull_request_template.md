@@ -48,7 +48,7 @@ claim instead of taking it:
 <!--
 State is one of:
 
-  verified                 `git show main:<path>` matches the concern -> resolve
+  verified                 `git show <sha> -- <path>` and `git show main:<path>` match the concern -> resolve
   deferred-with-rationale  intentional non-fix, rationale on the thread -> resolve
   fixed-now                real gap, fix not yet on `main` -> LEAVE OPEN
 

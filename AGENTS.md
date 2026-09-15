@@ -77,14 +77,16 @@ Dolt under `.beads/` is the issue source of truth; sync with `bd dolt push` /
 
 ## PR Review Threads
 
-Do **not** resolve a GitHub review thread on the strength of a reply. A thread is
-resolvable only when the change is provably on `main`:
+Do **not** resolve a GitHub review thread on the strength of a reply. Run both
+commands before resolving; a thread is resolvable only when the change is
+provably on `main`:
 
 ```bash
-git show main:<path>        # content on main must match the bot concern
-git show <sha> -- <path>    # only meaningful if the PR was not squashed
+git show <sha> -- <path>   # diff must match bot concern
+git show main:<path>       # fix must still exist
 ```
 
+Empty output from the first command means that SHA never touched the file.
 The one exception is a thread you are deliberately **not** fixing: mark it
 `deferred-with-rationale` and resolve it with that rationale on the thread. If a
 gap is real but the fix has not landed on `main` yet, the thread stays open —
