@@ -44,7 +44,20 @@ pub fn write_grok1_coverage_manifest_json(
 /// text-only; no plots, no HTML, no colors.
 pub fn render_markdown(inv: &ModelInventory) -> String {
     let mut md = String::new();
+    render_inventory_preamble(&mut md, inv);
+    render_inventory_kinds(&mut md, inv);
+    render_inventory_blocks(&mut md, inv);
+    render_inventory_exemplar(&mut md, inv);
+    md
+}
 
+/// Write the Markdown summary to `out`.
+pub fn write_markdown(inv: &ModelInventory, out: &Path) -> Result<()> {
+    let s = render_markdown(inv);
+    write_text(&s, out)
+}
+
+fn render_inventory_preamble(md: &mut String, inv: &ModelInventory) {
     let _ = writeln!(md, "# xai-dissect inventory");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", inv.model_family);
@@ -52,7 +65,6 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
     let _ = writeln!(md, "- **shards**: {}", inv.shard_count);
     let _ = writeln!(md, "- **schema_version**: {}", inv.schema_version);
 
-    // Inferred hyperparameters.
     let _ = writeln!(md);
     let _ = writeln!(md, "## Inferred hyperparameters");
     let _ = writeln!(md);
@@ -65,7 +77,6 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
     let _ = writeln!(md, "| d_ff | {} |", fmt_opt(hp.d_ff));
     let _ = writeln!(md, "| n_blocks | {} |", fmt_opt_u32(hp.n_blocks));
 
-    // Totals.
     let _ = writeln!(md);
     let _ = writeln!(md, "## Totals");
     let _ = writeln!(md);
@@ -83,8 +94,9 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
         t.total_nbytes,
         human_bytes(t.total_nbytes)
     );
+}
 
-    // Kind breakdown (across the whole inventory).
+fn render_inventory_kinds(md: &mut String, inv: &ModelInventory) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Tensor kinds");
     let _ = writeln!(md);
@@ -99,8 +111,9 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
     for (k, (c, n)) in &agg {
         let _ = writeln!(md, "| {} | {} | {} ({}) |", k, c, n, human_bytes(*n));
     }
+}
 
-    // Block summary table (compact).
+fn render_inventory_blocks(md: &mut String, inv: &ModelInventory) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Blocks");
     let _ = writeln!(md);
@@ -124,43 +137,36 @@ pub fn render_markdown(inv: &ModelInventory) -> String {
             kinds
         );
     }
-
-    // Exemplar block: dump the tensors of the first block-indexed summary
-    // so the reader can see the per-block layout at a glance.
-    if let Some(exemplar) = inv.blocks.iter().find(|b| b.block_index == Some(0)) {
-        let _ = writeln!(md);
-        let _ = writeln!(md, "## Exemplar block (`{}`)", exemplar.label);
-        let _ = writeln!(md);
-        let _ = writeln!(
-            md,
-            "| Shard | In-shard | Role | Dtype | Shape | Kind | Slot |"
-        );
-        let _ = writeln!(
-            md,
-            "| ----: | -------: | ---- | ----- | ----- | ---- | ---: |"
-        );
-        for ti in inv.tensors.iter().filter(|t| t.block_index == Some(0)) {
-            let _ = writeln!(
-                md,
-                "| {} | {} | {} | {} | `{}` | {} | {} |",
-                ti.shard_ordinal,
-                ti.in_shard_index,
-                ti.role.label(),
-                ti.dtype.label(),
-                ti.shape.render(),
-                ti.kind.short_label(),
-                fmt_opt_u32(ti.block_slot),
-            );
-        }
-    }
-
-    md
 }
 
-/// Write the Markdown summary to `out`.
-pub fn write_markdown(inv: &ModelInventory, out: &Path) -> Result<()> {
-    let s = render_markdown(inv);
-    write_text(&s, out)
+fn render_inventory_exemplar(md: &mut String, inv: &ModelInventory) {
+    let Some(exemplar) = inv.blocks.iter().find(|b| b.block_index == Some(0)) else {
+        return;
+    };
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Exemplar block (`{}`)", exemplar.label);
+    let _ = writeln!(md);
+    let _ = writeln!(
+        md,
+        "| Shard | In-shard | Role | Dtype | Shape | Kind | Slot |"
+    );
+    let _ = writeln!(
+        md,
+        "| ----: | -------: | ---- | ----- | ----- | ---- | ---: |"
+    );
+    for ti in inv.tensors.iter().filter(|t| t.block_index == Some(0)) {
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} | `{}` | {} | {} |",
+            ti.shard_ordinal,
+            ti.in_shard_index,
+            ti.role.label(),
+            ti.dtype.label(),
+            ti.shape.render(),
+            ti.kind.short_label(),
+            fmt_opt_u32(ti.block_slot),
+        );
+    }
 }
 
 fn render_kinds(b: &BlockSummary) -> String {

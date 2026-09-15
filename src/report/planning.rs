@@ -8,10 +8,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::common::{write_pretty_json, write_text};
+use super::common::{render_bullet_section, render_notes_section, write_pretty_json, write_text};
 use crate::schema::{
-    ConversionManifest, PilotSelectionPlan, QuantPlan, QuantPolicy, RouteMetricStatus,
-    RoutePreservationReport,
+    ConversionManifest, Grok1CoverageCounts, PilotSelectionPlan, QuantPlan, QuantPolicy,
+    RouteMetricStatus, RoutePreservationReport,
 };
 
 /// Write the conversion-ready manifest as pretty-printed JSON.
@@ -27,44 +27,72 @@ pub fn write_quant_plan_json(plan: &QuantPlan, out: &Path) -> Result<()> {
 /// Render a Markdown summary for the deterministic Grok-1 quant plan.
 pub fn render_quant_plan_markdown(plan: &QuantPlan) -> String {
     let mut md = String::new();
+    render_quant_plan_header(&mut md, plan);
+    render_coverage_counts(
+        &mut md,
+        "Required validation",
+        &plan.required_validation,
+        &plan.discovered_validation,
+    );
+    render_quant_plan_kind_lists(&mut md, plan);
+    render_notes_section(&mut md, &plan.notes, "None.");
+    md
+}
 
+/// Write the quant-plan Markdown summary to `out`.
+pub fn write_quant_plan_markdown(plan: &QuantPlan, out: &Path) -> Result<()> {
+    let s = render_quant_plan_markdown(plan);
+    write_text(&s, out)
+}
+
+fn render_quant_plan_header(md: &mut String, plan: &QuantPlan) {
     let _ = writeln!(md, "# xai-dissect quant plan");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", plan.model_family);
     let _ = writeln!(md, "- **checkpoint**: `{}`", plan.checkpoint_path.display());
     let _ = writeln!(md, "- **baseline**: `{}`", plan.baseline);
     let _ = writeln!(md, "- **schema_version**: {}", plan.schema_version);
+}
+
+fn render_coverage_counts(
+    md: &mut String,
+    heading: &str,
+    required: &Grok1CoverageCounts,
+    discovered: &Grok1CoverageCounts,
+) {
     let _ = writeln!(md);
-    let _ = writeln!(md, "## Required validation");
+    let _ = writeln!(md, "## {heading}");
     let _ = writeln!(md);
     let _ = writeln!(md, "| Metric | Required | Discovered |");
     let _ = writeln!(md, "| ------ | -------: | ---------: |");
     let _ = writeln!(
         md,
         "| blocks | {} | {} |",
-        plan.required_validation.blocks, plan.discovered_validation.blocks
+        required.blocks, discovered.blocks
     );
     let _ = writeln!(
         md,
         "| tensors | {} | {} |",
-        plan.required_validation.tensors, plan.discovered_validation.tensors
+        required.tensors, discovered.tensors
     );
     let _ = writeln!(
         md,
         "| routers | {} | {} |",
-        plan.required_validation.routers, plan.discovered_validation.routers
+        required.routers, discovered.routers
     );
     let _ = writeln!(
         md,
         "| expert_families | {} | {} |",
-        plan.required_validation.expert_families, plan.discovered_validation.expert_families
+        required.expert_families, discovered.expert_families
     );
     let _ = writeln!(
         md,
         "| unknown_tensors | {} | {} |",
-        plan.required_validation.unknown_tensors, plan.discovered_validation.unknown_tensors
+        required.unknown_tensors, discovered.unknown_tensors
     );
+}
 
+fn render_quant_plan_kind_lists(md: &mut String, plan: &QuantPlan) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Keep fp32");
     let _ = writeln!(md);
@@ -85,31 +113,30 @@ pub fn render_quant_plan_markdown(plan: &QuantPlan) -> String {
     for kind in &plan.defer {
         let _ = writeln!(md, "- `{kind}`");
     }
-
-    let _ = writeln!(md);
-    let _ = writeln!(md, "## Notes");
-    let _ = writeln!(md);
-    if plan.notes.is_empty() {
-        let _ = writeln!(md, "None.");
-    } else {
-        for note in &plan.notes {
-            let _ = writeln!(md, "- {}", note);
-        }
-    }
-
-    md
-}
-
-/// Write the quant-plan Markdown summary to `out`.
-pub fn write_quant_plan_markdown(plan: &QuantPlan, out: &Path) -> Result<()> {
-    let s = render_quant_plan_markdown(plan);
-    write_text(&s, out)
 }
 
 /// Render a human-readable Markdown summary of a conversion manifest.
 pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> String {
     let mut md = String::new();
+    render_conversion_header(&mut md, manifest);
+    render_coverage_counts(
+        &mut md,
+        "Validation",
+        &manifest.required_validation,
+        &manifest.discovered_validation,
+    );
+    render_conversion_policy_summary(&mut md, manifest);
+    render_bullet_section(&mut md, "Warnings", &manifest.warnings, "None.");
+    md
+}
 
+/// Write the conversion manifest Markdown summary to `out`.
+pub fn write_conversion_manifest_markdown(manifest: &ConversionManifest, out: &Path) -> Result<()> {
+    let s = render_conversion_manifest_markdown(manifest);
+    write_text(&s, out)
+}
+
+fn render_conversion_header(md: &mut String, manifest: &ConversionManifest) {
     let _ = writeln!(md, "# xai-dissect conversion manifest");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", manifest.model_family);
@@ -130,39 +157,9 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
     if let Some(ref orientation) = manifest.router_orientation {
         let _ = writeln!(md, "- **router_orientation**: `{}`", orientation.label());
     }
-    let _ = writeln!(md);
-    let _ = writeln!(md, "## Validation");
-    let _ = writeln!(md);
-    let _ = writeln!(md, "| Metric | Required | Discovered |");
-    let _ = writeln!(md, "| ------ | -------: | ---------: |");
-    let _ = writeln!(
-        md,
-        "| blocks | {} | {} |",
-        manifest.required_validation.blocks, manifest.discovered_validation.blocks
-    );
-    let _ = writeln!(
-        md,
-        "| tensors | {} | {} |",
-        manifest.required_validation.tensors, manifest.discovered_validation.tensors
-    );
-    let _ = writeln!(
-        md,
-        "| routers | {} | {} |",
-        manifest.required_validation.routers, manifest.discovered_validation.routers
-    );
-    let _ = writeln!(
-        md,
-        "| expert_families | {} | {} |",
-        manifest.required_validation.expert_families,
-        manifest.discovered_validation.expert_families
-    );
-    let _ = writeln!(
-        md,
-        "| unknown_tensors | {} | {} |",
-        manifest.required_validation.unknown_tensors,
-        manifest.discovered_validation.unknown_tensors
-    );
+}
 
+fn render_conversion_policy_summary(md: &mut String, manifest: &ConversionManifest) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Tensor summary");
     let _ = writeln!(md);
@@ -184,25 +181,6 @@ pub fn render_conversion_manifest_markdown(manifest: &ConversionManifest) -> Str
     for (policy, count) in &policy_counts {
         let _ = writeln!(md, "| `{}` | {} |", policy, count);
     }
-
-    let _ = writeln!(md);
-    let _ = writeln!(md, "## Warnings");
-    let _ = writeln!(md);
-    if manifest.warnings.is_empty() {
-        let _ = writeln!(md, "None.");
-    } else {
-        for warning in &manifest.warnings {
-            let _ = writeln!(md, "- {}", warning);
-        }
-    }
-
-    md
-}
-
-/// Write the conversion manifest Markdown summary to `out`.
-pub fn write_conversion_manifest_markdown(manifest: &ConversionManifest, out: &Path) -> Result<()> {
-    let s = render_conversion_manifest_markdown(manifest);
-    write_text(&s, out)
 }
 
 pub fn write_pilot_selection_plan_json(plan: &PilotSelectionPlan, out: &Path) -> Result<()> {

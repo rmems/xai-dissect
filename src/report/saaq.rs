@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::common::{fmt_opt_u32, write_pretty_json, write_text};
+use super::common::{fmt_opt_u32, render_notes_section, write_pretty_json, write_text};
 use crate::schema::{CandidateTensorManifest, SaaqDisposition, SaaqReadinessReport};
 
 /// Write the full SAAQ-readiness report as pretty-printed JSON.
@@ -23,7 +23,24 @@ pub fn write_candidate_manifest_json(manifest: &CandidateTensorManifest, out: &P
 /// Render a Markdown summary report for humans from a SAAQ-readiness report.
 pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> String {
     let mut md = String::new();
+    render_saaq_header(&mut md, report_doc);
+    render_saaq_candidates(&mut md, report_doc);
+    render_saaq_routing_critical(&mut md, report_doc);
+    render_saaq_precision_sensitive(&mut md, report_doc);
+    render_saaq_deferred(&mut md, report_doc);
+    render_saaq_risky(&mut md, report_doc);
+    render_saaq_layers(&mut md, report_doc);
+    render_notes_section(&mut md, &report_doc.notes, "None.");
+    md
+}
 
+/// Write the SAAQ-readiness Markdown summary to `out`.
+pub fn write_saaq_readiness_markdown(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
+    let s = render_saaq_readiness_markdown(report_doc);
+    write_text(&s, out)
+}
+
+fn render_saaq_header(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md, "# xai-dissect SAAQ-readiness report");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
@@ -54,7 +71,9 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
         report_doc.routing_critical_tensors.len()
     );
     let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+}
 
+fn render_saaq_candidates(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Quantization candidates");
     let _ = writeln!(md);
@@ -80,86 +99,96 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
             saaq_disposition_label(candidate.disposition)
         );
     }
+}
 
+fn render_saaq_routing_critical(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Routing-critical tensors");
     let _ = writeln!(md);
     if report_doc.routing_critical_tensors.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        let _ = writeln!(md, "| Tensor | Readiness | Risk | Reasons |");
-        let _ = writeln!(md, "| ------ | --------: | ---: | ------- |");
-        for candidate in &report_doc.routing_critical_tensors {
-            let _ = writeln!(
-                md,
-                "| `{}` | {:.3} | {:.3} | {} |",
-                candidate.structural_name,
-                candidate.readiness_score,
-                candidate.risk_score,
-                candidate.reasons.join("<br>")
-            );
-        }
+        return;
     }
+    let _ = writeln!(md, "| Tensor | Readiness | Risk | Reasons |");
+    let _ = writeln!(md, "| ------ | --------: | ---: | ------- |");
+    for candidate in &report_doc.routing_critical_tensors {
+        let _ = writeln!(
+            md,
+            "| `{}` | {:.3} | {:.3} | {} |",
+            candidate.structural_name,
+            candidate.readiness_score,
+            candidate.risk_score,
+            candidate.reasons.join("<br>")
+        );
+    }
+}
 
+fn render_saaq_precision_sensitive(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Precision-sensitive tensors");
     let _ = writeln!(md);
     if report_doc.precision_sensitive_tensors.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        let _ = writeln!(md, "| Tensor | Risk | Reasons |");
-        let _ = writeln!(md, "| ------ | ---: | ------- |");
-        for candidate in &report_doc.precision_sensitive_tensors {
-            let _ = writeln!(
-                md,
-                "| `{}` | {:.3} | {} |",
-                candidate.structural_name,
-                candidate.risk_score,
-                candidate.reasons.join("<br>")
-            );
-        }
+        return;
     }
+    let _ = writeln!(md, "| Tensor | Risk | Reasons |");
+    let _ = writeln!(md, "| ------ | ---: | ------- |");
+    for candidate in &report_doc.precision_sensitive_tensors {
+        let _ = writeln!(
+            md,
+            "| `{}` | {:.3} | {} |",
+            candidate.structural_name,
+            candidate.risk_score,
+            candidate.reasons.join("<br>")
+        );
+    }
+}
 
+fn render_saaq_deferred(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Deferred tensors");
     let _ = writeln!(md);
     if report_doc.deferred_tensors.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        let _ = writeln!(md, "| Tensor | Kind | Disposition | Reasons |");
-        let _ = writeln!(md, "| ------ | ---- | ----------- | ------- |");
-        for candidate in &report_doc.deferred_tensors {
-            let _ = writeln!(
-                md,
-                "| `{}` | {} | {} | {} |",
-                candidate.structural_name,
-                candidate.kind_label,
-                saaq_disposition_label(candidate.disposition),
-                candidate.reasons.join("<br>")
-            );
-        }
+        return;
     }
+    let _ = writeln!(md, "| Tensor | Kind | Disposition | Reasons |");
+    let _ = writeln!(md, "| ------ | ---- | ----------- | ------- |");
+    for candidate in &report_doc.deferred_tensors {
+        let _ = writeln!(
+            md,
+            "| `{}` | {} | {} | {} |",
+            candidate.structural_name,
+            candidate.kind_label,
+            saaq_disposition_label(candidate.disposition),
+            candidate.reasons.join("<br>")
+        );
+    }
+}
 
+fn render_saaq_risky(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Highest-risk tensors");
     let _ = writeln!(md);
     if report_doc.risky_tensors.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        let _ = writeln!(md, "| Tensor | Region | Risk | Reasons |");
-        let _ = writeln!(md, "| ------ | ------ | ---: | ------- |");
-        for candidate in &report_doc.risky_tensors {
-            let _ = writeln!(
-                md,
-                "| `{}` | {} | {:.3} | {} |",
-                candidate.structural_name,
-                saaq_region_label(candidate.region_class),
-                candidate.risk_score,
-                candidate.reasons.join("<br>")
-            );
-        }
+        return;
     }
+    let _ = writeln!(md, "| Tensor | Region | Risk | Reasons |");
+    let _ = writeln!(md, "| ------ | ------ | ---: | ------- |");
+    for candidate in &report_doc.risky_tensors {
+        let _ = writeln!(
+            md,
+            "| `{}` | {} | {:.3} | {} |",
+            candidate.structural_name,
+            saaq_region_label(candidate.region_class),
+            candidate.risk_score,
+            candidate.reasons.join("<br>")
+        );
+    }
+}
 
+fn render_saaq_layers(md: &mut String, report_doc: &SaaqReadinessReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Layer readiness");
     let _ = writeln!(md);
@@ -183,25 +212,6 @@ pub fn render_saaq_readiness_markdown(report_doc: &SaaqReadinessReport) -> Strin
             layer.max_risk_score
         );
     }
-
-    let _ = writeln!(md);
-    let _ = writeln!(md, "## Notes");
-    let _ = writeln!(md);
-    if report_doc.notes.is_empty() {
-        let _ = writeln!(md, "None.");
-    } else {
-        for note in &report_doc.notes {
-            let _ = writeln!(md, "- {}", note);
-        }
-    }
-
-    md
-}
-
-/// Write the SAAQ-readiness Markdown summary to `out`.
-pub fn write_saaq_readiness_markdown(report_doc: &SaaqReadinessReport, out: &Path) -> Result<()> {
-    let s = render_saaq_readiness_markdown(report_doc);
-    write_text(&s, out)
 }
 
 fn saaq_region_label(region: crate::schema::SaaqRegionClass) -> &'static str {

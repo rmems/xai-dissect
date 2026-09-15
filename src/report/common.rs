@@ -2,6 +2,7 @@
 //
 //! Shared JSON/text writers and formatting helpers for report artifacts.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -47,6 +48,39 @@ pub(super) fn fmt_opt_u32(v: Option<u32>) -> String {
         Some(x) => x.to_string(),
         None => "-".to_string(),
     }
+}
+
+pub(super) fn format_tensor_locator(
+    shard_ordinal: u32,
+    in_shard_index: u32,
+    block_slot: Option<u32>,
+    missing_slot: &str,
+) -> String {
+    format!(
+        "shard {} idx {} slot {}",
+        shard_ordinal,
+        in_shard_index,
+        block_slot
+            .map(|slot| slot.to_string())
+            .unwrap_or_else(|| missing_slot.to_string())
+    )
+}
+
+pub(super) fn render_bullet_section(md: &mut String, title: &str, items: &[String], empty: &str) {
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## {title}");
+    let _ = writeln!(md);
+    if items.is_empty() {
+        let _ = writeln!(md, "{empty}");
+    } else {
+        for item in items {
+            let _ = writeln!(md, "- {item}");
+        }
+    }
+}
+
+pub(super) fn render_notes_section(md: &mut String, notes: &[String], empty: &str) {
+    render_bullet_section(md, "Notes", notes, empty);
 }
 
 pub(super) fn human_bytes(n: u64) -> String {

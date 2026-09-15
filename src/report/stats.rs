@@ -18,7 +18,20 @@ pub fn write_stats_json(report_doc: &StatsProfileReport, out: &Path) -> Result<(
 /// Render a Markdown summary report for humans from a stats profile.
 pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
     let mut md = String::new();
+    render_stats_header(&mut md, report_doc);
+    render_stats_summaries(&mut md, report_doc);
+    render_stats_layers(&mut md, report_doc);
+    render_stats_tensors(&mut md, report_doc);
+    md
+}
 
+/// Write the stats Markdown summary to `out`.
+pub fn write_stats_markdown(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
+    let s = render_stats_markdown(report_doc);
+    write_text(&s, out)
+}
+
+fn render_stats_header(md: &mut String, report_doc: &StatsProfileReport) {
     let _ = writeln!(md, "# xai-dissect stats report");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
@@ -34,7 +47,9 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
         report_doc.sampling.max_sample_values
     );
     let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+}
 
+fn render_stats_summaries(md: &mut String, report_doc: &StatsProfileReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Norm summary");
     let _ = writeln!(md);
@@ -43,8 +58,8 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
         "- **mean_rms**: {:.6}",
         report_doc.norm_summary.mean_rms
     );
-    render_ranked_table(&mut md, "Top RMS tensors", &report_doc.norm_summary.top_rms);
-    render_ranked_table(&mut md, "Top L2 tensors", &report_doc.norm_summary.top_l2);
+    render_ranked_table(md, "Top RMS tensors", &report_doc.norm_summary.top_rms);
+    render_ranked_table(md, "Top L2 tensors", &report_doc.norm_summary.top_l2);
 
     let _ = writeln!(md);
     let _ = writeln!(md, "## Variance summary");
@@ -55,16 +70,19 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
         report_doc.variance_summary.mean_variance
     );
     render_ranked_table(
-        &mut md,
+        md,
         "Top variance tensors",
         &report_doc.variance_summary.top_variance,
     );
     render_ranked_table(
-        &mut md,
+        md,
         "Lowest variance tensors",
         &report_doc.variance_summary.lowest_variance,
     );
+    render_stats_outlier_summary(md, report_doc);
+}
 
+fn render_stats_outlier_summary(md: &mut String, report_doc: &StatsProfileReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Outlier summary");
     let _ = writeln!(md);
@@ -74,16 +92,18 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
         report_doc.outlier_summary.mean_outlier_fraction
     );
     render_ranked_table(
-        &mut md,
+        md,
         "Most outlier-heavy tensors",
         &report_doc.outlier_summary.most_outlier_heavy,
     );
     render_ranked_table(
-        &mut md,
+        md,
         "Highest peak-to-RMS tensors",
         &report_doc.outlier_summary.highest_peak_to_rms,
     );
+}
 
+fn render_stats_layers(md: &mut String, report_doc: &StatsProfileReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Per-layer metrics");
     let _ = writeln!(md);
@@ -111,7 +131,9 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
             layer.compressible_candidate_count
         );
     }
+}
 
+fn render_stats_tensors(md: &mut String, report_doc: &StatsProfileReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Per-tensor metrics");
     let _ = writeln!(md);
@@ -139,14 +161,6 @@ pub fn render_stats_markdown(report_doc: &StatsProfileReport) -> String {
             tensor.distribution_label
         );
     }
-
-    md
-}
-
-/// Write the stats Markdown summary to `out`.
-pub fn write_stats_markdown(report_doc: &StatsProfileReport, out: &Path) -> Result<()> {
-    let s = render_stats_markdown(report_doc);
-    write_text(&s, out)
 }
 
 fn render_ranked_table(md: &mut String, title: &str, rows: &[crate::schema::RankedTensorStat]) {

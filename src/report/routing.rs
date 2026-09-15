@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::common::{fmt_opt, human_bytes, write_pretty_json, write_text};
+use super::common::{fmt_opt, format_tensor_locator, human_bytes, write_pretty_json, write_text};
 use crate::schema::{RoutingCriticalTensorManifest, RoutingIssueCategory, RoutingReport};
 
 /// Write the full routing report as pretty-printed JSON.
@@ -26,7 +26,31 @@ pub fn write_routing_critical_manifest_json(
 /// Render a Markdown summary report for humans from a routing report.
 pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
     let mut md = String::new();
+    render_routing_header(&mut md, report_doc);
+    render_routing_candidates(&mut md, report_doc);
+    render_routing_orientations(&mut md, report_doc);
+    render_routing_layers(&mut md, report_doc);
+    render_routing_gate_metrics(&mut md, report_doc);
+    render_routing_expert_linkage(&mut md, report_doc);
+    render_routing_critical_blocks(&mut md, report_doc);
+    render_routing_layout_notes(&mut md, report_doc);
+    render_routing_issue_section(&mut md, "Routing anomalies", report_doc, None);
+    render_routing_issue_section(
+        &mut md,
+        "Missing routing candidates",
+        report_doc,
+        Some(RoutingIssueCategory::MissingCandidate),
+    );
+    md
+}
 
+/// Write the routing Markdown summary to `out`.
+pub fn write_routing_markdown(report_doc: &RoutingReport, out: &Path) -> Result<()> {
+    let s = render_routing_markdown(report_doc);
+    write_text(&s, out)
+}
+
+fn render_routing_header(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md, "# xai-dissect routing report");
     let _ = writeln!(md);
     let _ = writeln!(md, "- **model_family**: `{}`", report_doc.model_family);
@@ -47,7 +71,9 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
         fmt_opt(report_doc.expected_experts_per_router)
     );
     let _ = writeln!(md, "- **schema_version**: {}", report_doc.schema_version);
+}
 
+fn render_routing_candidates(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Candidate routing tensors");
     let _ = writeln!(md);
@@ -78,7 +104,9 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             tensor.structural_name
         );
     }
+}
 
+fn render_routing_orientations(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Shape and orientation summaries");
     let _ = writeln!(md);
@@ -104,7 +132,9 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             shapes
         );
     }
+}
 
+fn render_routing_layers(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Layer-by-layer routing metadata");
     let _ = writeln!(md);
@@ -121,14 +151,11 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             .primary_candidate
             .as_ref()
             .map(|locator| {
-                format!(
-                    "shard {} idx {} slot {}",
+                format_tensor_locator(
                     locator.shard_ordinal,
                     locator.in_shard_index,
-                    locator
-                        .block_slot
-                        .map(|slot| slot.to_string())
-                        .unwrap_or_else(|| "-".to_string())
+                    locator.block_slot,
+                    "-",
                 )
             })
             .unwrap_or_else(|| "-".to_string());
@@ -145,7 +172,9 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             block.candidates.len()
         );
     }
+}
 
+fn render_routing_gate_metrics(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Gate tensor structural metrics");
     let _ = writeln!(md);
@@ -169,7 +198,9 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             human_bytes(tensor.gate_metrics.total_nbytes)
         );
     }
+}
 
+fn render_routing_expert_linkage(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Expert count linkage");
     let _ = writeln!(md);
@@ -194,55 +225,43 @@ pub fn render_routing_markdown(report_doc: &RoutingReport) -> String {
             }
         );
     }
+}
 
+fn render_routing_critical_blocks(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Likely routing-critical blocks");
     let _ = writeln!(md);
     if report_doc.likely_routing_critical_blocks.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        let _ = writeln!(md, "| Block | Label | Reason |");
-        let _ = writeln!(md, "| ----: | ----- | ------ |");
-        for block in &report_doc.likely_routing_critical_blocks {
-            let _ = writeln!(
-                md,
-                "| {} | {} | {} |",
-                block
-                    .block_index
-                    .map(|index| index.to_string())
-                    .unwrap_or_else(|| "-".to_string()),
-                block.label,
-                block.reason
-            );
-        }
+        return;
     }
+    let _ = writeln!(md, "| Block | Label | Reason |");
+    let _ = writeln!(md, "| ----: | ----- | ------ |");
+    for block in &report_doc.likely_routing_critical_blocks {
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} |",
+            block
+                .block_index
+                .map(|index| index.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            block.label,
+            block.reason
+        );
+    }
+}
 
+fn render_routing_layout_notes(md: &mut String, report_doc: &RoutingReport) {
     let _ = writeln!(md);
     let _ = writeln!(md, "## Grok-specific layout notes");
     let _ = writeln!(md);
     if report_doc.grok_layout_notes.is_empty() {
         let _ = writeln!(md, "None detected.");
-    } else {
-        for note in &report_doc.grok_layout_notes {
-            let _ = writeln!(md, "- {}", note);
-        }
+        return;
     }
-
-    render_routing_issue_section(&mut md, "Routing anomalies", report_doc, None);
-    render_routing_issue_section(
-        &mut md,
-        "Missing routing candidates",
-        report_doc,
-        Some(RoutingIssueCategory::MissingCandidate),
-    );
-
-    md
-}
-
-/// Write the routing Markdown summary to `out`.
-pub fn write_routing_markdown(report_doc: &RoutingReport, out: &Path) -> Result<()> {
-    let s = render_routing_markdown(report_doc);
-    write_text(&s, out)
+    for note in &report_doc.grok_layout_notes {
+        let _ = writeln!(md, "- {}", note);
+    }
 }
 
 fn render_routing_issue_section(
@@ -270,6 +289,10 @@ fn render_routing_issue_section(
         return;
     }
 
+    write_routing_issue_table(md, &issues);
+}
+
+fn write_routing_issue_table(md: &mut String, issues: &[&crate::schema::RoutingIssue]) {
     let _ = writeln!(md, "| Block | Severity | Category | Tensor | Message |");
     let _ = writeln!(md, "| ----: | -------- | -------- | ------ | ------- |");
     for issue in issues {
@@ -277,14 +300,11 @@ fn render_routing_issue_section(
             .tensor
             .as_ref()
             .map(|tensor| {
-                format!(
-                    "shard {} idx {} slot {}",
+                format_tensor_locator(
                     tensor.shard_ordinal,
                     tensor.in_shard_index,
-                    tensor
-                        .block_slot
-                        .map(|slot| slot.to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                    tensor.block_slot,
+                    "?",
                 )
             })
             .unwrap_or_else(|| "-".to_string());
