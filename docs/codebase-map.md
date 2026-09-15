@@ -23,7 +23,7 @@ in-process API contract ([`export-contracts.md`](export-contracts.md)).
   [ schema ]          TensorInfo and every serializable export type
         |
         v
-  [ inventory ]       ModelInventory  (classify, block-map, coverage gate)
+  [ inventory ]       ModelInventory  (classify, block-map)
         |
         +--> [ experts ]    ExpertAtlas
         +--> [ routing ]    RoutingReport
@@ -38,7 +38,10 @@ in-process API contract ([`export-contracts.md`](export-contracts.md)).
 
 Every inventory-backed CLI command loads `ModelInventory` first. `dissect`
 stops at the parser. `quant-plan` is the only command that runs the full
-analyzer stack before planning.
+analyzer stack before planning. The Grok-1 coverage gate
+(`inventory::validate_grok1_complete_manifest`) is not part of
+`build_inventory`; it runs when an inventory bundle is exported and when
+planning validators run.
 
 ## Per-module table
 
@@ -51,8 +54,9 @@ marked **yes**. Smaller files are listed so the crate has no holes.
 | [`src/lib.rs`](../src/lib.rs) | no (19) | Library crate root. Re-exports analysis modules. Binary-only modules (`cli`, `observability`) are not here. | — → `pub mod` surface | none (wiring only) |
 | [`src/main.rs`](../src/main.rs) | **yes** | clap entry. Owns `Command` plus parser-only `dissect`. Inventory-backed variants dispatch to `cli::run_*`. `Command::name()` / `fields()` feed tracing / Sentry. | argv → `cli::run_*` / `parser::dissect_shard` → stdout table | `src/main.rs` (`command_name_and_fields_cover_every_variant`, `dissect_hex_fixture_prints_tensor_table`); [`tests/cli_help.rs`](../tests/cli_help.rs) |
 | [`src/observability.rs`](../src/observability.rs) | **yes** | Opt-in Sentry (`XAI_DISSECT_SENTRY` + `SENTRY_DSN`) and tracing init. Default off. Path-scrubs `$HOME` only. | `anyhow::Error` → Sentry event / `error_category` tag | `src/observability.rs` (`categorizes_*`, `sentry_opt_in_ready`, path scrub) |
-| [`src/cli/mod.rs`](../src/cli/mod.rs) | **yes** | Inventory-backed handlers. Shared clap groups (`CheckpointScanArgs`, `OutputTreeArgs`, family, sample-values). Complete-scope gate for planning commands. | scan args → `inventory::build_inventory` → analyzer → `report` / `exports` | [`src/cli/tests.rs`](../src/cli/tests.rs) (`run_inventory_*`, `run_experts_*`, `run_stats_and_saaq_*`, `planning_commands_reject_*`); [`tests/cli_orchestration.rs`](../tests/cli_orchestration.rs) |
+| [`src/cli/mod.rs`](../src/cli/mod.rs) | **yes** | Inventory-backed handlers. Shared clap groups (`CheckpointScanArgs`, `OutputTreeArgs`, family, sample-values). Complete-scope gate for planning commands. | scan args → `inventory::build_inventory` → analyzer → `report` / `exports` | [`src/cli/tests.rs`](../src/cli/tests.rs); [`tests/cli_orchestration.rs`](../tests/cli_orchestration.rs) |
 | [`src/cli/summary.rs`](../src/cli/summary.rs) | **yes** | stderr console summaries after each subcommand. Display only; not an export. | schema report types → stderr | `src/cli/summary.rs` (per-command summary tests) |
+| [`src/cli/tests.rs`](../src/cli/tests.rs) | **yes** | Handler tests for `cli::run_*`, complete-scope gate, and `--json` / `--md` / `--output-root` writers. Test-only (`#[cfg(test)] mod tests` from `cli/mod.rs`). | `cli::run_*` + hex fixtures → written files / stdout | `run_inventory_*`, `run_experts_*`, `run_stats_and_saaq_*`, `planning_commands_reject_*` |
 | [`src/parser/mod.rs`](../src/parser/mod.rs) | **yes** | PROTO 4 byte-grammar scanner. No Python, no payload decode, no `TensorKind`. | shard path → `Vec<RawTensor>` (`role`, `dtype`, `shape`, `offset`, `nbytes`) | `src/parser/mod.rs` (`qw8_role_assignment_*`); [`tests/parser_inventory.rs`](../tests/parser_inventory.rs) (`parser_fixture_discovers_single_f32_tensor`) |
 | [`src/schema/mod.rs`](../src/schema/mod.rs) | **yes** | Canonical serializable types. Every JSON document lives here. Version discipline is documented at the top of the file. | parser/inventory fields → `TensorKind`, `TensorInfo`, `ModelInventory`, `ExpertAtlas`, `RoutingReport`, `StatsProfileReport`, `SaaqReadinessReport`, `Grok1CoverageManifest`, `ConversionManifest`, `QuantPlan`, `PilotSelectionPlan`, `RoutePreservationReport`, manifests | round-trip coverage via [`tests/export_contracts.rs`](../tests/export_contracts.rs) and schema-using unit tests; no dedicated `schema` test module |
 | [`src/inventory/mod.rs`](../src/inventory/mod.rs) | **yes** | Walk shards, infer hyperparams, classify `TensorKind`, assign `block_index` / `block_slot`, disambiguate Grok-1 gate/up. | `RawTensor` + `InventoryConfig` → `ModelInventory` | `src/inventory/mod.rs` (`shifted_grok_layout_*`, classification/layout tests); [`tests/parser_inventory.rs`](../tests/parser_inventory.rs) (`inventory_fixture_builds_without_real_weights`) |
@@ -222,4 +226,4 @@ as well, not only from `build_grok1_planning_artifacts`.
 | [`contributing-bot-reviews.md`](contributing-bot-reviews.md) | Review-thread proof before resolve |
 
 Tracked as [GitHub #41](https://github.com/rmems/xai-dissect/issues/41)
-/ Linear [RM-152](https://linear.app/rpd-34/issue/RM-152).
+and Linear [RM-152](https://linear.app/rpd-34/issue/RM-152).
