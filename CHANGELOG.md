@@ -44,6 +44,8 @@ All notable changes to `xai-dissect` are documented here.
 
 ### Documented
 
+- Maintainer CLI command → pipeline map in `docs/cli-routing.md`
+  ([#46](https://github.com/rmems/xai-dissect/issues/46)).
 - `saaq-readiness.json` is `schema_version: 2` in `docs/export-contracts.md`,
   with the v1 → v2 `candidate_targets` → `quantization_candidates` rename and
   the dual-key emission spelled out (the code bump landed in
