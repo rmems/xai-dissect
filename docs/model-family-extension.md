@@ -112,9 +112,9 @@ Current Grok-1 implementation is inlined in `src/inventory/mod.rs`:
 | Step | Function | Grok-1-specific piece |
 | ---- | -------- | --------------------- |
 | Shard glob | `InventoryConfig.prefix` (default `"tensor"`) | official leaf naming |
-| Infer width / experts | `infer_hyperparams` | heuristics are mostly shape-generic; `n_blocks` is not |
+| Infer width / experts | `infer_hyperparams` | `vocab_size`, `d_model`, `n_experts`, `d_ff` from shapes; does **not** set `n_blocks` |
 | Classify | `classify_tensor` | Grok-1 shape language parameterized by inferred `hp` |
-| Block windows | `assign_block_indices` | `candidates = [12]` (`K = 12`) |
+| Block windows | `assign_block_indices` / `assign_block_indices_for_scan` | `candidates = [12]` (`K = 12`); this pass sets `inferred.n_blocks` |
 | Layout pick | `choose_grok_block_layout` / `grok_layout_candidate` | embedding + edge-norm + equal block windows |
 | Gate vs up | `disambiguate_grok1_moe_projection_slots` | Haiku restore order, slots 0/1/2 |
 
@@ -202,9 +202,9 @@ surface.
 | ---- | ------ | --------------------- |
 | `src/inventory/mod.rs` | `InventoryConfig::default` | `prefix = "tensor"`, `model_family = "grok-1"` |
 | `src/inventory/mod.rs` | `build_inventory` | calls Grok-1 MoE disambiguation when family is `"grok-1"` |
-| `src/inventory/mod.rs` | `infer_hyperparams` | `n_blocks` from Grok-1 shard arithmetic |
+| `src/inventory/mod.rs` | `infer_hyperparams` | `vocab_size` / `d_model` / `n_experts` / `d_ff` from shapes; does not set `n_blocks` |
 | `src/inventory/mod.rs` | `classify_tensor` | Grok-1 shape → `TensorKind` rules |
-| `src/inventory/mod.rs` | `assign_block_indices` | `candidates = [12]` |
+| `src/inventory/mod.rs` | `assign_block_indices` | `candidates = [12]`; sets `inferred.n_blocks` |
 | `src/inventory/mod.rs` | `assign_block_indices_for_scan` | skips layout when `--limit` truncated the scan |
 | `src/inventory/mod.rs` | `GrokBlockLayout`, `choose_grok_block_layout`, `grok_layout_candidate` | embedding + edge-norm + 64×K windows |
 | `src/inventory/mod.rs` | `disambiguate_grok1_moe_projection_slots` | only runs for `"grok-1"` |
@@ -363,11 +363,14 @@ Registry policy for v1:
 
 Worked example: Grok-1 is the template. Replace the italic parts.
 
-1. **Confirm format.** Run `dissect` (or `parser::dissect_shard`) on one
-   real shard. If PROTO 4 / `f32`+`int8` / `QuantizedWeight8bit` still
-   hold, keep the parser. If not, file a parser issue *first* and stop.
-   Capture dtypes, a few shapes, and the exact failure in the Grok-2
-   issue template (`.github/ISSUE_TEMPLATE/grok2-support.md`).
+1. **Confirm format.** Point the `dissect` CLI at a **checkpoint
+   directory** (`dissect /path/to/ckpt --limit 1`). The command
+   `read_dir`s its positional path, so a shard file fails. To scan one
+   file, call `parser::dissect_shard` from a test or REPL. If PROTO 4 /
+   `f32`+`int8` / `QuantizedWeight8bit` still hold, keep the parser. If
+   not, file a parser issue *first* and stop. Capture dtypes, a few
+   shapes, and the exact failure in the Grok-2 issue template
+   (`.github/ISSUE_TEMPLATE/grok2-support.md`).
 2. **Name the family.** Stable id string (`grok-1`, later `grok-2`). This
    is the `--family` value and every export's `model_family`. Do not
    overload `grok-1` for a different layout.
@@ -376,9 +379,11 @@ Worked example: Grok-1 is the template. Replace the italic parts.
    shards per block `K`, singleton placement, per-slot role/dtype/shape,
    source-backed projection order if shape collides (Grok-1 gate vs up).
 4. **Infer hyperparameters without copying Grok-1 constants.** Follow
-   `infer_hyperparams`: embedding → `vocab_size`/`d_model`, expert stack →
-   `n_experts`/`d_ff`, layout → `n_blocks`. Hardcoded widths belong in
-   the **coverage** profile, not in classification.
+   `infer_hyperparams` for embedding → `vocab_size`/`d_model` and expert
+   stack → `n_experts`/`d_ff`. `n_blocks` comes from the layout pass
+   (`assign_block_indices` / `assign_block_indices_for_scan`), not from
+   `infer_hyperparams`. Hardcoded widths belong in the **coverage**
+   profile, not in classification.
 5. **Classify, then disambiguate.** Shape rules first (`classify_tensor`);
    slot map second (`grok1_moe_projection_for_slot`). A new family that
    also cannot tell gate from up by shape needs its own restore-order
