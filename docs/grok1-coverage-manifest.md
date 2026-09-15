@@ -4,6 +4,10 @@ This document explains the `grok1-coverage.json` manifest produced by
 `xai-dissect`, the `grok1-map-v1-clean` baseline profile, and the
 FNV-1a 64-bit checksum algorithm used for reproducibility verification.
 
+A second model family needs its own baseline name, expected counts, and
+slot table — not a reuse of `grok1-map-v1-clean`. See
+[`docs/model-family-extension.md`](model-family-extension.md).
+
 ## What is grok1-map-v1-clean?
 
 `grok1-map-v1-clean` is the canonical structural baseline profile for

@@ -60,7 +60,9 @@ execution is not.
 These are not non-goals; they are "not yet":
 
 - **Grok-2** support. Depends on a public release under a compatible
-  license. No work starts until that exists.
+  license. No work starts until that exists. The maintainer design for
+  plugging a second family is `docs/model-family-extension.md`; the
+  Grok-2 checklist is `docs/grok2-future-support.md`.
 - Additional dtypes beyond `f32` and `int8`. Added only when a supported
   checkpoint actually requires them.
 - A stable Rust library API. The export schema is the stable surface
