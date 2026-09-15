@@ -256,6 +256,10 @@ See:
 - [docs/output-conventions.md](docs/output-conventions.md)
 - [Bot review verification](docs/contributing-bot-reviews.md) — do not resolve review threads without `git show` proof
 
+## Maintainers
+
+- [docs/codebase-map.md](docs/codebase-map.md) — how the Rust modules connect, and where to add a `TensorKind`, CLI subcommand, export artifact, Grok-1 slot spec, or planning validator
+
 ## Legal / Ethical Scope
 
 - Analyze only weights you have lawful access to under the original license
