@@ -19,7 +19,7 @@ use xai_dissect::schema::{
     ExpertIssue, ExpertIssueCategory, ExpertIssueSeverity, ExpertTensorLocator, FindingsSeverity,
     FindingsSummary, FindingsSummaryItem, MetricStatus, QuantPolicy, RouteMetricStatus,
     RoutingIssue, RoutingIssueCategory, RoutingIssueSeverity, RoutingTensorLocator,
-    SaaqDisposition, SaaqLayerReadiness, SaaqRegionClass,
+    SaaqDisposition, SaaqLayerReadiness, SaaqReadinessReport, SaaqRegionClass,
 };
 
 use support::{
@@ -96,7 +96,11 @@ fn expert_markdown_covers_empty_lists_failed_checks_and_issues() {
     assert!(md.contains("shard 2 idx 1 slot ?"));
     assert!(md.contains("| 1 | warning | - | naming |"));
     assert!(md.contains("| error |"));
+}
 
+#[test]
+fn expert_markdown_covers_empty_blocks() {
+    let mut atlas = sample_expert_atlas();
     atlas.blocks.clear();
     let empty = render_expert_markdown(&atlas);
     assert!(!empty.contains("## Exemplar block"));
@@ -108,42 +112,34 @@ fn routing_markdown_covers_empty_shapes_unmatched_experts_and_issues() {
     report.orientation_summaries[0].observed_shapes.clear();
     report.candidate_tensors[0].matches_inferred_expert_count = false;
     report.anomalies = vec![
-        RoutingIssue {
-            severity: RoutingIssueSeverity::Warning,
-            category: RoutingIssueCategory::ShapeSummary,
-            block_index: Some(0),
-            tensor: Some(RoutingTensorLocator {
-                shard_ordinal: 1,
-                in_shard_index: 0,
-                block_slot: Some(0),
-            }),
-            message: "shape note".into(),
-        },
-        RoutingIssue {
-            severity: RoutingIssueSeverity::Error,
-            category: RoutingIssueCategory::ExpertCountLinkage,
-            block_index: None,
-            tensor: Some(RoutingTensorLocator {
-                shard_ordinal: 3,
-                in_shard_index: 2,
-                block_slot: None,
-            }),
-            message: "linkage".into(),
-        },
-        RoutingIssue {
-            severity: RoutingIssueSeverity::Warning,
-            category: RoutingIssueCategory::LayoutNote,
-            block_index: Some(4),
-            tensor: None,
-            message: "layout".into(),
-        },
-        RoutingIssue {
-            severity: RoutingIssueSeverity::Error,
-            category: RoutingIssueCategory::MissingCandidate,
-            block_index: Some(5),
-            tensor: None,
-            message: "missing router".into(),
-        },
+        routing_issue(
+            RoutingIssueSeverity::Warning,
+            RoutingIssueCategory::ShapeSummary,
+            Some(0),
+            Some((1, 0, Some(0))),
+            "shape note",
+        ),
+        routing_issue(
+            RoutingIssueSeverity::Error,
+            RoutingIssueCategory::ExpertCountLinkage,
+            None,
+            Some((3, 2, None)),
+            "linkage",
+        ),
+        routing_issue(
+            RoutingIssueSeverity::Warning,
+            RoutingIssueCategory::LayoutNote,
+            Some(4),
+            None,
+            "layout",
+        ),
+        routing_issue(
+            RoutingIssueSeverity::Error,
+            RoutingIssueCategory::MissingCandidate,
+            Some(5),
+            None,
+            "missing router",
+        ),
     ];
     let md = render_routing_markdown(&report);
     assert!(md.contains("| no |"));
@@ -153,7 +149,11 @@ fn routing_markdown_covers_empty_shapes_unmatched_experts_and_issues() {
     assert!(md.contains("missing_candidate"));
     assert!(md.contains("shard 3 idx 2 slot ?"));
     assert!(md.contains("missing router"));
+}
 
+#[test]
+fn routing_markdown_covers_empty_critical_tables_and_optional_fields() {
+    let mut report = sample_routing_report();
     report.candidate_tensors[0].block_index = None;
     report.candidate_tensors[0].block_slot = None;
     report.candidate_tensors[0].linked_expert_count = None;
@@ -169,7 +169,7 @@ fn routing_markdown_covers_empty_shapes_unmatched_experts_and_issues() {
     assert!(empty.contains("1.00 MiB"));
     assert!(empty.contains("## Likely routing-critical blocks"));
     assert!(empty.contains("## Grok-specific layout notes"));
-    assert_eq!(empty.matches("None detected.").count(), 2);
+    assert_eq!(empty.matches("None detected.").count(), 4);
 }
 
 #[test]
@@ -181,40 +181,12 @@ fn stats_markdown_covers_empty_ranked_tables() {
 }
 
 #[test]
-fn saaq_markdown_covers_empty_deferred_and_remaining_labels() {
+fn saaq_markdown_covers_remaining_region_and_disposition_labels() {
     let mut report = sample_saaq_readiness();
     report.deferred_tensors.clear();
     report.quantization_candidates[0].region_class = SaaqRegionClass::AlreadyCompressed;
     report.quantization_candidates[0].disposition = SaaqDisposition::ObserveOnly;
-    let extra = report.quantization_candidates[0].clone();
-    for (name, region, disposition) in [
-        (
-            "blk.0.attn.qkv.weight",
-            SaaqRegionClass::Unknown,
-            SaaqDisposition::ObserveOnly,
-        ),
-        (
-            "blk.0.moe.router.weight",
-            SaaqRegionClass::RoutingCritical,
-            SaaqDisposition::AvoidForNow,
-        ),
-        (
-            "blk.0.moe.expert.0.mlp.linear_1.weight",
-            SaaqRegionClass::PotentialCompressionTarget,
-            SaaqDisposition::Candidate,
-        ),
-        (
-            "token_embd.weight",
-            SaaqRegionClass::EmbeddingHeavy,
-            SaaqDisposition::ObserveOnly,
-        ),
-    ] {
-        let mut tensor = extra.clone();
-        tensor.structural_name = name.into();
-        tensor.region_class = region;
-        tensor.disposition = disposition;
-        report.quantization_candidates.push(tensor);
-    }
+    push_saaq_label_variants(&mut report);
     report.risky_tensors[0].region_class = SaaqRegionClass::Unknown;
     report.layer_readiness.push(SaaqLayerReadiness {
         block_index: None,
@@ -225,8 +197,6 @@ fn saaq_markdown_covers_empty_deferred_and_remaining_labels() {
         max_risk_score: 0.0,
     });
     let md = render_saaq_readiness_markdown(&report);
-    assert!(md.contains("## Deferred tensors"));
-    assert!(md.contains("None detected."));
     assert!(md.contains("already_compressed"));
     assert!(md.contains("observe_only"));
     assert!(md.contains("unknown"));
@@ -235,19 +205,21 @@ fn saaq_markdown_covers_empty_deferred_and_remaining_labels() {
     assert!(md.contains("potential_target"));
     assert!(md.contains("embedding_heavy"));
     assert!(md.contains("| embedding | - | no |"));
+}
 
+#[test]
+fn saaq_markdown_covers_empty_optional_tables() {
+    let mut report = sample_saaq_readiness();
+    report.deferred_tensors.clear();
     report.routing_critical_tensors.clear();
     report.precision_sensitive_tensors.clear();
     report.risky_tensors.clear();
-    let empty_tables = render_saaq_readiness_markdown(&report);
-    assert!(empty_tables.contains("## Routing-critical tensors"));
-    assert!(empty_tables.contains("## Precision-sensitive tensors"));
-    assert!(empty_tables.contains("## Highest-risk tensors"));
-    assert_eq!(
-        empty_tables.matches("None detected.").count(),
-        4,
-        "deferred, routing-critical, precision-sensitive, and risky tables should all be empty"
-    );
+    let md = render_saaq_readiness_markdown(&report);
+    assert!(md.contains("## Deferred tensors"));
+    assert!(md.contains("## Routing-critical tensors"));
+    assert!(md.contains("## Precision-sensitive tensors"));
+    assert!(md.contains("## Highest-risk tensors"));
+    assert_eq!(md.matches("None detected.").count(), 4);
 }
 
 #[test]
@@ -342,4 +314,58 @@ fn findings_summary_json_writes_when_path_has_no_parent() {
     let body = fs::read_to_string(&name).expect("read findings json");
     let _ = fs::remove_file(&name);
     assert!(body.contains("\"analysis\": \"inventory\""));
+}
+
+fn routing_issue(
+    severity: RoutingIssueSeverity,
+    category: RoutingIssueCategory,
+    block_index: Option<u32>,
+    tensor: Option<(u32, u32, Option<u32>)>,
+    message: &str,
+) -> RoutingIssue {
+    RoutingIssue {
+        severity,
+        category,
+        block_index,
+        tensor: tensor.map(
+            |(shard_ordinal, in_shard_index, block_slot)| RoutingTensorLocator {
+                shard_ordinal,
+                in_shard_index,
+                block_slot,
+            },
+        ),
+        message: message.into(),
+    }
+}
+
+fn push_saaq_label_variants(report: &mut SaaqReadinessReport) {
+    let extra = report.quantization_candidates[0].clone();
+    for (name, region, disposition) in [
+        (
+            "blk.0.attn.qkv.weight",
+            SaaqRegionClass::Unknown,
+            SaaqDisposition::ObserveOnly,
+        ),
+        (
+            "blk.0.moe.router.weight",
+            SaaqRegionClass::RoutingCritical,
+            SaaqDisposition::AvoidForNow,
+        ),
+        (
+            "blk.0.moe.expert.0.mlp.linear_1.weight",
+            SaaqRegionClass::PotentialCompressionTarget,
+            SaaqDisposition::Candidate,
+        ),
+        (
+            "token_embd.weight",
+            SaaqRegionClass::EmbeddingHeavy,
+            SaaqDisposition::ObserveOnly,
+        ),
+    ] {
+        let mut tensor = extra.clone();
+        tensor.structural_name = name.into();
+        tensor.region_class = region;
+        tensor.disposition = disposition;
+        report.quantization_candidates.push(tensor);
+    }
 }
