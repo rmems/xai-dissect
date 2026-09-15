@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use crate::inventory;
+use crate::families::grok1;
 use crate::report;
 use crate::schema::{
     CheckpointInventoryBlockSnapshot, CheckpointInventorySnapshot, ConversionManifest, ExpertAtlas,
@@ -134,8 +134,8 @@ pub fn write_inventory_bundle(
     root: &Path,
     slug_override: Option<&str>,
 ) -> Result<OutputBundle> {
-    let coverage = if inventory::should_validate_grok1_coverage(inv) {
-        Some(inventory::validate_grok1_complete_manifest(inv)?)
+    let coverage = if grok1::should_validate_grok1_coverage(inv) {
+        Some(grok1::validate_grok1_complete_manifest(inv)?)
     } else {
         None
     };

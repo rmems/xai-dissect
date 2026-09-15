@@ -10,6 +10,7 @@
 
 pub mod experts;
 pub mod exports;
+pub mod families;
 pub mod inventory;
 pub mod parser;
 pub mod planning;

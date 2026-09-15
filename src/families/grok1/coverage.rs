@@ -2,11 +2,11 @@
 //
 //! Strict Grok-1 coverage validation for the grok1-map-v1-clean baseline.
 //!
-//! This module is intentionally separate from the generic inventory builder
-//! so parser/classification logic remains usable for partial scans while full
-//! Grok-1 exports fail closed. It is only invoked when the inventory
-//! has `model_family = "grok-1"` and the `--family` flag is left at its
-//! default value.
+//! Lives under `crate::families::grok1` so parser/classification in
+//! `inventory` remain usable for partial scans while full Grok-1 exports
+//! fail closed. Callers invoke it through this family path when the
+//! inventory has `model_family = "grok-1"` and the `--family` flag is
+//! left at its default value.
 //!
 //! ## grok1-map-v1-clean baseline profile
 //! The canonical structural invariants for a clean Grok-1 ckpt-0 parse:
@@ -40,22 +40,22 @@ use crate::schema::{
     TensorRole,
 };
 
-use super::SCHEMA_VERSION;
+use crate::inventory::SCHEMA_VERSION;
 
 pub const GROK1_COVERAGE_SCHEMA_VERSION: u32 = 2;
 
-// The dimensions below are `pub(super)` so `inventory::test_fixtures` can
+// The dimensions below are `pub(crate)` so `inventory::test_fixtures` can
 // build the canonical fixture from them instead of restating them as
 // literals. Crate-internal only; nothing here widens the public API.
-pub(super) const GROK1_EXPECTED_BLOCKS: u32 = 64;
+pub(crate) const GROK1_EXPECTED_BLOCKS: u32 = 64;
 const GROK1_EXPECTED_TENSORS: u64 = 770;
 const GROK1_EXPECTED_ROUTERS: u64 = 64;
 const GROK1_EXPECTED_EXPERT_FAMILIES: u64 = 64 * 3;
-pub(super) const GROK1_EXPECTED_VOCAB_SIZE: u64 = 131_072;
-pub(super) const GROK1_D_MODEL: u64 = 6_144;
-pub(super) const GROK1_D_FF: u64 = 32_768;
-pub(super) const GROK1_N_EXPERTS: u64 = 8;
-pub(super) const GROK1_BLOCK_SLOTS: u32 = 12;
+pub(crate) const GROK1_EXPECTED_VOCAB_SIZE: u64 = 131_072;
+pub(crate) const GROK1_D_MODEL: u64 = 6_144;
+pub(crate) const GROK1_D_FF: u64 = 32_768;
+pub(crate) const GROK1_N_EXPERTS: u64 = 8;
+pub(crate) const GROK1_BLOCK_SLOTS: u32 = 12;
 const GROK1_EXPERT_UP_OR_GATE_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_MODEL, GROK1_D_FF];
 const GROK1_EXPERT_DOWN_SHAPE: [u64; 3] = [GROK1_N_EXPERTS, GROK1_D_FF, GROK1_D_MODEL];
 const GROK1_ATTENTION_NARROW_SHAPE: [u64; 2] = [GROK1_D_MODEL, 1_024];
@@ -625,7 +625,8 @@ fn stable_fnv1a64(bytes: &[u8]) -> String {
 mod tests {
     use crate::schema::{MoeProjection, TensorShape};
 
-    use super::super::test_fixtures::{canonical_grok1_inventory, refresh_derived_fields};
+    use crate::inventory::test_fixtures::{canonical_grok1_inventory, refresh_derived_fields};
+
     use super::*;
 
     #[test]

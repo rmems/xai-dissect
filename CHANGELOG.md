@@ -8,6 +8,10 @@ All notable changes to `xai-dissect` are documented here.
 
 - Relicense from GPL-3.0-only to dual **Apache-2.0 OR MIT** (`LICENSE-APACHE`,
   `LICENSE-MIT`; Cargo `license = "Apache-2.0 OR MIT"`).
+- Move Grok-1 coverage validation and slot specs from `src/inventory/` into
+  `src/families/grok1/` so inventory stays generic. Exports and planning call
+  `families::grok1` explicitly; `inventory` keeps thin re-exports. No schema
+  or artifact change ([#44](https://github.com/rmems/xai-dissect/issues/44)).
 
 ### Added
 

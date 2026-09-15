@@ -28,7 +28,7 @@ mapping `d_model → n_experts` that selects the top-2 experts per token.
 
 Each of the 64 transformer blocks contains exactly **12 shards** on disk.
 This is the `K = 12` constant hard-coded in the Grok-1 coverage validator
-(`src/inventory/grok1_coverage.rs`). The 12 slots per block are:
+(`src/families/grok1/coverage.rs`). The 12 slots per block are:
 
 | Slot(s) | Count | Tensor type | Shape | dtype | Role |
 |--------|------:|------------|-------|-------|------|
