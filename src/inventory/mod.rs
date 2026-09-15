@@ -37,15 +37,18 @@ use crate::schema::{
     QuantizedAttentionWidth, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
 };
 
-mod grok1_coverage;
-
-/// Shared canonical-Grok-1 fixtures for `exports`, `planning`, and this
-/// module's own tests. Test-only; never compiled into a release binary.
+/// Shared canonical-Grok-1 fixtures for `exports`, `planning`, and
+/// `families::grok1` tests. Test-only; never compiled into a release binary.
 #[cfg(test)]
 pub(crate) mod test_fixtures;
 
+/// Thin glue: Grok-1 coverage lives in [`crate::families::grok1`]. Prefer
+/// that path at new call sites; these re-exports keep the previous
+/// `inventory::` entry points working.
+pub use crate::families::grok1::{
+    should_validate_grok1_coverage, validate_grok1_complete_manifest,
+};
 pub use crate::schema::GROK1_BASELINE_PROFILE;
-pub use grok1_coverage::{should_validate_grok1_coverage, validate_grok1_complete_manifest};
 
 pub const SCHEMA_VERSION: u32 = 2;
 

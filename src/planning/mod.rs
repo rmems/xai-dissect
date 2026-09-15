@@ -29,12 +29,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
 
-use crate::inventory::{GROK1_BASELINE_PROFILE, validate_grok1_complete_manifest};
+use crate::families::grok1::validate_grok1_complete_manifest;
 use crate::schema::{
-    ConversionManifest, ConversionManifestTensor, ExpertAtlas, Grok1CoverageManifest, MetricStatus,
-    ModelInventory, MoeProjection, PilotBlockSelection, PilotQuantizationMode, PilotSelectionPlan,
-    QuantPlan, QuantPolicy, RouteMetricStatus, RoutePreservationReport, RoutingOrientation,
-    RoutingReport, SaaqCandidate, SaaqReadinessReport, SaaqRegionClass, TensorInfo, TensorKind,
+    ConversionManifest, ConversionManifestTensor, ExpertAtlas, GROK1_BASELINE_PROFILE,
+    Grok1CoverageManifest, MetricStatus, ModelInventory, MoeProjection, PilotBlockSelection,
+    PilotQuantizationMode, PilotSelectionPlan, QuantPlan, QuantPolicy, RouteMetricStatus,
+    RoutePreservationReport, RoutingOrientation, RoutingReport, SaaqCandidate, SaaqReadinessReport,
+    SaaqRegionClass, TensorInfo, TensorKind,
 };
 
 pub const CONVERSION_MANIFEST_SCHEMA_VERSION: u32 = 1;
