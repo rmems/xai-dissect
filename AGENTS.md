@@ -86,8 +86,10 @@ git show <sha> -- <path>   # cited commit touches the file
 git show main:<path>       # content on main; exception: deferred-with-rationale
 ```
 
-Empty output from the first command means that SHA never touched the file.
-The one exception is a thread you are deliberately **not** fixing: mark it
+Empty output from the first command means that SHA did not change `<path>`.
+Do not use the PR tip as a stand-in for a missing SHA — walk
+`git log main..HEAD -- <path>` (or `origin/main` if `main` is not a local
+ref). The one exception is a thread you are deliberately **not** fixing: mark it
 `deferred-with-rationale` and resolve it with that rationale on the thread. If a
 gap is real but the fix has not landed on `main` yet, the thread stays open —
 `fixed-now` is not a resolvable state. When you cannot prove the content and

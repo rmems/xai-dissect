@@ -34,9 +34,25 @@ git show <sha> -- <path>   # diff must match bot concern
 git show main:<path>       # fix must still exist
 ```
 
-`<sha>` is the commit cited in the reply (or the PR head that claims the
-fix). Empty output from the first command means that SHA never touched the
-file — that is a reply-only resolve, not a fix.
+`<sha>` is the commit cited in the reply. With a pathspec, `git show`
+prints nothing when that commit did not change `<path>` (no header-only
+output). Empty output is a reply-only resolve, not a fix.
+
+Do not substitute the PR tip for a missing SHA. A later unrelated commit
+on the branch makes `git show HEAD -- <path>` empty even when an earlier
+commit on the PR touched the file. Walk the range instead:
+
+```bash
+git log main..HEAD -- <path>
+git diff main...HEAD -- <path>
+```
+
+If `main` is not a local ref (shallow or detached checkout):
+
+```bash
+git fetch origin main
+git show origin/main:<path>
+```
 
 **Resolve still requires `main`.** Historical PRs in this repo are usually
 **squash-merged**, so the original review-reply SHA is often *not* an
