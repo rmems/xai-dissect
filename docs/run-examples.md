@@ -8,7 +8,8 @@ explaining what each value means and where it comes from.
 
 This is the user-facing walkthrough. Maintainers mapping each subcommand to
 pipeline stages, handlers, and test touchpoints should start at
-[`docs/cli-routing.md`](cli-routing.md).
+[`docs/cli-routing.md`](cli-routing.md). The crate module graph and
+"where to change X" index is [`docs/codebase-map.md`](codebase-map.md).
 
 The checkpoint path used throughout is the real Grok-1 ckpt-0 location on
 this system:
@@ -799,5 +800,6 @@ See `docs/grok1-coverage-manifest.md` for the full algorithm documentation.
 ## Related
 
 - [`docs/cli-routing.md`](cli-routing.md) — maintainer command → pipeline map
+- [`docs/codebase-map.md`](codebase-map.md) — module graph and where to change X
 - [`docs/output-conventions.md`](output-conventions.md) — bundle paths
 - [`docs/export-contracts.md`](export-contracts.md) — schema contracts
