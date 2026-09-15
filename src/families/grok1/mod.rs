@@ -13,6 +13,7 @@ pub use coverage::{
     GROK1_COVERAGE_SCHEMA_VERSION, should_validate_grok1_coverage, validate_grok1_complete_manifest,
 };
 
+#[cfg(test)]
 pub(crate) use coverage::{
     GROK1_BLOCK_SLOTS, GROK1_D_FF, GROK1_D_MODEL, GROK1_EXPECTED_BLOCKS, GROK1_EXPECTED_VOCAB_SIZE,
     GROK1_N_EXPERTS,
