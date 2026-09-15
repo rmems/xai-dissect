@@ -95,9 +95,10 @@ wrote <label> -> <root>/{reports,exports,manifests}/<slug>/...
 ```
 
 `pilot-plan` and `route-preservation` print `{reports,manifests}` instead.
-Those bundles write Markdown under `reports/` and JSON under `manifests/`
-only; they do not emit `exports/` JSON. `prepare_output_layout` still
-creates all three directories.
+Those two bundles, and `quant-plan`, write Markdown under `reports/` and JSON
+under `manifests/` only; they do not emit `exports/` JSON. `quant-plan` still
+prints `{reports,exports,manifests}` in the stderr line. `prepare_output_layout`
+still creates all three directories.
 
 Bundle filenames are listed in [`docs/output-conventions.md`](output-conventions.md).
 
