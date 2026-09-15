@@ -82,8 +82,8 @@ commands before resolving; a thread is resolvable only when the change is
 provably on `main`:
 
 ```bash
-git show <sha> -- <path>   # diff must match bot concern
-git show main:<path>       # fix must still exist
+git show <sha> -- <path>   # cited commit touches the file
+git show main:<path>       # content on main; exception: deferred-with-rationale
 ```
 
 Empty output from the first command means that SHA never touched the file.
