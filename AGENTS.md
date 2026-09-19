@@ -1,27 +1,8 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
-
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/embeddeddolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+`xai-dissect` is a read-only Grok-family checkpoint dissector. Preserve public
+CLI and export-schema compatibility; do not add inference, checkpoint mutation,
+or quantization-runtime behavior to this repository.
 
 ## Non-Interactive Shell Commands
 
@@ -32,16 +13,13 @@ Shell tools such as `cp`, `mv`, and `rm` may be aliased with `-i` on some hosts.
 
 **Usual forms for unattended agents:**
 
-
 ```bash
-# Force overwrite without prompting
 cp -f source dest           # NOT: cp source dest
 mv -f source dest           # NOT: mv source dest
 rm -f file                  # NOT: rm file
 
-# For recursive operations
 rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
+cp -rf source dest          # NOT: cp -r directory
 ```
 
 **Other commands that may prompt:**
@@ -51,31 +29,20 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` — use `-y` flag
 - `brew` — use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
-## Beads Issue Tracker
+## Validation
 
-Canonical agent task tracker is **bd**. Prefer `bd` over ad-hoc markdown TODO
-lists or host-specific todo tools (TodoWrite / TaskCreate).
-
-### Common bd commands
+Run these before handing off a Rust-source, Cargo, CI, or behavior change:
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
+cargo fmt --check
+cargo test --locked
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-### Tracking rules
+When CLI behavior changes, also run the relevant help smoke command, for
+example `cargo run --locked -- --help` or the changed subcommand's `--help`.
 
-- Route open work through `bd` (create / claim / close)
-- Load workflow detail with `bd prime`
-- Persist cross-session notes with `bd remember` (avoid separate MEMORY.md files)
-
-Dolt under `.beads/` is the issue source of truth; sync with `bd dolt push` /
-`bd dolt pull`. Details: https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md
-
-## PR Review Threads
+## Pull Request Review Threads
 
 Do **not** resolve a GitHub review thread on the strength of a reply. Run both
 commands before resolving; a thread is resolvable only when the change is
@@ -99,16 +66,16 @@ Most PRs here are squash-merged, so the SHA cited in an `Addressed in <sha>` rep
 is usually **not** an ancestor of `main`. That alone is neither proof of a fix nor
 proof of a gap — verify by content.
 
-Full gate, status vocabulary (`verified` / `fixed-now` / `deferred-with-rationale`),
-and the anti-pattern list: [docs/contributing-bot-reviews.md](docs/contributing-bot-reviews.md).
 
 This gate applies to PR babysitting sessions too — the same proof is required when
 closing out threads at the end of a babysit pass as when handling them one at a time.
 
 ## Session Completion
 
-After a coding session, run this checklist when the agent is about to stop or
-hand off. Authorization rules:
+Before stopping or handing off, run the relevant validation and report the
+current branch, commit, working-tree status, and any remaining review threads.
+Do not push, rebase from a shared remote, prune remotes, or discard stashes
+without the authorization described below.
 
 | Operation | Needs explicit user OK? |
 |-----------|-------------------------|
@@ -116,25 +83,3 @@ hand off. Authorization rules:
 | `git pull --rebase` from shared remote | Yes, unless user granted **push** (or explicit pull) autonomy this session |
 | `git remote prune` / deleting remote branches | Yes, unless user granted **remote-cleanup** autonomy |
 | `git stash drop` / discarding local stashes | Yes, unless user granted **stash-drop** autonomy |
-
-**Workflow:**
-
-1. File remaining work as beads issues
-2. If code changed: run quality gates (`cargo fmt --check`, `cargo test --locked`, `cargo clippy --all-targets --all-features -- -D warnings`)
-3. Update issue status (close finished, claim still-open)
-4. With push authorization:
-
-   ```bash
-   git pull --rebase
-   git push
-   git status
-   ```
-
-5. With **remote-cleanup** / **stash-drop** authorization only: clear stashes / prune remotes as needed (do not treat push OK as cleanup OK)
-6. Confirm intended commits exist; remote matches only if push was authorized
-7. Hand off context for the next session
-
-**Defaults:** leave a handoff note if work remains; do not push or prune shared
-remotes without authorization; if an authorized push fails, fix or report the
-blocker.
-<!-- END BEADS INTEGRATION -->
