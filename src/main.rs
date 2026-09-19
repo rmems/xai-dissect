@@ -21,6 +21,9 @@
 //! `manifests/`). `--checkpoint-slug` overrides the inferred slug and is
 //! required when `--output-root` is set and a custom name is needed.
 //!
+//! Maintainer routing (handlers, shared flags, test touchpoints):
+//! `docs/cli-routing.md`. User-facing walkthrough: `docs/run-examples.md`.
+//!
 //! ## What this module does NOT do
 //! - It does **not** execute model inference
 //! - It does **not** mutate checkpoint files

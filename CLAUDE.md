@@ -32,3 +32,6 @@ No inference, no weight mutation, no quant runtime (that lives in `grok-ozempic`
 - Track work with `bd` (Beads); see AGENTS.md
 - Quality gate before handoff: fmt, test `--locked`, clippy `-D warnings`
 - Session push/cleanup: follow AGENTS.md authorization table
+- PR review threads: do not resolve without `git show` proof. Same gate as
+  AGENTS.md — `git show <sha> -- <path>` and `git show main:<path>` before
+  resolve. Full write-up: [docs/contributing-bot-reviews.md](docs/contributing-bot-reviews.md).

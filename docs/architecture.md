@@ -19,6 +19,7 @@ testable against a single shard or a full checkpoint directory.
         +--> [ expert analysis ]   -> MoE expert geometry
         +--> [ routing analysis ]  -> router / gate geometry
         +--> [ stats ]             -> offline tensor-value profiling
+        +--> [ planning ]          -> Grok-1 quant / pilot / route-preservation
         |
         +--> [ reports ]           -> human-readable Markdown
         +--> [ exports ]           -> full JSON + findings summaries
@@ -132,7 +133,9 @@ xai-dissect/
   LICENSE-APACHE
   LICENSE-MIT
   src/
-    main.rs                  # CLI entry
+    main.rs                  # CLI entry + parser-only `dissect`
+    cli/
+      mod.rs                 # inventory-backed subcommand handlers
     lib.rs                   # library entry + module exports
     parser/
       mod.rs                 # PROTO 4 byte-grammar scanner
@@ -146,14 +149,17 @@ xai-dissect/
       mod.rs                 # router / gate structure analysis
     stats/
       mod.rs                 # offline tensor-statistics profiling
+    planning/
+      mod.rs                 # Grok-1 planning artifacts
     report/
       mod.rs                 # Markdown / JSON writers and renderers
     exports/
       mod.rs                 # output-tree planning and manifest bundles
   docs/
-    architecture.md              # this file
-    export-contracts.md          # stable artifact contract
-    output-conventions.md        # bundle paths and filenames
+    architecture.md          # this file
+    cli-routing.md           # maintainer command → pipeline map
+    export-contracts.md      # stable artifact contract
+    output-conventions.md    # bundle paths and filenames
     non_goals.md
     tensor-schema.md             # inventory schema details
     model-family-extension.md    # maintainer design: adding a family
@@ -170,5 +176,7 @@ xai-dissect/
 
 This tree reflects the current milestone, not an aspirational future layout.
 The repo is already organized around parser, schema, inventory, expert,
-routing, stats, report, and export modules, with the CLI in `src/main.rs`
-acting as a thin entry point over those layers.
+routing, stats, planning, report, and export modules, with the CLI in
+`src/main.rs` acting as a thin entry point over those layers.
+Inventory-backed handlers live in `src/cli/`. The maintainer command →
+pipeline map is [`docs/cli-routing.md`](cli-routing.md).

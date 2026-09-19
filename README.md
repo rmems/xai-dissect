@@ -251,6 +251,7 @@ tracked in [issue #54](https://github.com/rmems/xai-dissect/issues/54).
 See:
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/cli-routing.md](docs/cli-routing.md) — maintainer CLI command → pipeline map
 - [docs/export-contracts.md](docs/export-contracts.md)
 - [docs/tensor-schema.md](docs/tensor-schema.md)
 - [docs/output-conventions.md](docs/output-conventions.md)
