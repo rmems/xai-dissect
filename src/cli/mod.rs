@@ -57,18 +57,24 @@ pub struct CheckpointScanArgs {
     pub limit: Option<usize>,
 }
 
+/// Model family ids the CLI accepts. Today Grok-1 is the only supported
+/// family; anything else must fail at parse time rather than stamp a foreign
+/// label onto Grok-1-layout artifacts (which would also disable the coverage
+/// gate, since `should_validate_grok1_coverage` keys on `model_family`).
+const SUPPORTED_MODEL_FAMILIES: [&str; 1] = ["grok-1"];
+
 #[derive(Args, Debug, Clone)]
 pub struct ModelFamilyArg {
     /// Model family tag written into the export header. Only `grok-1`
     /// is officially supported today.
-    #[arg(long, default_value = "grok-1")]
+    #[arg(long, default_value = "grok-1", value_parser = SUPPORTED_MODEL_FAMILIES)]
     pub family: String,
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct PlanningFamilyArg {
     /// Model family tag written into the export header.
-    #[arg(long, default_value = "grok-1")]
+    #[arg(long, default_value = "grok-1", value_parser = SUPPORTED_MODEL_FAMILIES)]
     pub family: String,
 }
 
