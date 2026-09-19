@@ -1,0 +1,19 @@
+AGENTS.md
+  s_1bea753cbd8069::t_60f5d633533029 3-5,22,32,34,37-39,42-43,45,75-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4712fa135e26fd3d3c217cf953430f3ae2b0d917",
+  "prompts": {},
+  "sessions": {
+    "s_1bea753cbd8069": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0b9e6-0b22-7a53-ad52-2de53ca51a4f",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "rmems <248355183+rmems@users.noreply.github.com>"
+    }
+  }
+}
