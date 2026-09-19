@@ -118,6 +118,11 @@ the `QuantizedWeight8bit` shard structure, how the 12-shard-per-block
 layout maps to tensor kinds, and the source-backed disambiguation of gate
 vs. up projections — see [`docs/grok1-architecture.md`](grok1-architecture.md).
 
+For what must become pluggable before a second family (parser vs family
+profile vs coverage validator), see
+[`docs/model-family-extension.md`](model-family-extension.md). That document
+is design-only; this tree remains Grok-1 until a later implementation epic.
+
 ## Current file tree
 
 ```
@@ -156,7 +161,8 @@ xai-dissect/
     export-contracts.md      # stable artifact contract
     output-conventions.md    # bundle paths and filenames
     non_goals.md
-    tensor-schema.md         # inventory schema details
+    tensor-schema.md             # inventory schema details
+    model-family-extension.md    # maintainer design: adding a family
   tests/
     fixtures/
       parser/                # tiny synthetic pickle fixtures

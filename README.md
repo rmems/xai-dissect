@@ -194,6 +194,7 @@ Priority for this project remains **Grok-1 cartography → conversion-manifest
 route preservation). Grok-2 is a bounded follow-on after that loop is solid:
 
 - Checklist: [docs/grok2-future-support.md](docs/grok2-future-support.md)
+- Maintainer extension points: [docs/model-family-extension.md](docs/model-family-extension.md)
 - Issue template: [.github/ISSUE_TEMPLATE/grok2-support.md](.github/ISSUE_TEMPLATE/grok2-support.md)
 
 ## Relationship To Sibling Repos
@@ -254,6 +255,7 @@ See:
 - [docs/export-contracts.md](docs/export-contracts.md)
 - [docs/tensor-schema.md](docs/tensor-schema.md)
 - [docs/output-conventions.md](docs/output-conventions.md)
+- [docs/model-family-extension.md](docs/model-family-extension.md) — how to add a family using the Grok-1 pattern
 - [Bot review verification](docs/contributing-bot-reviews.md) — do not resolve review threads without `git show` proof
 
 ## Legal / Ethical Scope

@@ -60,6 +60,9 @@ off the directory slug plus tensor locators, not off the host-local
 - `grok1-coverage.json` is a fail-closed gate. Downstream should require
   `validation = "pass"`, `expected == discovered`, and `unknown_slots = []`
   before treating the bundle as complete enough for `grok-ozempic` ingestion.
+  This gate is Grok-1-specific. A later family must not treat a missing or
+  Grok-1-named coverage file as proof of completeness; see
+  `docs/model-family-extension.md`.
 - `checkpoint_path` is informative and machine-local. `grok-ozempic` should
   not use it as a cache key, artifact identifier, or portability boundary.
 

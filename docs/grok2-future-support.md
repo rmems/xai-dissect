@@ -9,6 +9,13 @@ slice-by-slice / pilot quantization readiness (conversion-manifest, quant-plan,
 route preservation → grok-ozempic). Do not start Grok-2 implementation until
 the Grok-1 pilot loop is proven and a local Grok-2 checkpoint is in hand.
 
+When implementation does start, treat Grok-2 as the first consumer of the
+family-profile split documented in
+[`docs/model-family-extension.md`](model-family-extension.md): parser
+(format) vs family profile (semantics) vs coverage validator. Do not
+implement Grok-2 by stamping `--family grok-2` onto the current Grok-1
+layout path.
+
 ## Preconditions
 
 Work should not start until all of the following are true:
@@ -18,6 +25,7 @@ Work should not start until all of the following are true:
 - at least one checkpoint layout can be inspected locally
 - Grok-1 pilot / slice-quant handoff is stable enough that a second family
   will not derail that path
+
 ## First Questions To Answer
 
 - Is the shard/container format still compatible with the current parser?
@@ -44,11 +52,18 @@ Work should not start until all of the following are true:
 
 ## Suggested Work Breakdown
 
-1. Parser compatibility audit
+Map each step onto the layers in
+[`docs/model-family-extension.md`](model-family-extension.md). File them as
+separate issues; do not open a single "support Grok-2" or "support any
+model" ticket.
+
+1. Parser compatibility audit (format layer)
 2. Inventory/schema adjustments only where the checkpoint requires them
-3. Expert and routing heuristic validation
-4. Stats/readiness validation
-5. README and changelog updates after one real checkpoint is confirmed
+   (family profile)
+3. Expert and routing heuristic validation (consumers of the profile)
+4. A Grok-2 coverage baseline, not a reuse of `grok1-map-v1-clean`
+5. Stats/readiness validation
+6. README and changelog updates after one real checkpoint is confirmed
 
 ## Information To Capture In Future Issues
 
