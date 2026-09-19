@@ -160,7 +160,8 @@ xai-dissect/
     export-contracts.md      # stable artifact contract
     output-conventions.md    # bundle paths and filenames
     non_goals.md
-    tensor-schema.md         # inventory schema details
+    tensor-schema.md             # inventory schema details
+    model-family-extension.md    # maintainer design: adding a family
   tests/
     fixtures/
       parser/                # tiny synthetic pickle fixtures

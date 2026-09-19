@@ -43,3 +43,8 @@ assignees: []
 
 Provide exact commands, error messages, or a small structural sample if
 possible.
+
+Read `docs/model-family-extension.md` before filing implementation work.
+Grok-2 is a new family profile (and possibly a parser change), not a
+`--family` stamp on the Grok-1 layout path. Do not file "support any
+model" as one issue.

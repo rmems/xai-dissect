@@ -205,6 +205,12 @@ Grok-2 is not yet supported. When it lands, the expected extensions are:
   roles (e.g. a separate value projection) or new dtypes.
 - A new block-layout entry alongside the Grok-1 `K = 12` rule.
 
+Those changes belong in a family profile, not in the pickle scanner. See
+[`docs/model-family-extension.md`](model-family-extension.md) for the
+proposed parser / profile / coverage split and
+[`docs/grok2-future-support.md`](grok2-future-support.md) for Grok-2
+preconditions.
+
 The schema is designed to absorb these without breaking existing
 consumers: the JSON `kind` enum is tagged, unknown variants round-trip as
 `Unknown { reason }`, and `schema_version` bumps on any incompatible
