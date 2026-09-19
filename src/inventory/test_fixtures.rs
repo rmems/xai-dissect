@@ -2,22 +2,22 @@
 //
 //! Shared canonical-Grok-1 test fixtures. Compiled only under `cfg(test)`.
 //!
-//! `exports`, `planning`, and `grok1_coverage` each need "a complete,
+//! `exports`, `planning`, and `families::grok1` each need "a complete,
 //! canonical Grok-1 ckpt-0 inventory" as a starting point, and each grew its
 //! own builder for it. The three copies agreed on the layout but not on how
-//! they spelled it: `grok1_coverage` built its fixture from the named
+//! they spelled it: Grok-1 coverage built its fixture from the named
 //! `GROK1_*` constants, while `exports` and `planning` hardcoded `6_144`,
 //! `8`, `32_768` and `131_072` as literals. A change to a canonical constant
 //! therefore updated one fixture and silently desynchronized the other two —
 //! the tests kept passing against a layout production no longer emits.
 //!
 //! One builder, every dimension derived from the constants in
-//! [`super::grok1_coverage`].
+//! [`crate::families::grok1`].
 //!
 //! ## What this fixture is and is not
 //!
 //! It is a **positive control**: the canonical 770-tensor layout, built to
-//! satisfy [`super::validate_grok1_complete_manifest`]. A test asserting that
+//! satisfy [`crate::families::grok1::validate_grok1_complete_manifest`]. A test asserting that
 //! the validator accepts it is a smoke test, not a discriminating one — that
 //! was already true of all three predecessors, which hardcoded the same
 //! numbers the validator checks.
@@ -37,11 +37,11 @@ use crate::schema::{
     TensorInfo, TensorKind, TensorRole, TensorShape,
 };
 
-use super::grok1_coverage::{
+use super::{SCHEMA_VERSION, compute_totals, summarize_blocks};
+use crate::families::grok1::{
     GROK1_BLOCK_SLOTS, GROK1_D_FF, GROK1_D_MODEL, GROK1_EXPECTED_BLOCKS, GROK1_EXPECTED_VOCAB_SIZE,
     GROK1_N_EXPERTS,
 };
-use super::{SCHEMA_VERSION, compute_totals, summarize_blocks};
 
 /// Attention narrow width. Not a `GROK1_*` constant in its own right —
 /// production spells it inline inside `GROK1_ATTENTION_NARROW_SHAPE`.

@@ -65,6 +65,13 @@ queryable table. Responsibilities:
 The inventory is the single source of truth consumed by every downstream
 analyzer.
 
+Family-specific coverage (Grok-1 slot specs, grok1-map-v1-clean counts)
+lives in `src/families/grok1/`, not in inventory. `build_inventory` stays
+generic; exports and planning call `families::grok1` when a complete Grok-1
+manifest must fail closed. That module boundary is the real adapter
+surface a second family would implement — see
+[`docs/grok2-future-support.md`](grok2-future-support.md).
+
 ### 4. expert analysis
 Identifies Mixture-of-Experts structure from inventory records alone:
 
@@ -141,6 +148,8 @@ xai-dissect/
       mod.rs                 # stable serializable schema types
     inventory/
       mod.rs                 # checkpoint walk, dedup, classification
+    families/
+      grok1/                 # Grok-1 slot specs and coverage validator
     experts/
       mod.rs                 # MoE geometry from inventory records
     routing/
@@ -174,9 +183,12 @@ xai-dissect/
 ```
 
 This tree reflects the current milestone, not an aspirational future layout.
-The repo is already organized around parser, schema, inventory, expert,
-routing, stats, planning, report, and export modules, with the CLI in
+The repo is already organized around parser, schema, inventory, model-family
+adapters (`src/families/`), expert, routing, stats, planning, report, and
+export modules, with the CLI in
 `src/main.rs` acting as a thin entry point over those layers.
-Inventory-backed handlers live in `src/cli/`. The maintainer command →
+Inventory-backed handlers live in `src/cli/`. Grok-1 complete-manifest
+coverage is invoked through `families::grok1`, not from inside
+`inventory::build_inventory`. The maintainer command →
 pipeline map is [`docs/cli-routing.md`](cli-routing.md). The module graph
 and change-index are [`docs/codebase-map.md`](codebase-map.md).

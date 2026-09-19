@@ -31,7 +31,9 @@ The name components:
 
 When `xai-dissect` validates a checkpoint inventory against this
 profile, it checks that every structural invariant matches before
-allowing the coverage manifest to be written. If any invariant fails,
+allowing the coverage manifest to be written. The validator lives in
+`src/families/grok1/` and is invoked from exports/planning through that
+family path; inventory itself stays generic. If any invariant fails,
 `validation` becomes `"fail"` and the manifest is rejected by downstream
 consumers.
 
@@ -186,7 +188,7 @@ as the baseline for that layout.
 Concretely: block indices are assigned only for the canonical shard layout
 (`(shard_count - 2) % 12 == 0` with a single norm singleton (tail, or
 immediately after the embedding); official ckpt-0 is 770 shards).
-`should_validate_grok1_coverage` exempts only
+`families::grok1::should_validate_grok1_coverage` exempts only
 a layout that *breaks that arithmetic* (a genuine repack) and has no 64-block
 map. A 770-tensor inventory on a canonical-shaped shard count that failed
 mapping — for example a malformed or misclassified final norm, so
