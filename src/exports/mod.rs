@@ -135,22 +135,32 @@ pub fn write_inventory_bundle(
     slug_override: Option<&str>,
 ) -> Result<OutputBundle> {
     let coverage = if grok1::should_validate_grok1_coverage(inv) {
-        Some(grok1::validate_grok1_complete_manifest(inv)?)
+        Some(grok1::validate_grok1_complete_manifest(inv))
     } else {
         None
     };
+
+    // Drop a leftover pass-manifest before creating the layout or reporting
+    // the validation error, so a skipped or failed validation never leaves
+    // stale coverage published beside newer artifacts.
+    let coverage_path = root
+        .join("manifests")
+        .join(resolve_checkpoint_slug(
+            &inv.checkpoint_path,
+            slug_override,
+        )?)
+        .join("grok1-coverage.json");
+    let removed_stale =
+        !matches!(coverage, Some(Ok(_))) && remove_stale_coverage_manifest(&coverage_path)?;
+    let coverage = coverage.transpose()?;
+
     let layout = prepare_output_layout(root, &inv.checkpoint_path, slug_override)?;
     let mut bundle = OutputBundle {
         checkpoint_slug: layout.checkpoint_slug.clone(),
         written_paths: Vec::new(),
         removed_paths: Vec::new(),
     };
-
-    // Drop a leftover pass-manifest before rewriting the rest of the bundle.
-    // Otherwise a skipped-coverage rewrite can publish new inventory artifacts
-    // beside stale validation, or report success when deletion failed.
-    let coverage_path = layout.manifests_dir.join("grok1-coverage.json");
-    if coverage.is_none() && remove_stale_coverage_manifest(&coverage_path)? {
+    if removed_stale {
         bundle.removed_paths.push(coverage_path.clone());
     }
 
@@ -988,6 +998,25 @@ mod tests {
             !root
                 .join("manifests/grok-1-official__ckpt-0/grok1-coverage.json")
                 .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inventory_bundle_removes_stale_coverage_when_validation_fails() {
+        let root = unique_test_root("stale_coverage_failed_validation");
+        let mut inv = canonical_grok1_inventory();
+        inv.inferred.vocab_size = Some(123);
+        let coverage_dir = root.join("manifests").join("grok-1-official__ckpt-0");
+        fs::create_dir_all(&coverage_dir).expect("create manifests dir");
+        let coverage_path = coverage_dir.join("grok1-coverage.json");
+        fs::write(&coverage_path, b"{\"validation\":\"pass\"}").expect("write stale pass manifest");
+
+        let err = write_inventory_bundle(&inv, &root, None).unwrap_err();
+        assert!(format!("{err:#}").contains("inferred vocab_size"));
+        assert!(
+            !coverage_path.exists(),
+            "stale pass manifest must not survive a failed validation"
         );
         let _ = fs::remove_dir_all(root);
     }
