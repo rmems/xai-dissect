@@ -258,6 +258,10 @@ See:
 - [docs/model-family-extension.md](docs/model-family-extension.md) — how to add a family using the Grok-1 pattern
 - [Bot review verification](docs/contributing-bot-reviews.md) — do not resolve review threads without `git show` proof
 
+## Maintainers
+
+- [docs/codebase-map.md](docs/codebase-map.md) — how the Rust modules connect, and where to add a `TensorKind`, CLI subcommand, export artifact, Grok-1 slot spec, or planning validator
+
 ## Legal / Ethical Scope
 
 - Analyze only weights you have lawful access to under the original license

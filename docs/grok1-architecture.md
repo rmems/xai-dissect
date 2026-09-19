@@ -2,7 +2,8 @@
 
 This document describes the Grok-1 model architecture and how `xai-dissect`
 maps raw checkpoint shards to structural descriptions of it. It does not
-describe the codebase — that is covered in `docs/architecture.md`. This
+describe the codebase — layer overview is [`docs/architecture.md`](architecture.md),
+and the Rust module graph is [`docs/codebase-map.md`](codebase-map.md). This
 document is about the model.
 
 ## Model overview

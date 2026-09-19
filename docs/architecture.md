@@ -118,10 +118,8 @@ the `QuantizedWeight8bit` shard structure, how the 12-shard-per-block
 layout maps to tensor kinds, and the source-backed disambiguation of gate
 vs. up projections — see [`docs/grok1-architecture.md`](grok1-architecture.md).
 
-For what must become pluggable before a second family (parser vs family
-profile vs coverage validator), see
-[`docs/model-family-extension.md`](model-family-extension.md). That document
-is design-only; this tree remains Grok-1 until a later implementation epic.
+The crate-level module graph and "where to change X" index live in
+[`docs/codebase-map.md`](codebase-map.md).
 
 ## Current file tree
 
@@ -157,6 +155,7 @@ xai-dissect/
       mod.rs                 # output-tree planning and manifest bundles
   docs/
     architecture.md          # this file
+    codebase-map.md          # module graph + where to change X
     cli-routing.md           # maintainer command → pipeline map
     export-contracts.md      # stable artifact contract
     output-conventions.md    # bundle paths and filenames
@@ -179,4 +178,5 @@ The repo is already organized around parser, schema, inventory, expert,
 routing, stats, planning, report, and export modules, with the CLI in
 `src/main.rs` acting as a thin entry point over those layers.
 Inventory-backed handlers live in `src/cli/`. The maintainer command →
-pipeline map is [`docs/cli-routing.md`](cli-routing.md).
+pipeline map is [`docs/cli-routing.md`](cli-routing.md). The module graph
+and change-index are [`docs/codebase-map.md`](codebase-map.md).

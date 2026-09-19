@@ -44,6 +44,9 @@ All notable changes to `xai-dissect` are documented here.
 
 ### Documented
 
+- Maintainer module graph and "where to change X" index in
+  `docs/codebase-map.md`
+  ([#41](https://github.com/rmems/xai-dissect/issues/41)).
 - Maintainer CLI command → pipeline map in `docs/cli-routing.md`
   ([#46](https://github.com/rmems/xai-dissect/issues/46)).
 - `saaq-readiness.json` is `schema_version: 2` in `docs/export-contracts.md`,
