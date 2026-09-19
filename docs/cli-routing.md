@@ -176,11 +176,11 @@ intentionally allow `--prefix` / `--limit` for subset debugging.
 ## Related
 
 - [`docs/architecture.md`](architecture.md) — layer responsibilities
+- [`docs/codebase-map.md`](codebase-map.md) — module graph and where to change X
 - [`docs/run-examples.md`](run-examples.md) — user-facing annotated CLI
 - [`docs/output-conventions.md`](output-conventions.md) — bundle paths
 - [`docs/export-contracts.md`](export-contracts.md) — schema contracts
 - Issue [#46](https://github.com/rmems/xai-dissect/issues/46) — this document
-- Issue [#41](https://github.com/rmems/xai-dissect/issues/41) — preferred
-  home if `docs/codebase-map.md` lands later
+- Issue [#41](https://github.com/rmems/xai-dissect/issues/41) — `docs/codebase-map.md`
 - Issue [#45](https://github.com/rmems/xai-dissect/issues/45) — CLI helper
   extract (`src/cli/`)

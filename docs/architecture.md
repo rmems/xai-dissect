@@ -125,6 +125,9 @@ the `QuantizedWeight8bit` shard structure, how the 12-shard-per-block
 layout maps to tensor kinds, and the source-backed disambiguation of gate
 vs. up projections — see [`docs/grok1-architecture.md`](grok1-architecture.md).
 
+The crate-level module graph and "where to change X" index live in
+[`docs/codebase-map.md`](codebase-map.md).
+
 ## Current file tree
 
 ```
@@ -161,11 +164,13 @@ xai-dissect/
       mod.rs                 # output-tree planning and manifest bundles
   docs/
     architecture.md          # this file
+    codebase-map.md          # module graph + where to change X
     cli-routing.md           # maintainer command → pipeline map
     export-contracts.md      # stable artifact contract
     output-conventions.md    # bundle paths and filenames
     non_goals.md
-    tensor-schema.md         # inventory schema details
+    tensor-schema.md             # inventory schema details
+    model-family-extension.md    # maintainer design: adding a family
   tests/
     fixtures/
       parser/                # tiny synthetic pickle fixtures
@@ -185,4 +190,5 @@ export modules, with the CLI in
 Inventory-backed handlers live in `src/cli/`. Grok-1 complete-manifest
 coverage is invoked through `families::grok1`, not from inside
 `inventory::build_inventory`. The maintainer command →
-pipeline map is [`docs/cli-routing.md`](cli-routing.md).
+pipeline map is [`docs/cli-routing.md`](cli-routing.md). The module graph
+and change-index are [`docs/codebase-map.md`](codebase-map.md).

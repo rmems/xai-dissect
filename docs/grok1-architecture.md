@@ -2,7 +2,8 @@
 
 This document describes the Grok-1 model architecture and how `xai-dissect`
 maps raw checkpoint shards to structural descriptions of it. It does not
-describe the codebase — that is covered in `docs/architecture.md`. This
+describe the codebase — layer overview is [`docs/architecture.md`](architecture.md),
+and the Rust module graph is [`docs/codebase-map.md`](codebase-map.md). This
 document is about the model.
 
 ## Model overview
@@ -224,6 +225,9 @@ alone and are left as downstream responsibilities:
 
 Grok-2 is not yet supported by `xai-dissect`. Expected extension points
 when public Grok-2 weights are released are documented in
-`docs/grok2-future-support.md`. The primary architectural differences to
-anticipate are likely: different expert count, different d_model, and
-potentially a different MoE layout.
+`docs/grok2-future-support.md`. What must become pluggable in this codebase
+(parser vs family profile vs coverage validator), and how to copy the
+Grok-1 pattern for a new family, is
+[`docs/model-family-extension.md`](model-family-extension.md). The primary
+architectural differences to anticipate are likely: different expert count,
+different d_model, and potentially a different MoE layout.

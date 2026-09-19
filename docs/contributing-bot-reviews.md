@@ -27,18 +27,53 @@ Skip unless they left an inline thread with a concrete suggestion:
 
 ## Per-thread proof (required before resolve)
 
-**Proof target is always `main`.** For a squash-merged PR, use the merge
-commit on `main` (for example PR #37 → `3b31ebf`), not the pre-squash
-review-reply SHA.
+Run both commands. Do not resolve until the output matches the bot concern.
 
 ```bash
-# 1) Content on main (required for verified)
-git show main:<path>
+git show <sha> -- <path>   # diff must match bot concern
+git show main:<path>       # fix must still exist
+```
 
-# 2) Optional: original review SHA still exists as an object
+`<sha>` is the commit cited in the reply. With a pathspec, `git show`
+prints nothing when that commit did not change `<path>` (no header-only
+output). Empty output is a reply-only resolve, not a fix.
+
+Do not substitute the PR tip for a missing SHA. A later unrelated commit
+on the branch makes `git show HEAD -- <path>` empty even when an earlier
+commit on the PR touched the file. Walk the range instead:
+
+```bash
+git log main..HEAD -- <path>
+git diff main...HEAD -- <path>
+```
+
+If `main` is not a local ref (shallow or detached checkout):
+
+```bash
+git fetch origin main
+git show origin/main:<path>
+```
+
+**Resolve still requires `main`.** Historical PRs in this repo are usually
+**squash-merged**, so the original review-reply SHA is often *not* an
+ancestor of `main`. After a squash:
+
+- `git show <sha> -- <path>` still answers "did that cited commit touch the
+  file?" if the object exists locally.
+- Resolve still requires `git show main:<path>` to show the concern is
+  satisfied on `main`. A SHA that is not an ancestor of `main` is neither
+  proof of a fix nor proof of a gap.
+
+For a squash-merged PR, the merge commit on `main` (for example PR #37 →
+`3b31ebf`) is the object to inspect if the reply SHA is gone.
+
+Optional extra checks:
+
+```bash
+# Original review SHA still exists as an object
 git cat-file -t <reply-sha>
 
-# 3) Only if the PR was *not* squashed (merge commit preserves parents)
+# Only if the PR was *not* squashed (merge commit preserves parents)
 git merge-base --is-ancestor <reply-sha> main
 ```
 
@@ -50,13 +85,14 @@ Status vocabulary:
 
 | Status | Meaning | Resolve? |
 | --- | --- | --- |
-| verified | Diff on `main` matches the bot concern | yes, after `git show main:<path>` |
+| verified | Diff on `main` matches the bot concern | yes, after both `git show` commands |
 | fixed-now | Gap confirmed; fix committed on `audit/bot-followups` (or this follow-up PR) but **not yet on `main`** | **no** — leave open until the follow-up is merged and `git show main:<path>` proves it |
 | deferred-with-rationale | Intentional non-fix; rationale already on the thread or recorded | yes, with the rationale on the thread |
 
 ## Worked example (bad vs good)
 
-Bot comment on `src/report/mod.rs:212`:
+Illustrative thread — not a live file citation. Bot comment on
+`src/report/mod.rs:212`:
 
 > This builds the metric label with `format!` inside the per-tensor loop, so it
 > allocates once per tensor. Hoist the label table out of the loop.
@@ -76,18 +112,23 @@ exact failure mode that produced the gh-30 backfill audit.
 ### Good — proof, then resolve
 
 ```bash
+$ git show <sha> -- src/report/mod.rs
+# non-empty diff: hoists METRIC_LABELS out of the loop
+
 $ git show main:src/report/mod.rs | sed -n '205,215p'
 const METRIC_LABELS: BTreeMap<&'static str, usize> = ...
     for tensor in tensors {
         let label = METRIC_LABELS[tensor.kind.as_str()];
 ```
 
-The table is now a module-level constant and the loop indexes it — the concern
+The first command proves the cited commit touches the file. The second shows
+the table is now a module-level constant and the loop indexes it — the concern
 is satisfied **on `main`**, not merely in a branch. Reply with that evidence:
 
 ```text
-verified — `git show main:src/report/mod.rs` (lines 205-215) shows METRIC_LABELS
-hoisted to a module constant; the loop now indexes it instead of calling format!.
+verified — `git show <sha> -- src/report/mod.rs` hoists METRIC_LABELS.
+`git show main:src/report/mod.rs` (lines 205-215) still has the table as a
+module constant; the loop indexes it instead of calling format!.
 ```
 
 …then mark the thread **Resolved**.
@@ -113,7 +154,7 @@ written to prevent in the other direction.
 
 ## Anti-patterns
 
-- Reply “Addressed in …” without a commit that touches `<path>`
+- Reply-only resolve: “Addressed in …” without a commit that touches `<path>`
+- Batch-resolve at session end without per-thread `git show` proof
+- Trust `isResolved` (or a PR-template checkbox) without diff proof
 - Paste a truncated or concatenated SHA
-- Resolve at session end without per-thread `git show`
-- Trust `isResolved` on a historical PR

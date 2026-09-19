@@ -48,6 +48,9 @@ All notable changes to `xai-dissect` are documented here.
 
 ### Documented
 
+- Maintainer module graph and "where to change X" index in
+  `docs/codebase-map.md`
+  ([#41](https://github.com/rmems/xai-dissect/issues/41)).
 - Maintainer CLI command → pipeline map in `docs/cli-routing.md`
   ([#46](https://github.com/rmems/xai-dissect/issues/46)).
 - `saaq-readiness.json` is `schema_version: 2` in `docs/export-contracts.md`,
@@ -58,6 +61,11 @@ All notable changes to `xai-dissect` are documented here.
   (`GLOBAL`/`REDUCE`/`BINPUT` carried wrong bytes) and rewrote the scanner
   description to match `find_dtype_anchors` — the parser locates dtype-tag
   anchors, it does not count `REDUCE`/`BINPUT` pairs.
+- Maintainer design for adding a model family using the existing Grok-1
+  pattern: parser (format) vs family profile (semantics) vs coverage
+  validator, plus a file/symbol inventory of Grok-1-hardcoded touchpoints
+  (`docs/model-family-extension.md`,
+  [#42](https://github.com/rmems/xai-dissect/issues/42)).
 
 ## Unreleased - 2026-05-27
 
