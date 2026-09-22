@@ -858,7 +858,7 @@ fn clamp01(v: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -920,15 +920,16 @@ mod tests {
         assert_eq!(stats.tensors[0].distribution_label, "empty");
     }
 
-    #[test]
-    fn stats_report_preserves_interleaved_shard_order_and_values() {
-        let dir = temp_dir("interleaved_stats");
+    fn write_interleaved_stat_shards(dir: &Path) -> (PathBuf, PathBuf) {
         let first_shard = dir.join("tensor00000_000");
         let second_shard = dir.join("tensor00001_000");
         fs::write(&first_shard, [1_u8, 3]).unwrap();
         fs::write(&second_shard, [2_u8]).unwrap();
+        (first_shard, second_shard)
+    }
 
-        let inv = inventory(vec![
+    fn interleaved_shard_inventory(first_shard: PathBuf, second_shard: PathBuf) -> ModelInventory {
+        inventory(vec![
             tensor(
                 first_shard.clone(),
                 TensorDType::I8,
@@ -959,7 +960,14 @@ mod tests {
                     Some(2),
                 )
             },
-        ]);
+        ])
+    }
+
+    #[test]
+    fn stats_report_preserves_interleaved_shard_order_and_values() {
+        let dir = temp_dir("interleaved_stats");
+        let (first_shard, second_shard) = write_interleaved_stat_shards(&dir);
+        let inv = interleaved_shard_inventory(first_shard, second_shard);
 
         let stats = build_stats_report(&inv, &StatsConfig::default()).unwrap();
 
@@ -1011,17 +1019,27 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
-    fn shard_cache_vmsize_is_bounded_in_subprocess() {
-        let output = Command::new(std::env::current_exe().unwrap())
+    fn run_shard_cache_vmsize_helper_subprocess() -> std::process::Output {
+        Command::new("cargo")
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
             .args([
+                "test",
+                "--locked",
+                "--lib",
+                "--",
                 "--exact",
                 "stats::tests::shard_cache_vmsize_helper",
                 "--nocapture",
             ])
             .env("XAI_DISSECT_VMSIZE_HELPER", "1")
             .output()
-            .unwrap();
+            .expect("failed to spawn shard_cache_vmsize_helper subprocess")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shard_cache_vmsize_is_bounded_in_subprocess() {
+        let output = run_shard_cache_vmsize_helper_subprocess();
         assert!(
             output.status.success(),
             "VmSize helper failed:\nstdout:\n{}\nstderr:\n{}",
