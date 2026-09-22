@@ -16,13 +16,16 @@
 //! By default up to 65,536 values are sampled per tensor (configurable
 //! via `--sample-values`). For large tensors this is a tiny fraction of
 //! total elements but is sufficient for statistical moment estimation.
+//! Sampling touches file-backed pages, which the operating system may retain
+//! in its reclaimable page cache. Those pages are not anonymous allocations;
+//! only one shard mapping is kept live at a time.
 //!
 //! ## What it does NOT do
 //! - It does **not** compute SAAQ calibration scores
 //! - It does **not** select quantization bit-widths
 //! - It does **not** mutate checkpoint weights
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -202,22 +205,30 @@ pub fn build_saaq_readiness_report(
 
 #[derive(Default)]
 struct ShardCache {
-    by_path: HashMap<PathBuf, Mmap>,
+    current: Option<(PathBuf, Mmap)>,
 }
 
 impl ShardCache {
     fn tensor_bytes<'a>(&'a mut self, tensor: &TensorInfo) -> Result<&'a [u8]> {
-        if !self.by_path.contains_key(&tensor.shard_path) {
+        let is_current = self
+            .current
+            .as_ref()
+            .is_some_and(|(path, _)| path == &tensor.shard_path);
+        if !is_current {
+            // Unmap the previous shard before opening its successor. Inventories may
+            // interleave shard paths, in which case a prior shard is mapped again.
+            self.current = None;
             let file = File::open(&tensor.shard_path)
                 .with_context(|| format!("open {}", tensor.shard_path.display()))?;
             let mm = unsafe { Mmap::map(&file) }
                 .with_context(|| format!("mmap {}", tensor.shard_path.display()))?;
-            self.by_path.insert(tensor.shard_path.clone(), mm);
+            self.current = Some((tensor.shard_path.clone(), mm));
         }
         let mm = self
-            .by_path
-            .get(&tensor.shard_path)
-            .expect("inserted mmap missing");
+            .current
+            .as_ref()
+            .map(|(_, mmap)| mmap)
+            .expect("current mmap missing");
         let start = tensor.offset as usize;
         let end = start.saturating_add(tensor.nbytes as usize);
         if end > mm.len() {
@@ -848,6 +859,7 @@ fn clamp01(v: f64) -> f64 {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
+    use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::schema::{
@@ -856,7 +868,7 @@ mod tests {
         TensorDType, TensorInfo, TensorKind, TensorRole, TensorShape, TensorStats, VarianceSummary,
     };
 
-    use super::{StatsConfig, build_saaq_readiness_report, build_stats_report};
+    use super::{ShardCache, StatsConfig, build_saaq_readiness_report, build_stats_report};
 
     #[test]
     fn stats_report_profiles_tensor_values() {
@@ -906,6 +918,168 @@ mod tests {
         assert_eq!(stats.tensors[0].total_values, 0);
         assert_eq!(stats.tensors[0].sample_values, 0);
         assert_eq!(stats.tensors[0].distribution_label, "empty");
+    }
+
+    #[test]
+    fn stats_report_preserves_interleaved_shard_order_and_values() {
+        let dir = temp_dir("interleaved_stats");
+        let first_shard = dir.join("tensor00000_000");
+        let second_shard = dir.join("tensor00001_000");
+        fs::write(&first_shard, [1_u8, 3]).unwrap();
+        fs::write(&second_shard, [2_u8]).unwrap();
+
+        let inv = inventory(vec![
+            tensor(
+                first_shard.clone(),
+                TensorDType::I8,
+                TensorRole::Tensor,
+                TensorKind::Router,
+                vec![1],
+                Some(0),
+                Some(0),
+            ),
+            tensor(
+                second_shard,
+                TensorDType::I8,
+                TensorRole::Tensor,
+                TensorKind::Router,
+                vec![1],
+                Some(0),
+                Some(1),
+            ),
+            TensorInfo {
+                offset: 1,
+                ..tensor(
+                    first_shard,
+                    TensorDType::I8,
+                    TensorRole::Tensor,
+                    TensorKind::Router,
+                    vec![1],
+                    Some(0),
+                    Some(2),
+                )
+            },
+        ]);
+
+        let stats = build_stats_report(&inv, &StatsConfig::default()).unwrap();
+
+        assert_eq!(stats.tensors.len(), 3);
+        assert_eq!(
+            stats
+                .tensors
+                .iter()
+                .map(|stat| stat.mean)
+                .collect::<Vec<_>>(),
+            vec![1.0, 2.0, 3.0]
+        );
+        assert_eq!(
+            stats
+                .tensors
+                .iter()
+                .map(|stat| stat.block_slot)
+                .collect::<Vec<_>>(),
+            vec![Some(0), Some(1), Some(2)]
+        );
+    }
+
+    #[test]
+    fn shard_cache_retains_at_most_one_mapping() {
+        let dir = temp_dir("bounded_shard_cache");
+        let first = dir.join("first");
+        let second = dir.join("second");
+        fs::write(&first, [1_u8]).unwrap();
+        fs::write(&second, [2_u8]).unwrap();
+        let first_tensor = tensor(
+            first.clone(),
+            TensorDType::I8,
+            TensorRole::Tensor,
+            TensorKind::Router,
+            vec![1],
+            None,
+            None,
+        );
+        let second_tensor = TensorInfo {
+            shard_path: second.clone(),
+            ..first_tensor.clone()
+        };
+        let mut cache = ShardCache::default();
+
+        assert_eq!(cache.tensor_bytes(&first_tensor).unwrap(), [1]);
+        assert_eq!(cache.current.as_ref().map(|(path, _)| path), Some(&first));
+        assert_eq!(cache.tensor_bytes(&second_tensor).unwrap(), [2]);
+        assert_eq!(cache.current.as_ref().map(|(path, _)| path), Some(&second));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shard_cache_vmsize_is_bounded_in_subprocess() {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "stats::tests::shard_cache_vmsize_helper",
+                "--nocapture",
+            ])
+            .env("XAI_DISSECT_VMSIZE_HELPER", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "VmSize helper failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shard_cache_vmsize_helper() {
+        if std::env::var_os("XAI_DISSECT_VMSIZE_HELPER").is_none() {
+            return;
+        }
+
+        const SHARD_COUNT: usize = 12;
+        const SHARD_BYTES: u64 = 16 * 1024 * 1024;
+        let dir = temp_dir("shard_cache_vmsize");
+        let baseline_kib = vm_size_kib();
+        let mut peak_kib = baseline_kib;
+        let mut cache = ShardCache::default();
+
+        for ordinal in 0..SHARD_COUNT {
+            let path = dir.join(format!("shard-{ordinal:02}"));
+            let file = fs::File::create(&path).unwrap();
+            file.set_len(SHARD_BYTES).unwrap();
+            let tensor = tensor(
+                path,
+                TensorDType::I8,
+                TensorRole::Tensor,
+                TensorKind::Router,
+                vec![SHARD_BYTES],
+                None,
+                None,
+            );
+            assert_eq!(cache.tensor_bytes(&tensor).unwrap()[0], 0);
+            peak_kib = peak_kib.max(vm_size_kib());
+            assert!(cache.current.is_some());
+        }
+
+        let growth_kib = peak_kib.saturating_sub(baseline_kib);
+        let cap_kib = (SHARD_BYTES / 1024) * 2;
+        assert!(
+            growth_kib <= cap_kib,
+            "VmSize grew by {growth_kib} KiB for {SHARD_COUNT} shards; cap is {cap_kib} KiB"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn vm_size_kib() -> u64 {
+        fs::read_to_string("/proc/self/status")
+            .unwrap()
+            .lines()
+            .find_map(|line| line.strip_prefix("VmSize:"))
+            .and_then(|value| value.split_whitespace().next())
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 
     #[test]
