@@ -34,7 +34,8 @@ use anyhow::{Context, Result, bail};
 use crate::parser::{self, RawTensor};
 use crate::schema::{
     BlockSummary, InferredHyperparams, InventoryTotals, KindCount, ModelInventory, MoeProjection,
-    QuantizedAttentionWidth, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
+    QuantizedAttentionWidth, ShardParseSummary, ShardRange, SkippedAnchorInfo, TensorDType,
+    TensorInfo, TensorKind, TensorRole,
 };
 
 /// Shared canonical-Grok-1 fixtures for `exports`, `planning`, and
@@ -77,6 +78,15 @@ impl Default for InventoryConfig {
 
 /// Build a full `ModelInventory` for the checkpoint directory at `path`.
 pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInventory> {
+    build_inventory_with_options(path, cfg, false)
+}
+
+/// Build an inventory, optionally rejecting any parser anchor that was skipped.
+pub fn build_inventory_with_options(
+    path: &Path,
+    cfg: &InventoryConfig,
+    fail_on_skipped_anchors: bool,
+) -> Result<ModelInventory> {
     let md = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
     if !md.is_dir() {
         bail!("{} is not a directory", path.display());
@@ -93,10 +103,34 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
 
     // Pass 1: parse every shard into RawTensor records.
     let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shard_selection.shards.len());
-    for shard in &shard_selection.shards {
-        let ts = parser::dissect_shard(shard)
+    let mut skipped_anchors = Vec::new();
+    let mut shard_parse_summaries = Vec::with_capacity(shard_selection.shards.len());
+    for (shard_ordinal, shard) in shard_selection.shards.iter().enumerate() {
+        let parsed = parser::dissect_shard_with_diagnostics(shard)
             .with_context(|| format!("parse shard {}", shard.display()))?;
-        raws_per_shard.push(ts);
+        shard_parse_summaries.push(ShardParseSummary {
+            shard_path: shard.clone(),
+            shard_ordinal: shard_ordinal as u32,
+            skipped_anchor_count: parsed.skipped_anchors.len() as u64,
+        });
+        skipped_anchors.extend(
+            parsed
+                .skipped_anchors
+                .into_iter()
+                .map(|skip| SkippedAnchorInfo {
+                    shard_path: shard.clone(),
+                    shard_ordinal: shard_ordinal as u32,
+                    byte_offset: skip.byte_offset,
+                    error: skip.error,
+                }),
+        );
+        raws_per_shard.push(parsed.tensors);
+    }
+    if fail_on_skipped_anchors && !skipped_anchors.is_empty() {
+        bail!(
+            "parser skipped {} malformed tensor anchor(s)",
+            skipped_anchors.len()
+        );
     }
 
     // Pass 2: infer model hyperparameters from the raw set.
@@ -111,6 +145,18 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         .enumerate()
     {
         for (in_shard_index, raw) in raws.iter().enumerate() {
+            let expected_nbytes = parser::checked_tensor_nbytes(raw.dtype, raw.shape.dims())
+                .with_context(|| format!("validate tensor in {}", shard_path.display()))?;
+            if expected_nbytes != raw.nbytes {
+                bail!(
+                    "tensor nbytes mismatch in {}: shape={} dtype={} nbytes={} expected={}",
+                    shard_path.display(),
+                    raw.shape.render(),
+                    raw.dtype.label(),
+                    raw.nbytes,
+                    expected_nbytes
+                );
+            }
             let kind = classify_tensor(raw, &hp);
             tensors.push(TensorInfo {
                 shard_path: shard_path.clone(),
@@ -151,6 +197,9 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         tensors,
         blocks,
         totals,
+        skipped_anchor_count: skipped_anchors.len() as u64,
+        skipped_anchors,
+        shard_parse_summaries,
         schema_version: SCHEMA_VERSION,
     })
 }
@@ -1055,6 +1104,9 @@ mod tests {
             tensors,
             blocks,
             totals,
+            skipped_anchors: Vec::new(),
+            shard_parse_summaries: Vec::new(),
+            skipped_anchor_count: 0,
             schema_version: SCHEMA_VERSION,
         }
     }

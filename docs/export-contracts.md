@@ -190,6 +190,10 @@ runtime or checkpoint-mutation tool.
   out in `CHANGELOG.md`.
 - Incompatible JSON shape changes require a `schema_version` bump on the
   affected top-level document type.
+- Additive, serde-defaulted inventory fields do not require a version bump.
+  Inventory schema v2 includes `skipped_anchors`, `shard_parse_summaries`, and
+  `skipped_anchor_count`; readers of older v2 documents default them to empty
+  or zero.
 - Markdown is human-readable rather than schema-tagged, but section structure
   and filenames are still treated as stable enough for downstream review and
   automation.

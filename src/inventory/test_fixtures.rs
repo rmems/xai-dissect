@@ -149,6 +149,9 @@ pub(crate) fn canonical_grok1_inventory_at(checkpoint_path: &Path) -> ModelInven
         tensors: canonical_tensors(checkpoint_path),
         blocks: Vec::new(),
         totals: Default::default(),
+        skipped_anchors: Vec::new(),
+        shard_parse_summaries: Vec::new(),
+        skipped_anchor_count: 0,
         schema_version: SCHEMA_VERSION,
     };
     refresh_derived_fields(&mut inv);

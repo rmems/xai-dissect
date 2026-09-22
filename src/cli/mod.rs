@@ -12,7 +12,7 @@ use clap::Args;
 
 use xai_dissect::experts::build_expert_atlas;
 use xai_dissect::exports::{self, OutputBundle};
-use xai_dissect::inventory::{InventoryConfig, build_inventory};
+use xai_dissect::inventory::{InventoryConfig, build_inventory_with_options};
 use xai_dissect::planning::{
     build_grok1_pilot_selection_plan, build_grok1_planning_artifacts,
     build_grok1_route_preservation_report,
@@ -55,6 +55,9 @@ pub struct CheckpointScanArgs {
     /// Only process the first N shards (sorted by filename).
     #[arg(long)]
     pub limit: Option<usize>,
+    /// Reject the scan if any tensor-like dtype anchor cannot be extracted.
+    #[arg(long)]
+    pub fail_on_skipped_anchors: bool,
 }
 
 /// Model family ids the CLI accepts. Today Grok-1 is the only supported
@@ -359,7 +362,7 @@ fn run_inventory_command(
         limit: scan.limit,
         model_family: family.to_string(),
     };
-    build_inventory(&scan.path, &cfg)
+    build_inventory_with_options(&scan.path, &cfg, scan.fail_on_skipped_anchors)
 }
 
 fn stats_config(sample_values: usize) -> StatsConfig {

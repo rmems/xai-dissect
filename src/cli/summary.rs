@@ -218,6 +218,9 @@ mod tests {
             },
             tensors,
             blocks: Vec::new(),
+            skipped_anchors: Vec::new(),
+            shard_parse_summaries: Vec::new(),
+            skipped_anchor_count: 0,
             schema_version: 2,
         }
     }

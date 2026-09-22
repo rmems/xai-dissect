@@ -64,6 +64,7 @@ fn render_inventory_preamble(md: &mut String, inv: &ModelInventory) {
     let _ = writeln!(md, "- **checkpoint**: `{}`", inv.checkpoint_path.display());
     let _ = writeln!(md, "- **shards**: {}", inv.shard_count);
     let _ = writeln!(md, "- **schema_version**: {}", inv.schema_version);
+    let _ = writeln!(md, "- **skipped anchors**: {}", inv.skipped_anchor_count);
 
     let _ = writeln!(md);
     let _ = writeln!(md, "## Inferred hyperparameters");
