@@ -131,37 +131,48 @@ pub fn dissect_shard_with_diagnostics(path: &Path) -> Result<ShardDissection> {
     // Safety: the file is not mutated while the mmap is live.
     let mm = unsafe { Mmap::map(&file) }.with_context(|| format!("mmap {}", path.display()))?;
     let bytes: &[u8] = &mm;
+    validate_pickle_proto4(bytes)?;
+    let (tensors, skipped_anchors) = extract_tensors_from_anchors(path, bytes)?;
+    Ok(ShardDissection {
+        tensors,
+        skipped_anchors,
+    })
+}
 
+fn validate_pickle_proto4(bytes: &[u8]) -> Result<()> {
     if bytes.len() < 2 || bytes[0] != OP_PROTO || bytes[1] != 0x04 {
         bail!(
             "not a pickle protocol 4 stream (magic={:02x?})",
             &bytes[..min(2, bytes.len())]
         );
     }
+    Ok(())
+}
 
+fn extract_tensors_from_anchors(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(Vec<RawTensor>, Vec<SkippedAnchor>)> {
     let scan = scan_dtype_anchors(bytes);
     let mut anchors = scan.anchors;
     anchors.sort_by_key(|a| a.tag_pos);
 
     let mut tensors: Vec<RawTensor> = Vec::with_capacity(anchors.len());
     let mut skipped_anchors = scan.malformed_postambles;
-    for a in &anchors {
-        match extract_tensor(bytes, a) {
-            Ok(t) => tensors.push(t),
-            Err(err) => record_skipped_anchor(path, &mut skipped_anchors, a.tag_pos as u64, &err),
+    for anchor in &anchors {
+        match extract_tensor(bytes, anchor) {
+            Ok(tensor) => tensors.push(tensor),
+            Err(err) => {
+                record_skipped_anchor(path, &mut skipped_anchors, anchor.tag_pos as u64, &err)
+            }
         }
     }
     skipped_anchors.sort_by_key(|skip| skip.byte_offset);
 
     let qw8_sites = find_qw8_sites(bytes);
     assign_qw8_roles(&mut tensors, &qw8_sites);
-
-    // Stable order for all downstream layers.
-    tensors.sort_by_key(|t| t.offset);
-    Ok(ShardDissection {
-        tensors,
-        skipped_anchors,
-    })
+    tensors.sort_by_key(|tensor| tensor.offset);
+    Ok((tensors, skipped_anchors))
 }
 
 // --- Anchor discovery ------------------------------------------------------
