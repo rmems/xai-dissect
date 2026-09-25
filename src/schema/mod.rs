@@ -834,6 +834,9 @@ pub struct CheckpointInventorySnapshot {
     pub total_tensors: u64,
     pub total_nbytes: u64,
     pub blocks: Vec<CheckpointInventoryBlockSnapshot>,
+    /// Parser anchors omitted after extraction failed (same semantics as `ModelInventory`).
+    #[serde(default)]
+    pub skipped_anchor_count: u64,
     pub schema_version: u32,
 }
 

@@ -102,36 +102,10 @@ pub fn build_inventory_with_options(
     }
 
     // Pass 1: parse every shard into RawTensor records.
-    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shard_selection.shards.len());
-    let mut skipped_anchors = Vec::new();
-    let mut shard_parse_summaries = Vec::with_capacity(shard_selection.shards.len());
-    for (shard_ordinal, shard) in shard_selection.shards.iter().enumerate() {
-        let parsed = parser::dissect_shard_with_diagnostics(shard)
-            .with_context(|| format!("parse shard {}", shard.display()))?;
-        shard_parse_summaries.push(ShardParseSummary {
-            shard_path: shard.clone(),
-            shard_ordinal: shard_ordinal as u32,
-            skipped_anchor_count: parsed.skipped_anchors.len() as u64,
-        });
-        skipped_anchors.extend(
-            parsed
-                .skipped_anchors
-                .into_iter()
-                .map(|skip| SkippedAnchorInfo {
-                    shard_path: shard.clone(),
-                    shard_ordinal: shard_ordinal as u32,
-                    byte_offset: skip.byte_offset,
-                    error: skip.error,
-                }),
-        );
-        raws_per_shard.push(parsed.tensors);
-    }
-    if fail_on_skipped_anchors && !skipped_anchors.is_empty() {
-        bail!(
-            "parser skipped {} malformed tensor anchor(s)",
-            skipped_anchors.len()
-        );
-    }
+    let parsed_shards = parse_checkpoint_shards(&shard_selection.shards, fail_on_skipped_anchors)?;
+    let raws_per_shard = parsed_shards.raws_per_shard;
+    let skipped_anchors = parsed_shards.skipped_anchors;
+    let shard_parse_summaries = parsed_shards.shard_parse_summaries;
 
     // Pass 2: infer model hyperparameters from the raw set.
     let hp = infer_hyperparams(&raws_per_shard);
@@ -201,6 +175,53 @@ pub fn build_inventory_with_options(
         skipped_anchors,
         shard_parse_summaries,
         schema_version: SCHEMA_VERSION,
+    })
+}
+
+struct ParsedCheckpointShards {
+    raws_per_shard: Vec<Vec<RawTensor>>,
+    skipped_anchors: Vec<SkippedAnchorInfo>,
+    shard_parse_summaries: Vec<ShardParseSummary>,
+}
+
+fn parse_checkpoint_shards(
+    shards: &[PathBuf],
+    fail_on_skipped_anchors: bool,
+) -> Result<ParsedCheckpointShards> {
+    let mut raws_per_shard = Vec::with_capacity(shards.len());
+    let mut skipped_anchors = Vec::new();
+    let mut shard_parse_summaries = Vec::with_capacity(shards.len());
+    for (shard_ordinal, shard) in shards.iter().enumerate() {
+        let parsed = parser::dissect_shard_with_diagnostics(shard)
+            .with_context(|| format!("parse shard {}", shard.display()))?;
+        shard_parse_summaries.push(ShardParseSummary {
+            shard_path: shard.clone(),
+            shard_ordinal: shard_ordinal as u32,
+            skipped_anchor_count: parsed.skipped_anchors.len() as u64,
+        });
+        skipped_anchors.extend(
+            parsed
+                .skipped_anchors
+                .into_iter()
+                .map(|skip| SkippedAnchorInfo {
+                    shard_path: shard.clone(),
+                    shard_ordinal: shard_ordinal as u32,
+                    byte_offset: skip.byte_offset,
+                    error: skip.error,
+                }),
+        );
+        raws_per_shard.push(parsed.tensors);
+    }
+    if fail_on_skipped_anchors && !skipped_anchors.is_empty() {
+        bail!(
+            "parser skipped {} malformed tensor anchor(s)",
+            skipped_anchors.len()
+        );
+    }
+    Ok(ParsedCheckpointShards {
+        raws_per_shard,
+        skipped_anchors,
+        shard_parse_summaries,
     })
 }
 

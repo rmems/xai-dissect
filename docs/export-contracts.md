@@ -71,6 +71,8 @@ off the directory slug plus tensor locators, not off the host-local
 - `manifests/<slug>/checkpoint-inventory-snapshot.json`: compact summary for
   dashboards or quick sanity checks. It is not sufficient by itself for
   ingestion because it omits the full tensor table and expert slice mapping.
+  Includes `skipped_anchor_count` (serde-defaulted) so lossy permissive scans
+  are visible without opening the full `inventory.json`.
 - `exports/<slug>/routing-report.json`: richer routing analysis companion for
   review and debugging. It is not required for ingest because the normative
   routing guardrail list lives in `routing-critical-tensors.json`.

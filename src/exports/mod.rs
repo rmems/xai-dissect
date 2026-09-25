@@ -413,6 +413,7 @@ pub fn build_inventory_snapshot(inv: &ModelInventory) -> CheckpointInventorySnap
                     .collect(),
             })
             .collect(),
+        skipped_anchor_count: inv.skipped_anchor_count,
         schema_version: inv.schema_version,
     }
 }

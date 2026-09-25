@@ -139,25 +139,19 @@ pub fn dissect_shard_with_diagnostics(path: &Path) -> Result<ShardDissection> {
         );
     }
 
-    let mut anchors = find_dtype_anchors(bytes);
+    let scan = scan_dtype_anchors(bytes);
+    let mut anchors = scan.anchors;
     anchors.sort_by_key(|a| a.tag_pos);
 
     let mut tensors: Vec<RawTensor> = Vec::with_capacity(anchors.len());
-    let mut skipped_anchors = Vec::new();
+    let mut skipped_anchors = scan.malformed_postambles;
     for a in &anchors {
         match extract_tensor(bytes, a) {
             Ok(t) => tensors.push(t),
-            Err(err) => {
-                // Non-fatal: one bad anchor never aborts a shard.
-                let error = format!("{err:#}");
-                tracing::warn!(path = %path.display(), byte_offset = a.tag_pos, error, "skipping malformed tensor anchor");
-                skipped_anchors.push(SkippedAnchor {
-                    byte_offset: a.tag_pos as u64,
-                    error,
-                });
-            }
+            Err(err) => record_skipped_anchor(path, &mut skipped_anchors, a.tag_pos as u64, &err),
         }
     }
+    skipped_anchors.sort_by_key(|skip| skip.byte_offset);
 
     let qw8_sites = find_qw8_sites(bytes);
     assign_qw8_roles(&mut tensors, &qw8_sites);
@@ -181,8 +175,14 @@ struct DtypeAnchor {
     dtype: TensorDType,
 }
 
-fn find_dtype_anchors(bytes: &[u8]) -> Vec<DtypeAnchor> {
-    let mut out: Vec<DtypeAnchor> = Vec::new();
+struct DtypeAnchorScan {
+    anchors: Vec<DtypeAnchor>,
+    malformed_postambles: Vec<SkippedAnchor>,
+}
+
+fn scan_dtype_anchors(bytes: &[u8]) -> DtypeAnchorScan {
+    let mut anchors = Vec::new();
+    let mut malformed_postambles = Vec::new();
     for (tag, dtype) in [
         (DTYPE_TAG_F32, TensorDType::F32),
         (DTYPE_TAG_I8, TensorDType::I8),
@@ -190,15 +190,39 @@ fn find_dtype_anchors(bytes: &[u8]) -> Vec<DtypeAnchor> {
         for pos in memmem::find_iter(bytes, tag) {
             let after = pos + tag.len();
             if has_dtype_postamble(bytes, after) {
-                out.push(DtypeAnchor {
+                anchors.push(DtypeAnchor {
                     tag_pos: pos,
                     after_tag: after,
                     dtype,
                 });
+            } else {
+                malformed_postambles.push(SkippedAnchor {
+                    byte_offset: pos as u64,
+                    error: format!("malformed dtype postamble after {} tag", dtype.label()),
+                });
             }
         }
     }
-    out
+    DtypeAnchorScan {
+        anchors,
+        malformed_postambles,
+    }
+}
+
+fn record_skipped_anchor(
+    path: &Path,
+    skipped_anchors: &mut Vec<SkippedAnchor>,
+    byte_offset: u64,
+    err: &anyhow::Error,
+) {
+    let error = format!("{err:#}");
+    tracing::warn!(
+        path = %path.display(),
+        byte_offset,
+        error,
+        "skipping malformed tensor anchor"
+    );
+    skipped_anchors.push(SkippedAnchor { byte_offset, error });
 }
 
 fn has_dtype_postamble(bytes: &[u8], after_tag: usize) -> bool {
