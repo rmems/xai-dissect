@@ -34,7 +34,8 @@ use anyhow::{Context, Result, bail};
 use crate::parser::{self, RawTensor};
 use crate::schema::{
     BlockSummary, InferredHyperparams, InventoryTotals, KindCount, ModelInventory, MoeProjection,
-    QuantizedAttentionWidth, ShardRange, TensorDType, TensorInfo, TensorKind, TensorRole,
+    QuantizedAttentionWidth, ShardParseSummary, ShardRange, SkippedAnchorInfo, TensorDType,
+    TensorInfo, TensorKind, TensorRole,
 };
 
 /// Shared canonical-Grok-1 fixtures for `exports`, `planning`, and
@@ -77,11 +78,28 @@ impl Default for InventoryConfig {
 
 /// Build a full `ModelInventory` for the checkpoint directory at `path`.
 pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInventory> {
+    build_inventory_with_options(path, cfg, false)
+}
+
+/// Build an inventory, optionally rejecting any parser anchor that was skipped.
+pub fn build_inventory_with_options(
+    path: &Path,
+    cfg: &InventoryConfig,
+    fail_on_skipped_anchors: bool,
+) -> Result<ModelInventory> {
+    let shard_selection = select_checkpoint_shards(path, cfg)?;
+    let parsed_shards = parse_checkpoint_shards(&shard_selection.shards, fail_on_skipped_anchors)?;
+    let hp = infer_hyperparams(&parsed_shards.raws_per_shard);
+    let tensors =
+        classify_shard_tensors(&shard_selection.shards, &parsed_shards.raws_per_shard, &hp)?;
+    finalize_model_inventory(path, cfg, &shard_selection, parsed_shards, hp, tensors)
+}
+
+fn select_checkpoint_shards(path: &Path, cfg: &InventoryConfig) -> Result<ShardSelection> {
     let md = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
     if !md.is_dir() {
         bail!("{} is not a directory", path.display());
     }
-
     let shard_selection = collect_shards(path, &cfg.prefix, cfg.limit)?;
     if shard_selection.shards.is_empty() {
         bail!(
@@ -90,46 +108,72 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
             cfg.prefix
         );
     }
+    Ok(shard_selection)
+}
 
-    // Pass 1: parse every shard into RawTensor records.
-    let mut raws_per_shard: Vec<Vec<RawTensor>> = Vec::with_capacity(shard_selection.shards.len());
-    for shard in &shard_selection.shards {
-        let ts = parser::dissect_shard(shard)
-            .with_context(|| format!("parse shard {}", shard.display()))?;
-        raws_per_shard.push(ts);
-    }
-
-    // Pass 2: infer model hyperparameters from the raw set.
-    let hp = infer_hyperparams(&raws_per_shard);
-
-    // Pass 3: classify each raw tensor into a TensorKind.
-    let mut tensors: Vec<TensorInfo> = Vec::new();
-    for (shard_ordinal, (shard_path, raws)) in shard_selection
-        .shards
-        .iter()
-        .zip(raws_per_shard.iter())
-        .enumerate()
+fn classify_shard_tensors(
+    shards: &[PathBuf],
+    raws_per_shard: &[Vec<RawTensor>],
+    hp: &InferredHyperparams,
+) -> Result<Vec<TensorInfo>> {
+    let mut tensors = Vec::new();
+    for (shard_ordinal, (shard_path, raws)) in shards.iter().zip(raws_per_shard.iter()).enumerate()
     {
         for (in_shard_index, raw) in raws.iter().enumerate() {
-            let kind = classify_tensor(raw, &hp);
-            tensors.push(TensorInfo {
-                shard_path: shard_path.clone(),
-                shard_ordinal: shard_ordinal as u32,
-                in_shard_index: in_shard_index as u32,
-                role: raw.role,
-                dtype: raw.dtype,
-                shape: raw.shape.clone(),
-                offset: raw.offset,
-                nbytes: raw.nbytes,
-                kind,
-                block_index: None,
-                block_slot: None,
-            });
+            tensors.push(classify_raw_tensor(
+                shard_path,
+                shard_ordinal,
+                in_shard_index,
+                raw,
+                hp,
+            )?);
         }
     }
+    Ok(tensors)
+}
 
-    // Pass 4: assign block_index / block_slot from shard ordinals, using a
-    // Grok-1-shaped layout model when the shard count fits.
+fn classify_raw_tensor(
+    shard_path: &Path,
+    shard_ordinal: usize,
+    in_shard_index: usize,
+    raw: &RawTensor,
+    hp: &InferredHyperparams,
+) -> Result<TensorInfo> {
+    let expected_nbytes = parser::checked_tensor_nbytes(raw.dtype, raw.shape.dims())
+        .with_context(|| format!("validate tensor in {}", shard_path.display()))?;
+    if expected_nbytes != raw.nbytes {
+        bail!(
+            "tensor nbytes mismatch in {}: shape={} dtype={} nbytes={} expected={}",
+            shard_path.display(),
+            raw.shape.render(),
+            raw.dtype.label(),
+            raw.nbytes,
+            expected_nbytes
+        );
+    }
+    Ok(TensorInfo {
+        shard_path: shard_path.to_path_buf(),
+        shard_ordinal: shard_ordinal as u32,
+        in_shard_index: in_shard_index as u32,
+        role: raw.role,
+        dtype: raw.dtype,
+        shape: raw.shape.clone(),
+        offset: raw.offset,
+        nbytes: raw.nbytes,
+        kind: classify_tensor(raw, hp),
+        block_index: None,
+        block_slot: None,
+    })
+}
+
+fn finalize_model_inventory(
+    path: &Path,
+    cfg: &InventoryConfig,
+    shard_selection: &ShardSelection,
+    parsed_shards: ParsedCheckpointShards,
+    hp: InferredHyperparams,
+    mut tensors: Vec<TensorInfo>,
+) -> Result<ModelInventory> {
     let n_blocks = assign_block_indices_for_scan(
         &mut tensors,
         shard_selection.shards.len(),
@@ -138,11 +182,8 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
     if cfg.model_family == "grok-1" {
         disambiguate_grok1_moe_projection_slots(&mut tensors, &hp);
     }
-
-    // Pass 5: build block summaries and totals.
     let blocks = summarize_blocks(&tensors);
     let totals = compute_totals(&tensors);
-
     Ok(ModelInventory {
         model_family: cfg.model_family.clone(),
         checkpoint_path: path.to_path_buf(),
@@ -151,7 +192,57 @@ pub fn build_inventory(path: &Path, cfg: &InventoryConfig) -> Result<ModelInvent
         tensors,
         blocks,
         totals,
+        skipped_anchor_count: parsed_shards.skipped_anchors.len() as u64,
+        skipped_anchors: parsed_shards.skipped_anchors,
+        shard_parse_summaries: parsed_shards.shard_parse_summaries,
         schema_version: SCHEMA_VERSION,
+    })
+}
+
+struct ParsedCheckpointShards {
+    raws_per_shard: Vec<Vec<RawTensor>>,
+    skipped_anchors: Vec<SkippedAnchorInfo>,
+    shard_parse_summaries: Vec<ShardParseSummary>,
+}
+
+fn parse_checkpoint_shards(
+    shards: &[PathBuf],
+    fail_on_skipped_anchors: bool,
+) -> Result<ParsedCheckpointShards> {
+    let mut raws_per_shard = Vec::with_capacity(shards.len());
+    let mut skipped_anchors = Vec::new();
+    let mut shard_parse_summaries = Vec::with_capacity(shards.len());
+    for (shard_ordinal, shard) in shards.iter().enumerate() {
+        let parsed = parser::dissect_shard_with_diagnostics(shard)
+            .with_context(|| format!("parse shard {}", shard.display()))?;
+        shard_parse_summaries.push(ShardParseSummary {
+            shard_path: shard.clone(),
+            shard_ordinal: shard_ordinal as u32,
+            skipped_anchor_count: parsed.skipped_anchors.len() as u64,
+        });
+        skipped_anchors.extend(
+            parsed
+                .skipped_anchors
+                .into_iter()
+                .map(|skip| SkippedAnchorInfo {
+                    shard_path: shard.clone(),
+                    shard_ordinal: shard_ordinal as u32,
+                    byte_offset: skip.byte_offset,
+                    error: skip.error,
+                }),
+        );
+        raws_per_shard.push(parsed.tensors);
+    }
+    if fail_on_skipped_anchors && !skipped_anchors.is_empty() {
+        bail!(
+            "parser skipped {} malformed tensor anchor(s)",
+            skipped_anchors.len()
+        );
+    }
+    Ok(ParsedCheckpointShards {
+        raws_per_shard,
+        skipped_anchors,
+        shard_parse_summaries,
     })
 }
 
@@ -1055,6 +1146,9 @@ mod tests {
             tensors,
             blocks,
             totals,
+            skipped_anchors: Vec::new(),
+            shard_parse_summaries: Vec::new(),
+            skipped_anchor_count: 0,
             schema_version: SCHEMA_VERSION,
         }
     }

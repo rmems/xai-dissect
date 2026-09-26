@@ -51,6 +51,22 @@ fn inventory_markdown_covers_missing_shard_range_and_empty_kinds() {
 }
 
 #[test]
+fn inventory_markdown_lists_skipped_parser_anchors() {
+    let mut inv = sample_inventory();
+    inv.skipped_anchor_count = 1;
+    inv.skipped_anchors
+        .push(xai_dissect::schema::SkippedAnchorInfo {
+            shard_path: PathBuf::from("/tmp/tensor0000.pkl"),
+            shard_ordinal: 0,
+            byte_offset: 42,
+            error: "shape/payload mismatch".into(),
+        });
+    let md = render_markdown(&inv);
+    assert!(md.contains("## Skipped parser anchors"));
+    assert!(md.contains("| 0 | `/tmp/tensor0000.pkl` | 42 | shape/payload mismatch |"));
+}
+
+#[test]
 fn expert_markdown_covers_empty_lists_failed_checks_and_issues() {
     let mut atlas = sample_expert_atlas();
     atlas.blocks[0].tensors.clear();

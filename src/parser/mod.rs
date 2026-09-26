@@ -101,48 +101,78 @@ pub struct RawTensor {
     pub nbytes: u64,
 }
 
+/// A dtype anchor that looked like a tensor but could not be extracted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkippedAnchor {
+    /// Byte offset of the dtype tag in the pickle stream.
+    pub byte_offset: u64,
+    /// Human-readable extraction failure, suitable for diagnostics and exports.
+    pub error: String,
+}
+
+/// Rich parser result used by inventory callers that must account for losses.
+#[derive(Clone, Debug)]
+pub struct ShardDissection {
+    pub tensors: Vec<RawTensor>,
+    pub skipped_anchors: Vec<SkippedAnchor>,
+}
+
 /// Memory-map `path` and extract every tensor anchor it contains. Returns
 /// the tensors sorted by `offset`. `QuantizedWeight8bit` sites are detected
 /// and the adjacent int8/f32 pair is labeled with the matching
 /// `TensorRole::QuantWeight` / `QuantScales`.
 pub fn dissect_shard(path: &Path) -> Result<Vec<RawTensor>> {
+    Ok(dissect_shard_with_diagnostics(path)?.tensors)
+}
+
+/// Extract tensors and return structured records for every skipped anchor.
+pub fn dissect_shard_with_diagnostics(path: &Path) -> Result<ShardDissection> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     // Safety: the file is not mutated while the mmap is live.
     let mm = unsafe { Mmap::map(&file) }.with_context(|| format!("mmap {}", path.display()))?;
     let bytes: &[u8] = &mm;
+    validate_pickle_proto4(bytes)?;
+    let (tensors, skipped_anchors) = extract_tensors_from_anchors(path, bytes)?;
+    Ok(ShardDissection {
+        tensors,
+        skipped_anchors,
+    })
+}
 
+fn validate_pickle_proto4(bytes: &[u8]) -> Result<()> {
     if bytes.len() < 2 || bytes[0] != OP_PROTO || bytes[1] != 0x04 {
         bail!(
             "not a pickle protocol 4 stream (magic={:02x?})",
             &bytes[..min(2, bytes.len())]
         );
     }
+    Ok(())
+}
 
-    let mut anchors = find_dtype_anchors(bytes);
+fn extract_tensors_from_anchors(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(Vec<RawTensor>, Vec<SkippedAnchor>)> {
+    let scan = scan_dtype_anchors(bytes);
+    let mut anchors = scan.anchors;
     anchors.sort_by_key(|a| a.tag_pos);
 
     let mut tensors: Vec<RawTensor> = Vec::with_capacity(anchors.len());
-    for a in &anchors {
-        match extract_tensor(bytes, a) {
-            Ok(t) => tensors.push(t),
+    let mut skipped_anchors = scan.malformed_postambles;
+    for anchor in &anchors {
+        match extract_tensor(bytes, anchor) {
+            Ok(tensor) => tensors.push(tensor),
             Err(err) => {
-                // Non-fatal: one bad anchor never aborts a shard.
-                eprintln!(
-                    "  skip anchor @ {:#x} in {}: {:#}",
-                    a.tag_pos,
-                    path.display(),
-                    err
-                );
+                record_skipped_anchor(path, &mut skipped_anchors, anchor.tag_pos as u64, &err)
             }
         }
     }
+    skipped_anchors.sort_by_key(|skip| skip.byte_offset);
 
     let qw8_sites = find_qw8_sites(bytes);
     assign_qw8_roles(&mut tensors, &qw8_sites);
-
-    // Stable order for all downstream layers.
-    tensors.sort_by_key(|t| t.offset);
-    Ok(tensors)
+    tensors.sort_by_key(|tensor| tensor.offset);
+    Ok((tensors, skipped_anchors))
 }
 
 // --- Anchor discovery ------------------------------------------------------
@@ -156,8 +186,14 @@ struct DtypeAnchor {
     dtype: TensorDType,
 }
 
-fn find_dtype_anchors(bytes: &[u8]) -> Vec<DtypeAnchor> {
-    let mut out: Vec<DtypeAnchor> = Vec::new();
+struct DtypeAnchorScan {
+    anchors: Vec<DtypeAnchor>,
+    malformed_postambles: Vec<SkippedAnchor>,
+}
+
+fn scan_dtype_anchors(bytes: &[u8]) -> DtypeAnchorScan {
+    let mut anchors = Vec::new();
+    let mut malformed_postambles = Vec::new();
     for (tag, dtype) in [
         (DTYPE_TAG_F32, TensorDType::F32),
         (DTYPE_TAG_I8, TensorDType::I8),
@@ -165,15 +201,39 @@ fn find_dtype_anchors(bytes: &[u8]) -> Vec<DtypeAnchor> {
         for pos in memmem::find_iter(bytes, tag) {
             let after = pos + tag.len();
             if has_dtype_postamble(bytes, after) {
-                out.push(DtypeAnchor {
+                anchors.push(DtypeAnchor {
                     tag_pos: pos,
                     after_tag: after,
                     dtype,
                 });
+            } else {
+                malformed_postambles.push(SkippedAnchor {
+                    byte_offset: pos as u64,
+                    error: format!("malformed dtype postamble after {} tag", dtype.label()),
+                });
             }
         }
     }
-    out
+    DtypeAnchorScan {
+        anchors,
+        malformed_postambles,
+    }
+}
+
+fn record_skipped_anchor(
+    path: &Path,
+    skipped_anchors: &mut Vec<SkippedAnchor>,
+    byte_offset: u64,
+    err: &anyhow::Error,
+) {
+    let error = format!("{err:#}");
+    tracing::warn!(
+        path = %path.display(),
+        byte_offset,
+        error,
+        "skipping malformed tensor anchor"
+    );
+    skipped_anchors.push(SkippedAnchor { byte_offset, error });
 }
 
 fn has_dtype_postamble(bytes: &[u8], after_tag: usize) -> bool {
@@ -189,12 +249,8 @@ fn has_dtype_postamble(bytes: &[u8], after_tag: usize) -> bool {
 fn extract_tensor(bytes: &[u8], anchor: &DtypeAnchor) -> Result<RawTensor> {
     let shape_dims = parse_shape_backward(bytes, anchor.tag_pos)?;
     let (offset, nbytes) = find_payload_forward(bytes, anchor.after_tag)?;
-    let expected = anchor.dtype.itemsize() as u64
-        * shape_dims
-            .iter()
-            .copied()
-            .fold(1u64, |a, d| a.saturating_mul(d));
-    if expected != 0 && expected != nbytes {
+    let expected = checked_tensor_nbytes(anchor.dtype, &shape_dims)?;
+    if expected != nbytes {
         return Err(anyhow!(
             "shape/payload mismatch: shape={:?} dtype={} nbytes={} expected={}",
             shape_dims,
@@ -210,6 +266,20 @@ fn extract_tensor(bytes: &[u8], anchor: &DtypeAnchor) -> Result<RawTensor> {
         offset,
         nbytes,
     })
+}
+
+/// Compute the encoded byte size without allowing dimension multiplication to
+/// wrap or saturate into a plausible value.
+pub(crate) fn checked_tensor_nbytes(dtype: TensorDType, shape: &[u64]) -> Result<u64> {
+    shape
+        .iter()
+        .try_fold(dtype.itemsize() as u64, |size, dim| size.checked_mul(*dim))
+        .ok_or_else(|| {
+            anyhow!(
+                "tensor byte size overflows u64: shape={shape:?} dtype={}",
+                dtype.label()
+            )
+        })
 }
 
 fn parse_shape_backward(bytes: &[u8], tag_pos: usize) -> Result<Vec<u64>> {
@@ -463,8 +533,19 @@ fn assign_qw8_roles(tensors: &mut [RawTensor], sites: &[usize]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{RawTensor, assign_qw8_roles};
+    use super::{RawTensor, assign_qw8_roles, checked_tensor_nbytes};
     use crate::schema::{TensorDType, TensorRole, TensorShape};
+
+    #[test]
+    fn checked_tensor_nbytes_rejects_overflow() {
+        let error = checked_tensor_nbytes(TensorDType::F32, &[u64::MAX, 2])
+            .expect_err("overflowing dimensions must fail");
+        assert!(error.to_string().contains("overflows u64"));
+        assert_eq!(
+            checked_tensor_nbytes(TensorDType::F32, &[0, u64::MAX]).unwrap(),
+            0
+        );
+    }
 
     #[test]
     fn qw8_role_assignment_stays_within_site_region() {

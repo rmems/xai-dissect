@@ -58,7 +58,9 @@ Aggregates parser records across a checkpoint directory into a single
 queryable table. Responsibilities:
 
 - dedup and order shards deterministically
-- verify `nbytes == dtype_size * prod(shape)`
+- re-verify `nbytes == dtype_size * prod(shape)` with checked arithmetic
+- retain structured records and per-shard/overall counts for parser anchors
+  skipped because extraction failed
 - build indices by shard, by role, and by shape family
 - detect missing/extra shards vs. an expected count
 

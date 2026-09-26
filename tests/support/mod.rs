@@ -250,6 +250,9 @@ pub fn sample_inventory() -> ModelInventory {
             total_nbytes: 368,
             total_elements: 92,
         },
+        skipped_anchors: Vec::new(),
+        shard_parse_summaries: Vec::new(),
+        skipped_anchor_count: 0,
         schema_version: inventory::SCHEMA_VERSION,
     }
 }
@@ -294,6 +297,9 @@ pub fn unmapped_repacked_grok1_inventory() -> ModelInventory {
             total_nbytes: (N as u64) * 16,
             total_elements: (N as u64) * 4,
         },
+        skipped_anchors: Vec::new(),
+        shard_parse_summaries: Vec::new(),
+        skipped_anchor_count: 0,
         schema_version: inventory::SCHEMA_VERSION,
     }
 }

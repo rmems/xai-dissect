@@ -413,6 +413,7 @@ pub fn build_inventory_snapshot(inv: &ModelInventory) -> CheckpointInventorySnap
                     .collect(),
             })
             .collect(),
+        skipped_anchor_count: inv.skipped_anchor_count,
         schema_version: inv.schema_version,
     }
 }
@@ -1101,6 +1102,9 @@ mod tests {
                 total_nbytes: 1024,
                 total_elements: 256,
             },
+            skipped_anchors: Vec::new(),
+            shard_parse_summaries: Vec::new(),
+            skipped_anchor_count: 0,
             schema_version: 1,
         }
     }

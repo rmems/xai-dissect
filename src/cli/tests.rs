@@ -22,6 +22,7 @@ fn scan_for(path: PathBuf) -> CheckpointScanArgs {
         path,
         prefix: "tensor".into(),
         limit: None,
+        fail_on_skipped_anchors: false,
     }
 }
 

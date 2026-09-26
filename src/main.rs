@@ -551,6 +551,7 @@ mod tests {
             path: PathBuf::from("/tmp/ckpt"),
             prefix: "tensor".into(),
             limit: None,
+            fail_on_skipped_anchors: false,
         }
     }
 

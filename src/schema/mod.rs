@@ -324,8 +324,32 @@ pub struct ModelInventory {
     pub tensors: Vec<TensorInfo>,
     pub blocks: Vec<BlockSummary>,
     pub totals: InventoryTotals,
+    /// Parser anchors that were intentionally omitted after extraction failed.
+    #[serde(default)]
+    pub skipped_anchors: Vec<SkippedAnchorInfo>,
+    /// Per-shard parser accounting, including shards with no failures.
+    #[serde(default)]
+    pub shard_parse_summaries: Vec<ShardParseSummary>,
+    /// Total number of skipped anchors across all inspected shards.
+    #[serde(default)]
+    pub skipped_anchor_count: u64,
     /// Schema version. Bump on incompatible export changes.
     pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkippedAnchorInfo {
+    pub shard_path: PathBuf,
+    pub shard_ordinal: u32,
+    pub byte_offset: u64,
+    pub error: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ShardParseSummary {
+    pub shard_path: PathBuf,
+    pub shard_ordinal: u32,
+    pub skipped_anchor_count: u64,
 }
 
 /// Top-level, serializable expert-level view of a checkpoint directory.
@@ -810,6 +834,9 @@ pub struct CheckpointInventorySnapshot {
     pub total_tensors: u64,
     pub total_nbytes: u64,
     pub blocks: Vec<CheckpointInventoryBlockSnapshot>,
+    /// Parser anchors omitted after extraction failed (same semantics as `ModelInventory`).
+    #[serde(default)]
+    pub skipped_anchor_count: u64,
     pub schema_version: u32,
 }
 

@@ -71,6 +71,8 @@ off the directory slug plus tensor locators, not off the host-local
 - `manifests/<slug>/checkpoint-inventory-snapshot.json`: compact summary for
   dashboards or quick sanity checks. It is not sufficient by itself for
   ingestion because it omits the full tensor table and expert slice mapping.
+  Includes `skipped_anchor_count` (serde-defaulted) so lossy permissive scans
+  are visible without opening the full `inventory.json`.
 - `exports/<slug>/routing-report.json`: richer routing analysis companion for
   review and debugging. It is not required for ingest because the normative
   routing guardrail list lives in `routing-critical-tensors.json`.
@@ -190,6 +192,10 @@ runtime or checkpoint-mutation tool.
   out in `CHANGELOG.md`.
 - Incompatible JSON shape changes require a `schema_version` bump on the
   affected top-level document type.
+- Additive, serde-defaulted inventory fields do not require a version bump.
+  Inventory schema v2 includes `skipped_anchors`, `shard_parse_summaries`, and
+  `skipped_anchor_count`; readers of older v2 documents default them to empty
+  or zero.
 - Markdown is human-readable rather than schema-tagged, but section structure
   and filenames are still treated as stable enough for downstream review and
   automation.

@@ -45,6 +45,7 @@ pub fn write_grok1_coverage_manifest_json(
 pub fn render_markdown(inv: &ModelInventory) -> String {
     let mut md = String::new();
     render_inventory_preamble(&mut md, inv);
+    render_inventory_skipped_anchors(&mut md, inv);
     render_inventory_kinds(&mut md, inv);
     render_inventory_blocks(&mut md, inv);
     render_inventory_exemplar(&mut md, inv);
@@ -64,6 +65,7 @@ fn render_inventory_preamble(md: &mut String, inv: &ModelInventory) {
     let _ = writeln!(md, "- **checkpoint**: `{}`", inv.checkpoint_path.display());
     let _ = writeln!(md, "- **shards**: {}", inv.shard_count);
     let _ = writeln!(md, "- **schema_version**: {}", inv.schema_version);
+    let _ = writeln!(md, "- **skipped anchors**: {}", inv.skipped_anchor_count);
 
     let _ = writeln!(md);
     let _ = writeln!(md, "## Inferred hyperparameters");
@@ -94,6 +96,27 @@ fn render_inventory_preamble(md: &mut String, inv: &ModelInventory) {
         t.total_nbytes,
         human_bytes(t.total_nbytes)
     );
+}
+
+fn render_inventory_skipped_anchors(md: &mut String, inv: &ModelInventory) {
+    if inv.skipped_anchors.is_empty() {
+        return;
+    }
+    let _ = writeln!(md);
+    let _ = writeln!(md, "## Skipped parser anchors");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "| Shard | Path | Byte offset | Error |",);
+    let _ = writeln!(md, "| ----: | ---- | ----------: | ----- |");
+    for skip in &inv.skipped_anchors {
+        let _ = writeln!(
+            md,
+            "| {} | `{}` | {} | {} |",
+            skip.shard_ordinal,
+            skip.shard_path.display(),
+            skip.byte_offset,
+            skip.error,
+        );
+    }
 }
 
 fn render_inventory_kinds(md: &mut String, inv: &ModelInventory) {

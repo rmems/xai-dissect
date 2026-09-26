@@ -1413,6 +1413,9 @@ mod tests {
                 total_nbytes,
                 total_elements: 8,
             },
+            skipped_anchors: Vec::new(),
+            shard_parse_summaries: Vec::new(),
+            skipped_anchor_count: 0,
             schema_version: 1,
         }
     }
