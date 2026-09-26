@@ -4,6 +4,23 @@ All notable changes to `xai-dissect` are documented here.
 
 ## Unreleased - 2026-08-01
 
+### Fixed
+
+- `Cargo.toml` parses again at the declared MSRV. The `sentry` dependency used
+  a **multi-line inline table**, which TOML 1.0 forbids and cargo 1.88 rejects
+  outright (`error: invalid inline table`), so `rust-version = "1.88"` was
+  unbuildable while CI floated on `stable`. The dependency is now a
+  `[dependencies.sentry]` table section; features and version are unchanged
+  (re-lands [#57](https://github.com/rmems/xai-dissect/pull/57) after
+  [#65](https://github.com/rmems/xai-dissect/pull/65); Refs
+  [RM-1510](https://linear.app/rpd-34/issue/RM-1510/xai-dissect-re-land-57-cargotoml-must-parse-at-rust-version-188)).
+
+### Added
+
+- CI **msrv** job: `cargo check --locked --all-targets --all-features` pinned to
+  the `rust-version` floor, plus an assertion that the workflow pin and the
+  manifest have not drifted apart. Documented in `docs/ci.md`.
+
 ### Changed
 
 - Relicense from GPL-3.0-only to dual **Apache-2.0 OR MIT** (`LICENSE-APACHE`,
