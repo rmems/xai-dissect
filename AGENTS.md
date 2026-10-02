@@ -1,5 +1,7 @@
 # Agent Instructions
 
+See @CLAUDE.md for additional repository context. The @-mention makes Amp load it; Amp reads `CLAUDE.md` on its own only when no `AGENTS.md` exists.
+
 `xai-dissect` is a read-only Grok-family checkpoint dissector. Preserve public
 CLI and export-schema compatibility; do not add inference, checkpoint mutation,
 or quantization-runtime behavior to this repository.
