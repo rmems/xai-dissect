@@ -1,0 +1,4 @@
+{
+  "name": "xai-dissect",
+  "install": "bash .cursor/install.sh"
+}
