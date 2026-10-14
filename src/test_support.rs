@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-//! Test helpers shared by the binary crate's two test modules —
-//! `main::tests` and `cli::tests`. Compiled only under `cfg(test)`.
+//! Test helpers shared by the binary crate's test modules —
+//! `cli::tests` and `cli::dissect::tests`. Compiled only under `cfg(test)`.
 //!
 //! The integration tests under `tests/` cannot reach into a binary crate, so
 //! they keep their own copy in `tests/support/mod.rs`. Two homes is the floor
