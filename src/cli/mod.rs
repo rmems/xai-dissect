@@ -25,6 +25,7 @@ use xai_dissect::stats::{StatsConfig, build_saaq_readiness_report, build_stats_r
 mod summary;
 
 pub mod command;
+mod dispatch;
 mod dissect;
 
 pub use command::Cli;

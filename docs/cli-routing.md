@@ -62,10 +62,11 @@ calls `inventory::build_inventory`.
 routing + stats + SAAQ readiness) before the planning layer. `pilot-plan` and
 `route-preservation` take inventory only.
 
-Dispatch is the `match cli.command` in `main()`. `Command::name()` and
-`Command::fields()` feed tracing / Sentry tags (`command`, `limit`, `prefix`,
-`family`, `sample_values`). Adding a variant without updating those match arms
-fails to compile.
+`main()` records tracing / Sentry tags from `Command::name()` and
+`Command::fields()`, then calls `Command::run()`. That method splits dispatch
+across `run_catalog`, `run_profile`, and `run_planning` so no single function
+covers every variant. Adding a variant without updating `name()`, `fields()`,
+and the matching `run_*` arm fails to compile.
 
 ## Shared flags
 

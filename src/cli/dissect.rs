@@ -4,35 +4,61 @@
 //! print a per-shard tensor table. Raw parser output only — no
 //! classification, no grouping.
 
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, Result, bail};
 use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
 
-use xai_dissect::parser;
+use xai_dissect::parser::{self, RawTensor};
 
-pub(crate) fn run_dissect(
-    path: &std::path::Path,
-    limit: Option<usize>,
-    prefix: &str,
-) -> Result<()> {
-    let md = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
-    if !md.is_dir() {
+pub(crate) fn run_dissect(path: &Path, limit: Option<usize>, prefix: &str) -> Result<()> {
+    let shards = collect_shards(path, limit, prefix)?;
+    for shard in &shards {
+        print_shard(shard);
+    }
+    Ok(())
+}
+
+fn collect_shards(path: &Path, limit: Option<usize>, prefix: &str) -> Result<Vec<PathBuf>> {
+    ensure_directory(path)?;
+    let mut shards = matching_files(path, prefix)?;
+    shards.sort();
+    require_shards(&shards, path, prefix)?;
+    if let Some(n) = limit {
+        shards.truncate(n);
+    }
+    Ok(shards)
+}
+
+fn ensure_directory(path: &Path) -> Result<()> {
+    let metadata = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
+    if !metadata.is_dir() {
         bail!("{} is not a directory", path.display());
     }
+    Ok(())
+}
 
+fn matching_files(path: &Path, prefix: &str) -> Result<Vec<PathBuf>> {
     let mut shards = Vec::new();
     for entry in std::fs::read_dir(path).with_context(|| format!("read {}", path.display()))? {
         let entry = entry.with_context(|| format!("read entry in {}", path.display()))?;
-        let p = entry.path();
-        if p.is_file()
-            && p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.starts_with(prefix))
-                .unwrap_or(false)
-        {
-            shards.push(p);
+        let candidate = entry.path();
+        if file_matches_prefix(&candidate, prefix) {
+            shards.push(candidate);
         }
     }
-    shards.sort();
+    Ok(shards)
+}
+
+fn file_matches_prefix(path: &Path, prefix: &str) -> bool {
+    path.is_file()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(prefix))
+}
+
+fn require_shards(shards: &[PathBuf], path: &Path, prefix: &str) -> Result<()> {
     if shards.is_empty() {
         bail!(
             "no shards found under {} with prefix '{}'",
@@ -40,40 +66,46 @@ pub(crate) fn run_dissect(
             prefix
         );
     }
-    if let Some(n) = limit {
-        shards.truncate(n);
-    }
-
-    for shard in &shards {
-        match parser::dissect_shard(shard) {
-            Ok(entries) => {
-                println!("\n{}", shard.display());
-                if entries.is_empty() {
-                    println!("  (no tensors found)");
-                    continue;
-                }
-                let mut table = Table::new();
-                table
-                    .load_preset(UTF8_FULL)
-                    .set_content_arrangement(ContentArrangement::Dynamic)
-                    .set_header(vec!["Idx", "Role", "Dtype", "Shape", "Offset", "Nbytes"]);
-                for (i, e) in entries.iter().enumerate() {
-                    table.add_row(vec![
-                        Cell::new(i),
-                        Cell::new(e.role.label()),
-                        Cell::new(e.dtype.label()),
-                        Cell::new(e.shape.render()),
-                        Cell::new(format!("{:#x}", e.offset)),
-                        Cell::new(e.nbytes),
-                    ]);
-                }
-                println!("{table}");
-            }
-            Err(e) => eprintln!("warn: {}: {:#}", shard.display(), e),
-        }
-    }
-
     Ok(())
+}
+
+fn print_shard(shard: &Path) {
+    match parser::dissect_shard(shard) {
+        Ok(entries) => print_entries(shard, &entries),
+        Err(error) => eprintln!("warn: {}: {:#}", shard.display(), error),
+    }
+}
+
+fn print_entries(shard: &Path, entries: &[RawTensor]) {
+    println!("\n{}", shard.display());
+    if entries.is_empty() {
+        println!("  (no tensors found)");
+        return;
+    }
+    println!("{}", tensor_table(entries));
+}
+
+fn tensor_table(entries: &[RawTensor]) -> Table {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec!["Idx", "Role", "Dtype", "Shape", "Offset", "Nbytes"]);
+    for (index, entry) in entries.iter().enumerate() {
+        table.add_row(tensor_row(index, entry));
+    }
+    table
+}
+
+fn tensor_row(index: usize, entry: &RawTensor) -> Vec<Cell> {
+    vec![
+        Cell::new(index),
+        Cell::new(entry.role.label()),
+        Cell::new(entry.dtype.label()),
+        Cell::new(entry.shape.render()),
+        Cell::new(format!("{:#x}", entry.offset)),
+        Cell::new(entry.nbytes),
+    ]
 }
 
 #[cfg(test)]

@@ -2,13 +2,16 @@
 //
 //! Parsed CLI surface for `xai-dissect`: the `Cli`/`Command` clap types plus
 //! the subcommand dispatch. Argument shapes and routing only — every command
-//! implementation lives in the sibling `cli` helpers.
+//! implementation lives in the sibling `cli` helpers. `Command::run` splits
+//! across `run_catalog`, `run_profile`, and `run_planning`, and the per-command
+//! calls live in `dispatch` so no method exceeds Codacy's length limit.
 
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use super::dispatch;
 use super::{
     CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg,
 };
@@ -220,12 +223,9 @@ impl Command {
             },
             Command::Inventory { scan, family, .. }
             | Command::Experts { scan, family, .. }
-            | Command::RoutingReport { scan, family, .. } => CommandFields {
-                limit: scan.limit,
-                prefix: Some(scan.prefix.clone()),
-                family: Some(family.family.clone()),
-                sample_values: None,
-            },
+            | Command::RoutingReport { scan, family, .. } => {
+                scan_fields(scan, &family.family, None)
+            }
             Command::Stats {
                 scan,
                 family,
@@ -237,31 +237,31 @@ impl Command {
                 family,
                 sample,
                 ..
-            } => CommandFields {
-                limit: scan.limit,
-                prefix: Some(scan.prefix.clone()),
-                family: Some(family.family.clone()),
-                sample_values: Some(sample.sample_values),
-            },
+            } => scan_fields(scan, &family.family, Some(sample.sample_values)),
             Command::PilotPlan { scan, family, .. }
-            | Command::RoutePreservation { scan, family, .. } => CommandFields {
-                limit: scan.limit,
-                prefix: Some(scan.prefix.clone()),
-                family: Some(family.family.clone()),
-                sample_values: None,
-            },
+            | Command::RoutePreservation { scan, family, .. } => {
+                scan_fields(scan, &family.family, None)
+            }
             Command::QuantPlan {
                 scan,
                 family,
                 sample_values,
                 ..
-            } => CommandFields {
-                limit: scan.limit,
-                prefix: Some(scan.prefix.clone()),
-                family: Some(family.family.clone()),
-                sample_values: Some(*sample_values),
-            },
+            } => scan_fields(scan, &family.family, Some(*sample_values)),
         }
+    }
+}
+
+fn scan_fields(
+    scan: &CheckpointScanArgs,
+    family: &str,
+    sample_values: Option<usize>,
+) -> CommandFields {
+    CommandFields {
+        limit: scan.limit,
+        prefix: Some(scan.prefix.clone()),
+        family: Some(family.to_string()),
+        sample_values,
     }
 }
 
@@ -269,6 +269,17 @@ impl Command {
     /// Execute the parsed subcommand. Pure dispatch: every arm delegates
     /// to a `cli` helper, so no command logic lives in this module.
     pub fn run(self) -> Result<()> {
+        match self {
+            this @ (Command::Dissect { .. }
+            | Command::Inventory { .. }
+            | Command::Experts { .. }
+            | Command::RoutingReport { .. }) => this.run_catalog(),
+            this @ (Command::Stats { .. } | Command::SaaqReadiness { .. }) => this.run_profile(),
+            this => this.run_planning(),
+        }
+    }
+
+    fn run_catalog(self) -> Result<()> {
         match self {
             Command::Dissect {
                 path,
@@ -281,39 +292,31 @@ impl Command {
                 json,
                 md,
                 output_tree,
-            } => super::run_inventory(
-                &scan,
-                &family.family,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_inventory_cmd(scan, family, json, md, output_tree),
             Command::Experts {
                 scan,
                 family,
                 json,
                 md,
                 output_tree,
-            } => super::run_experts(
-                &scan,
-                &family.family,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_experts_cmd(scan, family, json, md, output_tree),
             Command::RoutingReport {
                 scan,
                 family,
                 json,
                 md,
                 output_tree,
-            } => super::run_routing_report(
-                &scan,
-                &family.family,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_routing_cmd(scan, family, json, md, output_tree),
+            Command::Stats { .. }
+            | Command::SaaqReadiness { .. }
+            | Command::PilotPlan { .. }
+            | Command::RoutePreservation { .. }
+            | Command::QuantPlan { .. } => unreachable!("profile and planning commands"),
+        }
+    }
+
+    fn run_profile(self) -> Result<()> {
+        match self {
             Command::Stats {
                 scan,
                 family,
@@ -321,14 +324,7 @@ impl Command {
                 json,
                 md,
                 output_tree,
-            } => super::run_stats(
-                &scan,
-                &family.family,
-                sample.sample_values,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_stats_cmd(scan, family, sample, json, md, output_tree),
             Command::SaaqReadiness {
                 scan,
                 family,
@@ -337,41 +333,33 @@ impl Command {
                 md,
                 manifest,
                 output_tree,
-            } => super::run_saaq_readiness(
-                &scan,
-                &family.family,
-                sample.sample_values,
-                json.as_deref(),
-                md.as_deref(),
-                manifest.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_saaq_cmd(scan, family, sample, json, md, manifest, output_tree),
+            Command::Dissect { .. }
+            | Command::Inventory { .. }
+            | Command::Experts { .. }
+            | Command::RoutingReport { .. }
+            | Command::PilotPlan { .. }
+            | Command::RoutePreservation { .. }
+            | Command::QuantPlan { .. } => unreachable!("catalog and planning commands"),
+        }
+    }
+
+    fn run_planning(self) -> Result<()> {
+        match self {
             Command::PilotPlan {
                 scan,
                 family,
                 json,
                 md,
                 output_tree,
-            } => super::run_pilot_plan(
-                &scan,
-                &family.family,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_pilot_cmd(scan, family, json, md, output_tree),
             Command::RoutePreservation {
                 scan,
                 family,
                 json,
                 md,
                 output_tree,
-            } => super::run_route_preservation(
-                &scan,
-                &family.family,
-                json.as_deref(),
-                md.as_deref(),
-                &output_tree,
-            ),
+            } => dispatch::run_route_cmd(scan, family, json, md, output_tree),
             Command::QuantPlan {
                 scan,
                 family,
@@ -381,16 +369,22 @@ impl Command {
                 conversion_manifest,
                 conversion_manifest_md,
                 output_tree,
-            } => super::run_quant_plan(
-                &scan,
-                &family.family,
+            } => dispatch::run_quant_cmd(
+                scan,
+                family,
                 sample_values,
-                json.as_deref(),
-                md.as_deref(),
-                conversion_manifest.as_deref(),
-                conversion_manifest_md.as_deref(),
-                &output_tree,
+                json,
+                md,
+                conversion_manifest,
+                conversion_manifest_md,
+                output_tree,
             ),
+            Command::Dissect { .. }
+            | Command::Inventory { .. }
+            | Command::Experts { .. }
+            | Command::RoutingReport { .. }
+            | Command::Stats { .. }
+            | Command::SaaqReadiness { .. } => unreachable!("catalog and profile commands"),
         }
     }
 }

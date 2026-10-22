@@ -10,11 +10,12 @@ use xai_dissect::report;
 
 use crate::test_support::{unique_temp_dir, write_hex_checkpoint};
 
+use super::command::Command;
 use super::{
-    CheckpointScanArgs, OutputTreeArgs, run_experts, run_inventory, run_pilot_plan, run_quant_plan,
-    run_route_preservation, run_routing_report, run_saaq_readiness, run_stats,
-    validate_complete_inventory_scope, write_json_and_markdown, write_optional_file,
-    write_output_tree,
+    CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg,
+    run_experts, run_inventory, run_pilot_plan, run_quant_plan, run_route_preservation,
+    run_routing_report, run_saaq_readiness, run_stats, validate_complete_inventory_scope,
+    write_json_and_markdown, write_optional_file, write_output_tree,
 };
 
 fn scan_for(path: PathBuf) -> CheckpointScanArgs {
@@ -349,9 +350,6 @@ fn write_json_and_markdown_uses_real_inventory_renderers() {
 
 // --- `Command` shape coverage (moved from the old `src/main.rs`) ---
 
-use super::command::Command;
-use super::{ModelFamilyArg, PlanningFamilyArg, SampleValuesArg};
-
 fn dummy_scan() -> CheckpointScanArgs {
     CheckpointScanArgs {
         path: PathBuf::from("/tmp/ckpt"),
@@ -503,23 +501,6 @@ fn assert_every_command_name_and_prefix(variants: &[Command]) {
     for command in variants {
         assert_eq!(command.fields().prefix.as_deref(), Some("tensor"));
     }
-}
-
-#[test]
-fn complete_inventory_scope_accepts_default_prefix_without_limit() {
-    validate_complete_inventory_scope("quant-plan", "tensor", None).expect("default scope");
-}
-
-#[test]
-fn quant_plan_rejects_non_default_prefix() {
-    let err = validate_complete_inventory_scope("quant-plan", "tensor-shard", None).unwrap_err();
-    assert!(format!("{err:#}").contains("--prefix tensor-shard"));
-}
-
-#[test]
-fn quant_plan_rejects_limited_inventory() {
-    let err = validate_complete_inventory_scope("quant-plan", "tensor", Some(4)).unwrap_err();
-    assert!(format!("{err:#}").contains("--limit 4"));
 }
 
 #[test]

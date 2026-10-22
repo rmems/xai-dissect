@@ -52,7 +52,10 @@ marked **yes**. Smaller files are listed so the crate has no holes.
 | File | LOC >100 | Responsibility | Key types in → out | Primary tests |
 | --- | --- | --- | --- | --- |
 | [`src/lib.rs`](../src/lib.rs) | no (19) | Library crate root. Re-exports analysis modules. Binary-only modules (`cli`, `observability`) are not here. | — → `pub mod` surface | none (wiring only) |
-| [`src/main.rs`](../src/main.rs) | **yes** | clap entry. Owns `Command` plus parser-only `dissect`. Inventory-backed variants dispatch to `cli::run_*`. `Command::name()` / `fields()` feed tracing / Sentry. | argv → `cli::run_*` / `parser::dissect_shard` → stdout table | `src/main.rs` (`command_name_and_fields_cover_every_variant`, `dissect_hex_fixture_prints_tensor_table`); [`tests/cli_help.rs`](../tests/cli_help.rs) |
+| [`src/main.rs`](../src/main.rs) | no (92) | Binary entry. Parses `cli::Cli`, records tracing / Sentry tags from `Command::name()` / `fields()`, and calls `Command::run()`. | argv → `cli::Command::run` | [`tests/cli_help.rs`](../tests/cli_help.rs) |
+| [`src/cli/command.rs`](../src/cli/command.rs) | **yes** | Clap `Cli` / `Command` schema, tracing field extraction, and subcommand dispatch (`run_catalog`, `run_profile`, `run_planning`). | argv → `dispatch` / `dissect::run_dissect` | `src/cli/tests.rs` (`command_name_and_fields_cover_every_variant`) |
+| [`src/cli/dispatch.rs`](../src/cli/dispatch.rs) | **yes** | One-command adapters from a `Command` variant to `cli::run_*`. No extra flags or paths. | variant fields → `cli::run_*` | covered by `src/cli/tests.rs` handler tests |
+| [`src/cli/dissect.rs`](../src/cli/dissect.rs) | **yes** | Parser-only `dissect`. Lists prefix-matching shard files and prints a tensor table per readable shard. Unreadable shards warn and the command continues. | shard dir → stdout table | `src/cli/dissect.rs` (`dissect_hex_fixture_prints_tensor_table`) |
 | [`src/observability.rs`](../src/observability.rs) | **yes** | Opt-in Sentry (`XAI_DISSECT_SENTRY` + `SENTRY_DSN`) and tracing init. Default off. Path-scrubs `$HOME` only. | `anyhow::Error` → Sentry event / `error_category` tag | `src/observability.rs` (`categorizes_*`, `sentry_opt_in_ready`, path scrub) |
 | [`src/cli/mod.rs`](../src/cli/mod.rs) | **yes** | Inventory-backed handlers. Shared clap groups (`CheckpointScanArgs`, `OutputTreeArgs`, family, sample-values). Complete-scope gate for planning commands. | scan args → `inventory::build_inventory` → analyzer → `report` / `exports` | [`src/cli/tests.rs`](../src/cli/tests.rs); [`tests/cli_orchestration.rs`](../tests/cli_orchestration.rs) |
 | [`src/cli/summary.rs`](../src/cli/summary.rs) | **yes** | stderr console summaries after each subcommand. Display only; not an export. | schema report types → stderr | `src/cli/summary.rs` (per-command summary tests) |
@@ -75,7 +78,7 @@ marked **yes**. Smaller files are listed so the crate has no holes.
 | [`src/report/saaq.rs`](../src/report/saaq.rs) | **yes** | SAAQ readiness Markdown/JSON + candidate manifest. | `SaaqReadinessReport` → files | same |
 | [`src/report/planning.rs`](../src/report/planning.rs) | **yes** | Quant-plan, conversion-manifest, pilot, route-preservation writers. | planning schema types → files | same; [`tests/pilot_route_reports.rs`](../tests/pilot_route_reports.rs) |
 | [`src/exports/mod.rs`](../src/exports/mod.rs) | **yes** | Unified `--output-root` layout, slug resolution, bundle writers, findings summaries, inventory snapshot, routing-critical manifest. | schema types + root/slug → `OutputBundle` (written paths) | `src/exports/mod.rs` (slug / findings unit tests); [`tests/export_contracts.rs`](../tests/export_contracts.rs) (`*_bundle_matches_snapshot`) |
-| [`src/test_support.rs`](../src/test_support.rs) | no (56) | Hex-checkpoint helper shared by `main.rs` and `cli` tests. Binary-only. | prefix → temp shard dir | used by `src/main.rs` / `src/cli/tests.rs` |
+| [`src/test_support.rs`](../src/test_support.rs) | no (56) | Hex-checkpoint helper shared by `cli` tests. Binary-only. | prefix → temp shard dir | used by `src/cli/dissect.rs` / `src/cli/tests.rs` |
 
 Integration tests under `tests/` that cut across modules:
 
@@ -125,11 +128,12 @@ The step-by-step for clap + handlers + tests is in
 [`cli-routing.md` → Add a new subcommand](cli-routing.md#add-a-new-subcommand).
 In crate terms:
 
-1. `Command` variant, `name()`, `fields()`, and `match` arm in
-   [`src/main.rs`](../src/main.rs).
-2. `cli::run_*` in [`src/cli/mod.rs`](../src/cli/mod.rs) (or `run_dissect`-style
-   in `main.rs` if parser-only). Flatten `CheckpointScanArgs` /
-   `OutputTreeArgs` unless the command is parser-only.
+1. `Command` variant, `name()`, `fields()`, and a `run_catalog` /
+   `run_profile` / `run_planning` arm in
+   [`src/cli/command.rs`](../src/cli/command.rs).
+2. `cli::run_*` in [`src/cli/mod.rs`](../src/cli/mod.rs) (or a parser-only
+   handler in [`src/cli/dissect.rs`](../src/cli/dissect.rs)). Flatten
+   `CheckpointScanArgs` / `OutputTreeArgs` unless the command is parser-only.
 3. Analyzer in the matching module (`experts` / `routing` / `stats` /
    `planning`, or a new `src/<layer>/mod.rs` re-exported from `lib.rs`).
 4. Writers: `report::write_*` / `render_*` and, for `--output-root`,
