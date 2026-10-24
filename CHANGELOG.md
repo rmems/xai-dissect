@@ -2,7 +2,11 @@
 
 All notable changes to `xai-dissect` are documented here.
 
-## Unreleased - 2026-08-01
+Git version tags are cut by the maintainer. `Cargo.toml` is `0.1.1`, and
+there is no `v0.1.1` tag yet. Do not add a `## 0.1.1` section until that
+tag exists; those commits stay under Unreleased.
+
+## Unreleased
 
 ### Fixed
 
@@ -29,6 +33,10 @@ All notable changes to `xai-dissect` are documented here.
   `src/families/grok1/` so inventory stays generic. Exports and planning call
   `families::grok1` explicitly; `inventory` keeps thin re-exports. No schema
   or artifact change ([#44](https://github.com/rmems/xai-dissect/issues/44)).
+- Bump inventory schema to version 2 after adding serialized
+  `quantized_attention_projection` tensor kinds.
+- Add Grok-1 pilot-selection planning artifacts and route-preservation gate report schemas/documentation.
+- Add explicit `docs/GO_NO_GO.md` checklist for broader/full Grok-1 quantization decisions.
 
 ### Added
 
@@ -83,15 +91,11 @@ All notable changes to `xai-dissect` are documented here.
   validator, plus a file/symbol inventory of Grok-1-hardcoded touchpoints
   (`docs/model-family-extension.md`,
   [#42](https://github.com/rmems/xai-dissect/issues/42)).
-
-## Unreleased - 2026-05-27
-
-### Changed
-
-- Bump inventory schema to version 2 after adding serialized
-  `quantized_attention_projection` tensor kinds.
-- Add Grok-1 pilot-selection planning artifacts and route-preservation gate report schemas/documentation.
-- Add explicit `docs/GO_NO_GO.md` checklist for broader/full Grok-1 quantization decisions.
+- Repoint `docs/codebase-map.md` and the coverage rows in
+  `docs/model-family-extension.md` at `src/families/grok1/coverage.rs`,
+  including the thin re-exports in `src/inventory/mod.rs`. Fold the
+  2026-05-27 notes into this single Unreleased section
+  ([#84](https://github.com/rmems/xai-dissect/issues/84)).
 
 ## 0.1.0 - 2026-04-23
 

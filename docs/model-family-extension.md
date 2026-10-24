@@ -23,10 +23,11 @@ Today the CLI is a Grok-1 dissector. Family identity is a string header
 planning validators are hardcoded against official Grok-1 `ckpt-0`.
 
 The long-term goal is more than Grok-1. The next consumer is Grok-2, not
-"any model." Before writing a `FamilyProfile` trait or moving files under
-`families/grok1/`, this document inventories the Grok-1-specific surface and
-proposes the module boundaries that a later implementation epic should
-follow.
+"any model." Coverage already lives in `src/families/grok1/coverage.rs`
+(thin re-exports remain on `inventory`). Before writing a `FamilyProfile`
+trait or moving the remaining planning surface under `families/grok1/`,
+this document inventories the Grok-1-specific surface and proposes the
+module boundaries that a later implementation epic should follow.
 
 Copy the Grok-1 pattern: one family, one layout table, one fail-closed
 coverage profile, one set of planning artifacts. Do not collapse that into a
@@ -140,7 +141,8 @@ maybe `TensorKind`), then let `experts::build_expert_atlas` and
 **Job:** fail-closed completeness proof for one named baseline profile.
 Independent of the parser. Independent of stats sampling.
 
-Current Grok-1 implementation: `src/inventory/grok1_coverage.rs`, emitted as
+Current Grok-1 implementation: `src/families/grok1/coverage.rs`
+(re-exported from `src/inventory/mod.rs`), emitted as
 `manifests/<slug>/grok1-coverage.json` (`schema::Grok1CoverageManifest`).
 
 The Grok-1 profile `grok1-map-v1-clean` encodes:
@@ -219,24 +221,24 @@ surface.
 
 | File | Symbol | What is Grok-1-shaped |
 | ---- | ------ | --------------------- |
-| `src/inventory/grok1_coverage.rs` | `GROK1_COVERAGE_SCHEMA_VERSION` | `2` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_EXPECTED_BLOCKS` | `64` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_EXPECTED_TENSORS` | `770` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_EXPECTED_ROUTERS` | `64` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_EXPECTED_EXPERT_FAMILIES` | `192` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_EXPECTED_VOCAB_SIZE` | `131_072` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_D_MODEL` | `6_144` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_D_FF` | `32_768` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_N_EXPERTS` | `8` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_BLOCK_SLOTS` | `12` |
-| `src/inventory/grok1_coverage.rs` | `GROK1_*_SHAPE` | per-kind expected dims |
-| `src/inventory/grok1_coverage.rs` | `Grok1SlotSpec`, `Grok1ExpectedKind`, `GROK1_SLOT_SPECS` | 12-slot table |
-| `src/inventory/grok1_coverage.rs` | `should_validate_grok1_coverage` | family id + 770-tensor / canonical-layout gate |
-| `src/inventory/grok1_coverage.rs` | `is_canonical_grok1_shard_layout` | `(shard_count - 2) % 12 == 0` |
-| `src/inventory/grok1_coverage.rs` | `validate_grok1_complete_manifest` | fail-closed entry |
-| `src/inventory/grok1_coverage.rs` | `validate_grok1_metadata` | inferred hp must match constants |
-| `src/inventory/grok1_coverage.rs` | `validate_grok1_blocks`, `validate_grok1_expected_slots`, `validate_grok1_slot_signature` | occupancy + signatures |
-| `src/inventory/grok1_coverage.rs` | `grok1_structural_name`, `grok1_checksum` | path-independent FNV-1a view |
+| `src/families/grok1/coverage.rs` | `GROK1_COVERAGE_SCHEMA_VERSION` | `2` |
+| `src/families/grok1/coverage.rs` | `GROK1_EXPECTED_BLOCKS` | `64` |
+| `src/families/grok1/coverage.rs` | `GROK1_EXPECTED_TENSORS` | `770` |
+| `src/families/grok1/coverage.rs` | `GROK1_EXPECTED_ROUTERS` | `64` |
+| `src/families/grok1/coverage.rs` | `GROK1_EXPECTED_EXPERT_FAMILIES` | `192` |
+| `src/families/grok1/coverage.rs` | `GROK1_EXPECTED_VOCAB_SIZE` | `131_072` |
+| `src/families/grok1/coverage.rs` | `GROK1_D_MODEL` | `6_144` |
+| `src/families/grok1/coverage.rs` | `GROK1_D_FF` | `32_768` |
+| `src/families/grok1/coverage.rs` | `GROK1_N_EXPERTS` | `8` |
+| `src/families/grok1/coverage.rs` | `GROK1_BLOCK_SLOTS` | `12` |
+| `src/families/grok1/coverage.rs` | `GROK1_*_SHAPE` | per-kind expected dims |
+| `src/families/grok1/coverage.rs` | `Grok1SlotSpec`, `Grok1ExpectedKind`, `GROK1_SLOT_SPECS` | 12-slot table |
+| `src/families/grok1/coverage.rs` | `should_validate_grok1_coverage` | family id + 770-tensor / canonical-layout gate |
+| `src/families/grok1/coverage.rs` | `is_canonical_grok1_shard_layout` | `(shard_count - 2) % 12 == 0` |
+| `src/families/grok1/coverage.rs` | `validate_grok1_complete_manifest` | fail-closed entry |
+| `src/families/grok1/coverage.rs` | `validate_grok1_metadata` | inferred hp must match constants |
+| `src/families/grok1/coverage.rs` | `validate_grok1_blocks`, `validate_grok1_expected_slots`, `validate_grok1_slot_signature` | occupancy + signatures |
+| `src/families/grok1/coverage.rs` | `grok1_structural_name`, `grok1_checksum` | path-independent FNV-1a view |
 | `src/exports/mod.rs` | `write_inventory_bundle` | calls the Grok-1 coverage gate |
 | `src/exports/mod.rs` | coverage path `"grok1-coverage.json"` | family-named artifact |
 | `src/exports/mod.rs` | `remove_stale_coverage_manifest` | leftover Grok-1 gate file |
@@ -332,8 +334,8 @@ pub trait FamilyPlanning {
 }
 ```
 
-Suggested module layout when code *does* move (existing issue #44, not this
-PR):
+Suggested module layout. Coverage already moved (#44); the registry and
+`planning.rs` split are still design:
 
 ```text
 src/
@@ -341,10 +343,10 @@ src/
   families/
     mod.rs                # registry: id → &'static dyn FamilyProfile
     grok1/
-      mod.rs              # InventoryConfig defaults, classify, slots
-      coverage.rs         # today's grok1_coverage.rs
+      mod.rs              # barrel today; classify/slots stay in inventory for now
+      coverage.rs         # src/families/grok1/coverage.rs (landed)
       planning.rs         # today's build_grok1_* + GROK1_* policy tables
-  inventory/mod.rs        # walk shards, call parser + selected profile
+  inventory/mod.rs        # walk shards; thin re-export of the coverage gate
 ```
 
 `FamilyCoverageManifest` may start as a rename of `Grok1CoverageManifest`
@@ -451,8 +453,9 @@ This design feeds a later code epic. It does not open that epic.
 
 Natural issue cuts (already tracked separately, not created here):
 
-1. Isolate the Grok-1 profile (`families/grok1`) with **no** behavior
-   change — mechanical move of today's functions and constants.
+1. Isolate the rest of the Grok-1 profile (`families/grok1`) with **no**
+   behavior change. Coverage constants already live in
+   `src/families/grok1/coverage.rs`; planning policy tables have not moved.
 2. Introduce the registry / traits with Grok-1 as the only impl; unknown
    `--family` becomes an error.
 3. Deduplicate planning literals (`[6144, 8]`) onto the coverage profile.
