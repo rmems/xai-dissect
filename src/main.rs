@@ -501,9 +501,12 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
         shards.truncate(n);
     }
 
+    let mut parsed = 0usize;
+    let mut failures = Vec::new();
     for shard in &shards {
         match parser::dissect_shard(shard) {
             Ok(entries) => {
+                parsed += 1;
                 println!("\n{}", shard.display());
                 if entries.is_empty() {
                     println!("  (no tensors found)");
@@ -526,8 +529,23 @@ fn run_dissect(path: &std::path::Path, limit: Option<usize>, prefix: &str) -> Re
                 }
                 println!("{table}");
             }
-            Err(e) => eprintln!("warn: {}: {:#}", shard.display(), e),
+            Err(error) => {
+                let detail = format!("{error:#}");
+                eprintln!("warn: {}: {detail}", shard.display());
+                failures.push(format!("{}: {detail}", shard.display()));
+            }
         }
+    }
+
+    // A prefix or `--limit` that selects nothing is the existing
+    // "no shards found" / empty-selection case. Total failure is only when
+    // every shard that was actually selected failed to parse.
+    if !shards.is_empty() && parsed == 0 {
+        let count = shards.len();
+        let noun = if count == 1 { "shard" } else { "shards" };
+        let displayed = path.display();
+        let summary = failures.join("; ");
+        bail!("every selected shard failed to parse under {displayed} ({count} {noun}): {summary}");
     }
 
     Ok(())
@@ -544,7 +562,7 @@ mod tests {
     };
 
     use super::{Command, run_dissect};
-    use crate::test_support::write_hex_checkpoint;
+    use crate::test_support::{unique_temp_dir, write_hex_checkpoint};
 
     fn dummy_scan() -> CheckpointScanArgs {
         CheckpointScanArgs {
@@ -748,5 +766,49 @@ mod tests {
         assert!(format!("{empty:#}").contains("no shards found"));
         let not_dir = run_dissect(&root.path().join("tensor0000.pkl"), None, "tensor").unwrap_err();
         assert!(format!("{not_dir:#}").contains("is not a directory"));
+    }
+
+    #[test]
+    fn dissect_errors_when_every_selected_shard_fails() {
+        let root = unique_temp_dir("dissect-all-corrupt");
+        fs::write(root.path().join("tensor0000.pkl"), b"not-a-pickle").expect("write shard");
+        fs::write(root.path().join("tensor0001.pkl"), b"also-garbage").expect("write shard");
+
+        let err = run_dissect(root.path(), None, "tensor").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("every selected shard failed to parse"),
+            "{msg}"
+        );
+        assert!(msg.contains("2 shards"), "{msg}");
+        assert!(msg.contains("tensor0000.pkl"), "{msg}");
+        assert!(msg.contains("tensor0001.pkl"), "{msg}");
+        assert!(msg.contains("not a pickle protocol 4"), "{msg}");
+    }
+
+    #[test]
+    fn dissect_errors_when_limit_selects_only_corrupt_shards() {
+        let root = write_hex_checkpoint("dissect-limit-corrupt");
+        let valid = fs::read(root.path().join("tensor0000.pkl")).expect("read valid shard");
+        fs::write(root.path().join("tensor0000.pkl"), b"not-a-pickle").expect("overwrite shard");
+        fs::write(root.path().join("tensor0001.pkl"), valid).expect("write later valid shard");
+
+        let err = run_dissect(root.path(), Some(1), "tensor").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("every selected shard failed to parse"),
+            "{msg}"
+        );
+        assert!(msg.contains("1 shard"), "{msg}");
+        assert!(msg.contains("tensor0000.pkl"), "{msg}");
+        assert!(!msg.contains("tensor0001.pkl"), "{msg}");
+
+        run_dissect(root.path(), None, "tensor").expect("later valid shard still parses");
+    }
+
+    #[test]
+    fn dissect_limit_zero_selects_nothing_and_succeeds() {
+        let root = write_hex_checkpoint("dissect-limit-zero");
+        run_dissect(root.path(), Some(0), "tensor").expect("limit 0 selects no shards");
     }
 }
