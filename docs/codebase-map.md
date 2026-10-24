@@ -39,7 +39,9 @@ in-process API contract ([`export-contracts.md`](export-contracts.md)).
 Every inventory-backed CLI command loads `ModelInventory` first. `dissect`
 stops at the parser. `quant-plan` is the only command that runs the full
 analyzer stack before planning. The Grok-1 coverage gate
-(`inventory::validate_grok1_complete_manifest`) is not part of
+(`families::grok1::validate_grok1_complete_manifest`, also re-exported from
+[`src/inventory/mod.rs`](../src/inventory/mod.rs) as
+`inventory::validate_grok1_complete_manifest`) is not part of
 `build_inventory`; it runs when an inventory bundle is exported and when
 planning validators run.
 
@@ -59,9 +61,11 @@ marked **yes**. Smaller files are listed so the crate has no holes.
 | [`src/cli/tests.rs`](../src/cli/tests.rs) | **yes** | Handler tests for `cli::run_*`, complete-scope gate, and `--json` / `--md` / `--output-root` writers. Test-only (`#[cfg(test)] mod tests` from `cli/mod.rs`). | `cli::run_*` + hex fixtures → written files / stdout | `run_inventory_*`, `run_experts_*`, `run_stats_and_saaq_*`, `planning_commands_reject_*` |
 | [`src/parser/mod.rs`](../src/parser/mod.rs) | **yes** | PROTO 4 byte-grammar scanner. No Python, no payload decode, no `TensorKind`. | shard path → `Vec<RawTensor>` (`role`, `dtype`, `shape`, `offset`, `nbytes`) | `src/parser/mod.rs` (`qw8_role_assignment_*`); [`tests/parser_inventory.rs`](../tests/parser_inventory.rs) (`parser_fixture_discovers_single_f32_tensor`) |
 | [`src/schema/mod.rs`](../src/schema/mod.rs) | **yes** | Canonical serializable types. Every JSON document lives here. Version discipline is documented at the top of the file. | parser/inventory fields → `TensorKind`, `TensorInfo`, `ModelInventory`, `ExpertAtlas`, `RoutingReport`, `StatsProfileReport`, `SaaqReadinessReport`, `Grok1CoverageManifest`, `ConversionManifest`, `QuantPlan`, `PilotSelectionPlan`, `RoutePreservationReport`, manifests | round-trip coverage via [`tests/export_contracts.rs`](../tests/export_contracts.rs) and schema-using unit tests; no dedicated `schema` test module |
-| [`src/inventory/mod.rs`](../src/inventory/mod.rs) | **yes** | Walk shards, infer hyperparams, classify `TensorKind`, assign `block_index` / `block_slot`, disambiguate Grok-1 gate/up. | `RawTensor` + `InventoryConfig` → `ModelInventory` | `src/inventory/mod.rs` (`shifted_grok_layout_*`, classification/layout tests); [`tests/parser_inventory.rs`](../tests/parser_inventory.rs) (`inventory_fixture_builds_without_real_weights`) |
-| [`src/inventory/grok1_coverage.rs`](../src/inventory/grok1_coverage.rs) | **yes** | Fail-closed `grok1-map-v1-clean` coverage. Owns `GROK1_SLOT_SPECS` (12 slots/block). | `ModelInventory` → `Grok1CoverageManifest` | `src/inventory/grok1_coverage.rs` (`validates_complete_grok1_coverage_manifest` and fail-path tests); [`docs/grok1-coverage-manifest.md`](grok1-coverage-manifest.md) |
-| [`src/inventory/test_fixtures.rs`](../src/inventory/test_fixtures.rs) | **yes** | Canonical 770-tensor Grok-1 inventory builder. Test-only (`cfg(test)`). | constants from `grok1_coverage` → `ModelInventory` | consumed by inventory, exports, planning tests (not a test module itself) |
+| [`src/inventory/mod.rs`](../src/inventory/mod.rs) | **yes** | Walk shards, infer hyperparams, classify `TensorKind`, assign `block_index` / `block_slot`, disambiguate Grok-1 gate/up. Thin re-exports of `should_validate_grok1_coverage` and `validate_grok1_complete_manifest` from `families::grok1`. | `RawTensor` + `InventoryConfig` → `ModelInventory` | `src/inventory/mod.rs` (`shifted_grok_layout_*`, classification/layout tests); [`tests/parser_inventory.rs`](../tests/parser_inventory.rs) (`inventory_fixture_builds_without_real_weights`) |
+| [`src/inventory/test_fixtures.rs`](../src/inventory/test_fixtures.rs) | **yes** | Canonical 770-tensor Grok-1 inventory builder. Test-only (`cfg(test)`). | constants from `families::grok1::coverage` → `ModelInventory` | consumed by inventory, exports, planning tests (not a test module itself) |
+| [`src/families/mod.rs`](../src/families/mod.rs) | no (10) | Family-adapter barrel. Re-exports `grok1`. | — → `pub mod grok1` | none (wiring only) |
+| [`src/families/grok1/mod.rs`](../src/families/grok1/mod.rs) | no (20) | Grok-1 profile barrel. Re-exports the coverage gate from `coverage.rs`. | — → `should_validate_grok1_coverage`, `validate_grok1_complete_manifest` | none (wiring only) |
+| [`src/families/grok1/coverage.rs`](../src/families/grok1/coverage.rs) | **yes** | Fail-closed `grok1-map-v1-clean` coverage. Owns `GROK1_SLOT_SPECS` (12 slots/block). | `ModelInventory` → `Grok1CoverageManifest` | `src/families/grok1/coverage.rs` (`validates_complete_grok1_coverage_manifest` and fail-path tests); [`docs/grok1-coverage-manifest.md`](grok1-coverage-manifest.md) |
 | [`src/experts/mod.rs`](../src/experts/mod.rs) | **yes** | MoE geometry from inventory records. Shape-only. Resolves gate/down/up slices. | `&ModelInventory` → `ExpertAtlas` | `src/experts/mod.rs` (`atlas_discovers_expert_blocks_and_slices` and sibling layout tests) |
 | [`src/routing/mod.rs`](../src/routing/mod.rs) | **yes** | Router/gate structure. Identifies `(d_model, n_experts)` tensors and orientation. Does not execute routing. | `&ModelInventory` → `RoutingReport` | `src/routing/mod.rs` (`report_discovers_primary_router_and_orientation` and sibling tests) |
 | [`src/stats/mod.rs`](../src/stats/mod.rs) | **yes** | Read-only payload sampling. Tensor stats and SAAQ-readiness scouting. No weight mutation. | `&ModelInventory` + `StatsConfig` → `StatsProfileReport` / `SaaqReadinessReport` | `src/stats/mod.rs` (`stats_report_profiles_tensor_values` and SAAQ scoring tests) |
@@ -107,7 +111,7 @@ Semantic classification, not the parser-level `TensorRole`.
    is required, extend `disambiguate_grok1_moe_projection_slots` in the
    same file.
 3. If the kind appears in a Grok-1 block, add a `Grok1ExpectedKind` arm and
-   a `GROK1_SLOT_SPECS` row in [`src/inventory/grok1_coverage.rs`](../src/inventory/grok1_coverage.rs)
+   a `GROK1_SLOT_SPECS` row in [`src/families/grok1/coverage.rs`](../src/families/grok1/coverage.rs)
    (see [New Grok-1 slot spec](#new-grok-1-slot-spec)).
 4. Update downstream matches that currently enumerate kinds:
    - experts: [`src/experts/mod.rs`](../src/experts/mod.rs)
@@ -165,7 +169,7 @@ expected kind for one of the 12 shards in a transformer block.
 1. Confirm the on-disk layout in [`docs/grok1-architecture.md`](grok1-architecture.md)
    (the 12-slot table). Domain docs first; the validator copies that table.
 2. Add or edit `Grok1SlotSpec` / `Grok1ExpectedKind` /
-   `GROK1_SLOT_SPECS` in [`src/inventory/grok1_coverage.rs`](../src/inventory/grok1_coverage.rs).
+   `GROK1_SLOT_SPECS` in [`src/families/grok1/coverage.rs`](../src/families/grok1/coverage.rs).
    `GROK1_BLOCK_SLOTS` must stay in sync with the array length.
 3. If classification cannot see the slot from shape alone, update
    `disambiguate_grok1_moe_projection_slots` / `grok1_moe_projection_for_slot`
@@ -173,7 +177,7 @@ expected kind for one of the 12 shards in a transformer block.
 4. Update `canonical_tensors` in
    [`src/inventory/test_fixtures.rs`](../src/inventory/test_fixtures.rs)
    so the 770-tensor fixture still validates.
-5. Tests: `src/inventory/grok1_coverage.rs` (`validates_complete_grok1_coverage_manifest`
+5. Tests: `src/families/grok1/coverage.rs` (`validates_complete_grok1_coverage_manifest`
    plus the fail-path tests for the new mismatch). Coverage counts
    (`GROK1_EXPECTED_*`) change only when the checkpoint cardinality changes.
 6. Docs: [`grok1-coverage-manifest.md`](grok1-coverage-manifest.md) and the
