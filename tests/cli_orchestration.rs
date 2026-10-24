@@ -129,6 +129,41 @@ fn routing_saaq_and_dissect_succeed_against_hex_fixture() {
 }
 
 #[test]
+fn dissect_warns_and_succeeds_when_one_shard_is_corrupt() {
+    let ckpt = write_hex_checkpoint("cli-dissect-mixed");
+    fs::write(ckpt.join("tensor0001.pkl"), b"not-a-pickle").expect("write garbage shard");
+    let output = run_cli(&["dissect", utf8(&ckpt)]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("warn:") && stderr.contains("tensor0001.pkl"),
+        "{stderr}"
+    );
+    assert!(stdout.contains("tensor0000.pkl"), "{stdout}");
+    let _ = fs::remove_dir_all(ckpt);
+}
+
+#[test]
+fn dissect_exits_nonzero_when_every_selected_shard_is_corrupt() {
+    let ckpt = unique_temp_root("cli-dissect-corrupt");
+    fs::create_dir_all(&ckpt).expect("create checkpoint dir");
+    fs::write(ckpt.join("tensor0000.pkl"), b"not-a-pickle").expect("write shard");
+    fs::write(ckpt.join("tensor0001.pkl"), b"also-garbage").expect("write shard");
+    let output = run_cli(&["dissect", utf8(&ckpt)]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("every selected shard failed to parse"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("tensor0000.pkl"), "{stderr}");
+    assert!(stderr.contains("tensor0001.pkl"), "{stderr}");
+    assert!(stderr.contains("warn:"), "{stderr}");
+    let _ = fs::remove_dir_all(ckpt);
+}
+
+#[test]
 fn planning_commands_fail_closed_against_hex_fixture() {
     let ckpt = write_hex_checkpoint("cli-orch-plan");
     let ckpt_s = utf8(&ckpt);
