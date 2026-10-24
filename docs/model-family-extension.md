@@ -215,7 +215,7 @@ surface.
 | `src/cli/mod.rs` | `ModelFamilyArg`, `PlanningFamilyArg` | `--family` default `"grok-1"` |
 | `src/cli/mod.rs` | `validate_complete_inventory_scope` | planning commands require a complete Grok-1-style scan |
 | `src/cli/mod.rs` | `run_pilot_plan`, `run_route_preservation`, `run_quant_plan` | always call `build_grok1_*` |
-| `src/main.rs` | `Command::*` family fields | CLI wiring for the same default |
+| `src/cli/command.rs` | `Command::*` family fields | CLI wiring for the same default |
 
 ### Coverage validator
 

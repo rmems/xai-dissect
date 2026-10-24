@@ -10,11 +10,12 @@ the JSON files are in [`docs/export-contracts.md`](export-contracts.md).
 
 `src/main.rs` is the clap entry point. After
 [#45](https://github.com/rmems/xai-dissect/issues/45), inventory-backed
-`run_*` handlers live in `src/cli/`. `dissect` remains parser-only in
-`src/main.rs`.
+`run_*` handlers live in `src/cli/`, and the `Command`/`Cli` types plus the
+dispatch live in `src/cli/command.rs`. `dissect` remains parser-only in
+`src/cli/dissect.rs`.
 
 ```
-  clap Command (src/main.rs)
+  clap Command (src/cli/command.rs)
         |
         +-- dissect -------------> parser::dissect_shard  -> stdout table
         |
@@ -40,14 +41,14 @@ the JSON files are in [`docs/export-contracts.md`](export-contracts.md).
 
 ## Command routing
 
-Every current `Command` variant in `src/main.rs` is listed. Inventory-backed
+Every current `Command` variant in `src/cli/command.rs` is listed. Inventory-backed
 commands share `cli::run_inventory_command`, which builds
 `inventory::InventoryConfig` from `CheckpointScanArgs` plus `--family` and
 calls `inventory::build_inventory`.
 
 | Subcommand | Handler | Inventory load | Analyzer | Report / export writers |
 |---|---|---|---|---|
-| `dissect` | `run_dissect` in `src/main.rs` | none — parser only (`parser::dissect_shard` per shard) | none | stdout `comfy_table` only; no `--json` / `--md` / `--output-root` |
+| `dissect` | `cli::dissect::run_dissect` | none — parser only (`parser::dissect_shard` per shard) | none | stdout `comfy_table` only; no `--json` / `--md` / `--output-root` |
 | `inventory` | `cli::run_inventory` | `inventory::build_inventory` | none beyond inventory classification | `report::write_json` / `write_markdown` / `render_markdown`; `exports::write_inventory_bundle` |
 | `experts` | `cli::run_experts` | `inventory::build_inventory` | `experts::build_expert_atlas` | `report::write_expert_json` / `write_expert_markdown` / `render_expert_markdown`; `exports::write_expert_bundle` |
 | `routing-report` | `cli::run_routing_report` | `inventory::build_inventory` | `routing::build_routing_report` | `report::write_routing_json` / `write_routing_markdown` / `render_routing_markdown`; `exports::write_routing_bundle` |
@@ -61,10 +62,11 @@ calls `inventory::build_inventory`.
 routing + stats + SAAQ readiness) before the planning layer. `pilot-plan` and
 `route-preservation` take inventory only.
 
-Dispatch is the `match cli.command` in `main()`. `Command::name()` and
-`Command::fields()` feed tracing / Sentry tags (`command`, `limit`, `prefix`,
-`family`, `sample_values`). Adding a variant without updating those match arms
-fails to compile.
+`main()` records tracing / Sentry tags from `Command::name()` and
+`Command::fields()`, then calls `Command::run()`. That method splits dispatch
+across `run_catalog`, `run_profile`, and `run_planning` so no single function
+covers every variant. Adding a variant without updating `name()`, `fields()`,
+and the matching `run_*` arm fails to compile.
 
 ## Shared flags
 
@@ -141,14 +143,15 @@ intentionally allow `--prefix` / `--limit` for subset debugging.
 
 ## Add a new subcommand
 
-1. Add a `Command` variant in `src/main.rs` with clap args. Flatten
+1. Add a `Command` variant in `src/cli/command.rs` with clap args. Flatten
    `OutputTreeArgs` and `CheckpointScanArgs` unless the command is parser-only
    like `dissect`.
 2. Extend `Command::name()` and `Command::fields()` so tracing / Sentry see
    the new command. `command_name_and_fields_cover_every_variant` in
-   `src/main.rs` enumerates all nine variants today.
+   `src/cli/tests.rs` enumerates all nine variants today.
 3. Add a `cli::run_*` handler (or `run_dissect`-style parser handler in
-   `src/main.rs`) and dispatch it from `main()`.
+   `src/cli/dissect.rs`) and dispatch it from `Command::run()` in
+   `src/cli/command.rs`.
 4. If the command needs a complete Grok-1 inventory, pass
    `Some("command-name")` into `run_inventory_command` so the scope gate runs
    first.
