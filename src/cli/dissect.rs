@@ -13,10 +13,11 @@ use xai_dissect::parser::{self, RawTensor};
 
 pub(crate) fn run_dissect(path: &Path, limit: Option<usize>, prefix: &str) -> Result<()> {
     let shards = collect_shards(path, limit, prefix)?;
-    for shard in &shards {
-        print_shard(shard);
-    }
-    Ok(())
+    let failures: Vec<String> = shards
+        .iter()
+        .filter_map(|shard| shard_failure(shard))
+        .collect();
+    ensure_one_shard_parsed(path, shards.len(), &failures)
 }
 
 fn collect_shards(path: &Path, limit: Option<usize>, prefix: &str) -> Result<Vec<PathBuf>> {
@@ -69,11 +70,36 @@ fn require_shards(shards: &[PathBuf], path: &Path, prefix: &str) -> Result<()> {
     Ok(())
 }
 
-fn print_shard(shard: &Path) {
+/// `None` when the shard parsed. The returned string is the warning detail
+/// for a shard that did not.
+fn shard_failure(shard: &Path) -> Option<String> {
     match parser::dissect_shard(shard) {
-        Ok(entries) => print_entries(shard, &entries),
-        Err(error) => eprintln!("warn: {}: {:#}", shard.display(), error),
+        Ok(entries) => {
+            print_entries(shard, &entries);
+            None
+        }
+        Err(error) => Some(warn_unreadable(shard, &format!("{error:#}"))),
     }
+}
+
+fn warn_unreadable(shard: &Path, detail: &str) -> String {
+    eprintln!("warn: {}: {detail}", shard.display());
+    format!("{}: {detail}", shard.display())
+}
+
+/// An empty selection (`--limit 0`) still succeeds. Total failure is only
+/// when every shard that was actually selected failed to parse. A mix of
+/// readable and unreadable shards warns and continues.
+fn ensure_one_shard_parsed(path: &Path, selected: usize, failures: &[String]) -> Result<()> {
+    if selected == 0 || failures.len() != selected {
+        return Ok(());
+    }
+    let noun = if selected == 1 { "shard" } else { "shards" };
+    bail!(
+        "every selected shard failed to parse under {} ({selected} {noun}): {}",
+        path.display(),
+        failures.join("; ")
+    )
 }
 
 fn print_entries(shard: &Path, entries: &[RawTensor]) {
@@ -112,7 +138,7 @@ fn tensor_row(index: usize, entry: &RawTensor) -> Vec<Cell> {
 mod tests {
     use std::fs;
 
-    use crate::test_support::write_hex_checkpoint;
+    use crate::test_support::{unique_temp_dir, write_hex_checkpoint};
 
     use super::run_dissect;
 
@@ -132,5 +158,49 @@ mod tests {
         assert!(format!("{empty:#}").contains("no shards found"));
         let not_dir = run_dissect(&root.path().join("tensor0000.pkl"), None, "tensor").unwrap_err();
         assert!(format!("{not_dir:#}").contains("is not a directory"));
+    }
+
+    #[test]
+    fn dissect_errors_when_every_selected_shard_fails() {
+        let root = unique_temp_dir("dissect-all-corrupt");
+        fs::write(root.path().join("tensor0000.pkl"), b"not-a-pickle").expect("write shard");
+        fs::write(root.path().join("tensor0001.pkl"), b"also-garbage").expect("write shard");
+
+        let err = run_dissect(root.path(), None, "tensor").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("every selected shard failed to parse"),
+            "{msg}"
+        );
+        assert!(msg.contains("2 shards"), "{msg}");
+        assert!(msg.contains("tensor0000.pkl"), "{msg}");
+        assert!(msg.contains("tensor0001.pkl"), "{msg}");
+        assert!(msg.contains("not a pickle protocol 4"), "{msg}");
+    }
+
+    #[test]
+    fn dissect_errors_when_limit_selects_only_corrupt_shards() {
+        let root = write_hex_checkpoint("dissect-limit-corrupt");
+        let valid = fs::read(root.path().join("tensor0000.pkl")).expect("read valid shard");
+        fs::write(root.path().join("tensor0000.pkl"), b"not-a-pickle").expect("overwrite shard");
+        fs::write(root.path().join("tensor0001.pkl"), valid).expect("write later valid shard");
+
+        let err = run_dissect(root.path(), Some(1), "tensor").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("every selected shard failed to parse"),
+            "{msg}"
+        );
+        assert!(msg.contains("1 shard"), "{msg}");
+        assert!(msg.contains("tensor0000.pkl"), "{msg}");
+        assert!(!msg.contains("tensor0001.pkl"), "{msg}");
+
+        run_dissect(root.path(), None, "tensor").expect("later valid shard still parses");
+    }
+
+    #[test]
+    fn dissect_limit_zero_selects_nothing_and_succeeds() {
+        let root = write_hex_checkpoint("dissect-limit-zero");
+        run_dissect(root.path(), Some(0), "tensor").expect("limit 0 selects no shards");
     }
 }
