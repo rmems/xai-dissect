@@ -24,6 +24,12 @@ use xai_dissect::stats::{StatsConfig, build_saaq_readiness_report, build_stats_r
 
 mod summary;
 
+pub mod command;
+mod dispatch;
+mod dissect;
+
+pub use command::Cli;
+
 use summary::{
     print_console_summary, print_expert_console_summary, print_pilot_plan_console_summary,
     print_quant_plan_console_summary, print_route_preservation_console_summary,

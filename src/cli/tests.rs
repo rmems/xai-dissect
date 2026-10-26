@@ -10,11 +10,12 @@ use xai_dissect::report;
 
 use crate::test_support::{unique_temp_dir, write_hex_checkpoint};
 
+use super::command::Command;
 use super::{
-    CheckpointScanArgs, OutputTreeArgs, run_experts, run_inventory, run_pilot_plan, run_quant_plan,
-    run_route_preservation, run_routing_report, run_saaq_readiness, run_stats,
-    validate_complete_inventory_scope, write_json_and_markdown, write_optional_file,
-    write_output_tree,
+    CheckpointScanArgs, ModelFamilyArg, OutputTreeArgs, PlanningFamilyArg, SampleValuesArg,
+    run_experts, run_inventory, run_pilot_plan, run_quant_plan, run_route_preservation,
+    run_routing_report, run_saaq_readiness, run_stats, validate_complete_inventory_scope,
+    write_json_and_markdown, write_optional_file, write_output_tree,
 };
 
 fn scan_for(path: PathBuf) -> CheckpointScanArgs {
@@ -345,4 +346,172 @@ fn write_json_and_markdown_uses_real_inventory_renderers() {
     )
     .expect("write inventory via helpers");
     assert!(out.path().join("inv.json").is_file());
+}
+
+// --- `Command` shape coverage (moved from the old `src/main.rs`) ---
+
+fn dummy_scan() -> CheckpointScanArgs {
+    CheckpointScanArgs {
+        path: PathBuf::from("/tmp/ckpt"),
+        prefix: "tensor".into(),
+        limit: None,
+        fail_on_skipped_anchors: false,
+    }
+}
+
+fn dummy_tree() -> OutputTreeArgs {
+    OutputTreeArgs {
+        output_root: None,
+        checkpoint_slug: None,
+    }
+}
+
+fn command_fixtures() -> (
+    CheckpointScanArgs,
+    ModelFamilyArg,
+    PlanningFamilyArg,
+    SampleValuesArg,
+    OutputTreeArgs,
+) {
+    (
+        dummy_scan(),
+        ModelFamilyArg {
+            family: "grok-1".into(),
+        },
+        PlanningFamilyArg {
+            family: "grok-1".into(),
+        },
+        SampleValuesArg { sample_values: 64 },
+        dummy_tree(),
+    )
+}
+
+fn inspect_commands(
+    scan: &CheckpointScanArgs,
+    family: &ModelFamilyArg,
+    tree: &OutputTreeArgs,
+) -> [Command; 4] {
+    [
+        Command::Dissect {
+            path: PathBuf::from("/tmp/ckpt"),
+            limit: Some(1),
+            prefix: "tensor".into(),
+        },
+        Command::Inventory {
+            scan: scan.clone(),
+            family: family.clone(),
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+        Command::Experts {
+            scan: scan.clone(),
+            family: family.clone(),
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+        Command::RoutingReport {
+            scan: scan.clone(),
+            family: family.clone(),
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+    ]
+}
+
+fn profile_commands(
+    scan: &CheckpointScanArgs,
+    family: &ModelFamilyArg,
+    sample: SampleValuesArg,
+    tree: &OutputTreeArgs,
+) -> [Command; 2] {
+    [
+        Command::Stats {
+            scan: scan.clone(),
+            family: family.clone(),
+            sample: sample.clone(),
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+        Command::SaaqReadiness {
+            scan: scan.clone(),
+            family: family.clone(),
+            sample,
+            json: None,
+            md: None,
+            manifest: None,
+            output_tree: tree.clone(),
+        },
+    ]
+}
+
+fn planning_commands(
+    scan: CheckpointScanArgs,
+    family: ModelFamilyArg,
+    planning: PlanningFamilyArg,
+    tree: OutputTreeArgs,
+) -> [Command; 3] {
+    [
+        Command::PilotPlan {
+            scan: scan.clone(),
+            family: planning.clone(),
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+        Command::RoutePreservation {
+            scan: scan.clone(),
+            family: planning,
+            json: None,
+            md: None,
+            output_tree: tree.clone(),
+        },
+        Command::QuantPlan {
+            scan,
+            family,
+            sample_values: 64,
+            json: None,
+            md: None,
+            conversion_manifest: None,
+            conversion_manifest_md: None,
+            output_tree: tree,
+        },
+    ]
+}
+
+fn assert_every_command_name_and_prefix(variants: &[Command]) {
+    let names: Vec<_> = variants.iter().map(Command::name).collect();
+    assert_eq!(
+        names,
+        [
+            "dissect",
+            "inventory",
+            "experts",
+            "routing-report",
+            "stats",
+            "saaq-readiness",
+            "pilot-plan",
+            "route-preservation",
+            "quant-plan",
+        ]
+    );
+    for command in variants {
+        assert_eq!(command.fields().prefix.as_deref(), Some("tensor"));
+    }
+}
+
+#[test]
+fn command_name_and_fields_cover_every_variant() {
+    let (scan, family, planning, sample, tree) = command_fixtures();
+    let inspect = inspect_commands(&scan, &family, &tree);
+    let profile = profile_commands(&scan, &family, sample, &tree);
+    let planning = planning_commands(scan, family, planning, tree);
+    let mut variants = Vec::with_capacity(9);
+    variants.extend(inspect);
+    variants.extend(profile);
+    variants.extend(planning);
+    assert_every_command_name_and_prefix(&variants);
 }
