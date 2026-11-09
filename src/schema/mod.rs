@@ -16,7 +16,7 @@
 //! | `ExpertAtlas` | 1 | — |
 //! | `RoutingReport` | 1 | — |
 //! | `StatsProfileReport` | 1 | — |
-//! | `SaaqReadinessReport` | 1 | — |
+//! | `SaaqReadinessReport` | 2 | — |
 //! | `Grok1CoverageManifest` | 2 | 2 | (two independent version fields)
 //! | `ConversionManifest` | 1 | — |
 //! | `QuantPlan` | 1 | — |

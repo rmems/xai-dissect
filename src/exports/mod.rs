@@ -496,6 +496,16 @@ pub fn build_inventory_findings_summary(
         ));
     }
 
+    if inv.skipped_anchor_count > 0 {
+        findings.push(warn_finding(
+            "skipped_parser_anchors",
+            format!(
+                "{} parser anchor(s) skipped during shard scan; see inventory.md and skipped_anchors in inventory.json",
+                inv.skipped_anchor_count
+            ),
+        ));
+    }
+
     FindingsSummary {
         analysis: "inventory".into(),
         model_family: inv.model_family.clone(),
@@ -1056,6 +1066,23 @@ mod tests {
             manifest.tensors[0].criticality_reason.as_deref(),
             Some("primary router present")
         );
+    }
+
+    #[test]
+    fn inventory_findings_warn_when_parser_skipped_anchors() {
+        let mut inv = sample_inventory();
+        inv.skipped_anchor_count = 2;
+        let summary = build_inventory_findings_summary(&inv, "grok-1-official__ckpt-0");
+        let warning = summary
+            .findings
+            .iter()
+            .find(|item| item.category == "skipped_parser_anchors")
+            .expect("skipped_parser_anchors finding");
+        assert!(matches!(
+            warning.severity,
+            crate::schema::FindingsSeverity::Warning
+        ));
+        assert!(warning.detail.contains('2'));
     }
 
     fn unique_test_root(prefix: &str) -> PathBuf {
