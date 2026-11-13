@@ -1082,7 +1082,10 @@ mod tests {
             warning.severity,
             crate::schema::FindingsSeverity::Warning
         ));
-        assert!(warning.detail.contains('2'));
+        assert_eq!(
+            warning.detail,
+            "2 parser anchor(s) skipped during shard scan; see inventory.md and skipped_anchors in inventory.json"
+        );
     }
 
     fn unique_test_root(prefix: &str) -> PathBuf {
